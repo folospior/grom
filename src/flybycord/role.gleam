@@ -1,0 +1,105 @@
+import gleam/dynamic/decode
+import gleam/option.{type Option, None}
+
+pub type Role {
+  Role(
+    id: String,
+    name: String,
+    color: Int,
+    hoisted: Bool,
+    icon: Option(String),
+    unicode_emoji: Option(String),
+    position: Int,
+    permissions: String,
+    managed: Bool,
+    is_mentionable: Bool,
+    tags: Option(RoleTags),
+    flags: Int,
+  )
+}
+
+pub type RoleTags {
+  RoleTags(
+    bot_id: Option(String),
+    integration_id: Option(String),
+    premium_subscriber: Option(Nil),
+    subscription_listing_id: Option(String),
+    available_for_purchase: Option(Nil),
+    guild_connections: Option(Nil),
+  )
+}
+
+@internal
+pub fn decoder() -> decode.Decoder(Role) {
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use color <- decode.field("color", decode.int)
+  use hoisted <- decode.field("hoisted", decode.bool)
+  use icon <- decode.optional_field(
+    "icon",
+    None,
+    decode.optional(decode.string),
+  )
+  use unicode_emoji <- decode.optional_field(
+    "unicode_emoji",
+    None,
+    decode.optional(decode.string),
+  )
+  use position <- decode.field("position", decode.int)
+  use permissions <- decode.field("permissions", decode.string)
+  use managed <- decode.field("managed", decode.bool)
+  use is_mentionable <- decode.field("mentionable", decode.bool)
+  use tags <- decode.optional_field(
+    "tags",
+    None,
+    decode.optional(tags_decoder()),
+  )
+  use flags <- decode.field("flags", decode.int)
+  decode.success(Role(
+    id:,
+    name:,
+    color:,
+    hoisted:,
+    icon:,
+    unicode_emoji:,
+    position:,
+    permissions:,
+    managed:,
+    is_mentionable:,
+    tags:,
+    flags:,
+  ))
+}
+
+@internal
+pub fn tags_decoder() -> decode.Decoder(RoleTags) {
+  use bot_id <- decode.field("bot_id", decode.optional(decode.string))
+  use integration_id <- decode.field(
+    "integration_id",
+    decode.optional(decode.string),
+  )
+  use premium_subscriber <- decode.field(
+    "premium_subscriber",
+    decode.optional(decode.success(Nil)),
+  )
+  use subscription_listing_id <- decode.field(
+    "subscription_listing_id",
+    decode.optional(decode.string),
+  )
+  use available_for_purchase <- decode.field(
+    "available_for_purchase",
+    decode.optional(decode.success(Nil)),
+  )
+  use guild_connections <- decode.field(
+    "guild_connections",
+    decode.optional(decode.success(Nil)),
+  )
+  decode.success(RoleTags(
+    bot_id:,
+    integration_id:,
+    premium_subscriber:,
+    subscription_listing_id:,
+    available_for_purchase:,
+    guild_connections:,
+  ))
+}
