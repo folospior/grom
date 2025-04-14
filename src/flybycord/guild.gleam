@@ -1,8 +1,8 @@
 import flybycord/channel.{type Channel}
 import flybycord/emoji.{type Emoji}
+import flybycord/guild/integration
+import flybycord/guild/onboarding
 import flybycord/internal/time_rfc3339
-import flybycord/onboarding
-import flybycord/role.{type Role}
 import flybycord/sticker.{type Sticker}
 import flybycord/user.{type User}
 import gleam/dynamic/decode
@@ -12,54 +12,6 @@ import gleam/option.{type Option, None}
 import gleam/time/timestamp.{type Timestamp}
 
 // TYPES ----------------------------------------------------------------------
-
-pub type Guild {
-  Guild(
-    id: String,
-    name: String,
-    icon: Option(String),
-    icon_hash: Option(String),
-    splash: Option(String),
-    discovery_splash: Option(String),
-    is_current_user_owner: Option(Bool),
-    owner_id: String,
-    current_user_permissions: Option(String),
-    afk_channel_id: Option(String),
-    afk_timeout: Int,
-    is_widget_enabled: Option(Bool),
-    widget_channel_id: Option(String),
-    verification_level: VerificationLevel,
-    default_message_notification_setting: DefaultMessageNotificationSetting,
-    explicit_content_filter_setting: ExplicitContentFilterSetting,
-    roles: List(Role),
-    emojis: List(Emoji),
-    features: List(Feature),
-    mfa_level: MfaLevel,
-    application_id: Option(String),
-    system_channel_id: Option(String),
-    system_channel_flags: List(SystemChannelFlag),
-    rules_channel_id: Option(String),
-    max_presences: Option(Int),
-    max_members: Option(Int),
-    vanity_url_code: Option(String),
-    description: Option(String),
-    banner_hash: Option(String),
-    premium_tier: PremiumTier,
-    premium_subscription_count: Option(Int),
-    preferred_locale: String,
-    public_updates_channel_id: Option(String),
-    max_video_channel_users: Option(Int),
-    max_stage_video_channel_users: Option(Int),
-    approximate_member_count: Option(Int),
-    approximate_presence_count: Option(Int),
-    welcome_screen: Option(WelcomeScreen),
-    nsfw_level: NsfwLevel,
-    stickers: Option(List(Sticker)),
-    is_premium_progress_bar_enabled: Bool,
-    safety_alerts_channel_id: Option(String),
-    incidents_data: Option(IncidentsData),
-  )
-}
 
 pub type Preview {
   Preview(
@@ -120,29 +72,15 @@ pub type Integration {
     is_syncing: Option(Bool),
     role_id: Option(String),
     are_emoticons_enabled: Option(Bool),
-    expire_behavior: Option(IntegrationExpireBehavior),
+    expire_behavior: Option(integration.ExpireBehavior),
     expire_grace_period: Option(Int),
     user: Option(User),
-    account: IntegrationAccount,
+    account: integration.Account,
     synced_at: Option(Timestamp),
     subscriber_count: Option(Int),
     is_revoked: Option(Bool),
-    application: Option(IntegrationApplication),
+    application: Option(integration.Application),
     scopes: Option(List(String)),
-  )
-}
-
-pub type IntegrationAccount {
-  IntegrationAccount(id: String, name: String)
-}
-
-pub type IntegrationApplication {
-  IntegrationApplication(
-    id: String,
-    name: String,
-    icon_hash: Option(String),
-    description: String,
-    bot: Option(User),
   )
 }
 
@@ -181,20 +119,13 @@ pub type Onboarding {
     prompts: List(onboarding.Prompt),
     default_channel_ids: List(String),
     is_enabled: Bool,
-    mode: OnboardingMode,
+    mode: onboarding.Mode,
   )
-}
-
-pub type IntegrationExpireBehavior {
-  RemoveRole
-  Kick
-  InvalidIntegrationExpireBehavior
 }
 
 pub type DefaultMessageNotificationSetting {
   AllMessages
   OnlyMentions
-  InvalidDefaultMessageNotificationSetting
 }
 
 pub type VerificationLevel {
@@ -203,20 +134,17 @@ pub type VerificationLevel {
   Medium
   High
   VeryHigh
-  InvalidVerificationLevel
 }
 
 pub type ExplicitContentFilterSetting {
   Disabled
   MembersWithoutRoles
   AllMembers
-  InvalidExplicitContentFilterSetting
 }
 
 pub type MfaLevel {
   NoMfa
   Elevated
-  InvalidMfaLevel
 }
 
 pub type Feature {
@@ -249,7 +177,6 @@ pub type Feature {
   Verified
   VipRegions
   WelcomeScreenEnabled
-  InvalidFeature
 }
 
 pub type SystemChannelFlag {
@@ -259,7 +186,6 @@ pub type SystemChannelFlag {
   SuppressJoinNotificationReplies
   SuppressRoleSubscriptionPurchaseNotifications
   SuppressRoleSubscriptionPurchaseNotificationReplies
-  InvalidSystemChannelFlag
 }
 
 pub type PremiumTier {
@@ -267,7 +193,6 @@ pub type PremiumTier {
   Tier1
   Tier2
   Tier3
-  InvalidPremiumTier
 }
 
 pub type NsfwLevel {
@@ -275,7 +200,6 @@ pub type NsfwLevel {
   Explicit
   Safe
   AgeRestricted
-  InvalidNsfwLevel
 }
 
 pub type MemberFlag {
@@ -352,7 +276,7 @@ pub fn feature_decoder() -> decode.Decoder(Feature) {
     "VERIFIED" -> decode.success(Verified)
     "VIP_REGIONS" -> decode.success(VipRegions)
     "WELCOME_SCREEN_ENABLED" -> decode.success(WelcomeScreenEnabled)
-    _ -> decode.failure(InvalidFeature, "Feature")
+    _ -> decode.failure(AnimatedBanner, "Feature")
   }
 }
 
@@ -364,11 +288,7 @@ pub fn default_message_notification_setting_decoder() -> decode.Decoder(
   case variant {
     0 -> decode.success(AllMessages)
     1 -> decode.success(OnlyMentions)
-    _ ->
-      decode.failure(
-        InvalidDefaultMessageNotificationSetting,
-        "DefaultMessageNotificationSetting",
-      )
+    _ -> decode.failure(AllMessages, "DefaultMessageNotificationSetting")
   }
 }
 
@@ -381,11 +301,7 @@ pub fn explicit_content_filter_setting_decoder() -> decode.Decoder(
     0 -> decode.success(Disabled)
     1 -> decode.success(MembersWithoutRoles)
     2 -> decode.success(AllMembers)
-    _ ->
-      decode.failure(
-        InvalidExplicitContentFilterSetting,
-        "ExplicitContentFilterSetting",
-      )
+    _ -> decode.failure(Disabled, "ExplicitContentFilterSetting")
   }
 }
 
@@ -395,7 +311,7 @@ pub fn mfa_level_decoder() -> decode.Decoder(MfaLevel) {
   case variant {
     0 -> decode.success(NoMfa)
     1 -> decode.success(Elevated)
-    _ -> decode.failure(InvalidMfaLevel, "MfaLevel")
+    _ -> decode.failure(NoMfa, "MfaLevel")
   }
 }
 
@@ -408,7 +324,7 @@ pub fn verification_level_decoder() -> decode.Decoder(VerificationLevel) {
     2 -> decode.success(Medium)
     3 -> decode.success(High)
     4 -> decode.success(VeryHigh)
-    _ -> decode.failure(InvalidVerificationLevel, "VerificationLevel")
+    _ -> decode.failure(NoVerification, "VerificationLevel")
   }
 }
 
@@ -420,7 +336,7 @@ pub fn nsfw_level_decoder() -> decode.Decoder(NsfwLevel) {
     1 -> decode.success(Explicit)
     2 -> decode.success(Safe)
     3 -> decode.success(AgeRestricted)
-    _ -> decode.failure(InvalidNsfwLevel, "NsfwLevel")
+    _ -> decode.failure(Default, "NsfwLevel")
   }
 }
 
@@ -432,7 +348,7 @@ pub fn premium_tier_decoder() -> decode.Decoder(PremiumTier) {
     1 -> decode.success(Tier1)
     2 -> decode.success(Tier2)
     3 -> decode.success(Tier3)
-    _ -> decode.failure(InvalidPremiumTier, "PremiumTier")
+    _ -> decode.failure(NoTier, "PremiumTier")
   }
 }
 
@@ -499,196 +415,6 @@ pub fn incidents_data_decoder() -> decode.Decoder(IncidentsData) {
     dms_disabled_until:,
     dms_spam_disabled_at:,
     raid_detected_at:,
-  ))
-}
-
-@internal
-pub fn decoder() -> decode.Decoder(Guild) {
-  use id <- decode.field("id", decode.string)
-  use name <- decode.field("name", decode.string)
-  use icon <- decode.field("icon", decode.optional(decode.string))
-  use icon_hash <- decode.optional_field(
-    "icon_hash",
-    None,
-    decode.optional(decode.string),
-  )
-  use splash <- decode.field("splash", decode.optional(decode.string))
-  use discovery_splash <- decode.field(
-    "discovery_splash",
-    decode.optional(decode.string),
-  )
-  use is_current_user_owner <- decode.optional_field(
-    "owner",
-    None,
-    decode.optional(decode.bool),
-  )
-  use owner_id <- decode.field("owner_id", decode.string)
-  use current_user_permissions <- decode.optional_field(
-    "permissions",
-    None,
-    decode.optional(decode.string),
-  )
-  use afk_channel_id <- decode.field(
-    "afk_channel_id",
-    decode.optional(decode.string),
-  )
-  use afk_timeout <- decode.field("afk_timeout", decode.int)
-  use is_widget_enabled <- decode.optional_field(
-    "widget_enabled",
-    None,
-    decode.optional(decode.bool),
-  )
-  use widget_channel_id <- decode.optional_field(
-    "widget_channel_id",
-    None,
-    decode.optional(decode.string),
-  )
-  use verification_level <- decode.field(
-    "verification_level",
-    verification_level_decoder(),
-  )
-  use default_message_notification_setting <- decode.field(
-    "default_message_notifications",
-    default_message_notification_setting_decoder(),
-  )
-  use explicit_content_filter_setting <- decode.field(
-    "explicit_content_filter",
-    explicit_content_filter_setting_decoder(),
-  )
-  use roles <- decode.field("roles", decode.list(role.decoder()))
-  use emojis <- decode.field("emojis", decode.list(emoji.decoder()))
-  use features <- decode.field("features", decode.list(feature_decoder()))
-  use mfa_level <- decode.field("mfa_level", mfa_level_decoder())
-  use application_id <- decode.field(
-    "application_id",
-    decode.optional(decode.string),
-  )
-  use system_channel_id <- decode.field(
-    "system_channel_id",
-    decode.optional(decode.string),
-  )
-  use system_channel_flags <- decode.field(
-    "system_channel_flags",
-    system_channel_flags_decoder(),
-  )
-  use rules_channel_id <- decode.field(
-    "rules_channel_id",
-    decode.optional(decode.string),
-  )
-  use max_presences <- decode.optional_field(
-    "max_presences",
-    None,
-    decode.optional(decode.int),
-  )
-  use max_members <- decode.optional_field(
-    "max_members",
-    None,
-    decode.optional(decode.int),
-  )
-  use vanity_url_code <- decode.field(
-    "vanity_url_code",
-    decode.optional(decode.string),
-  )
-  use description <- decode.field("description", decode.optional(decode.string))
-  use banner_hash <- decode.field("banner", decode.optional(decode.string))
-  use premium_tier <- decode.field("premium_tier", premium_tier_decoder())
-  use premium_subscription_count <- decode.optional_field(
-    "premium_subscription_count",
-    None,
-    decode.optional(decode.int),
-  )
-  use preferred_locale <- decode.field("preferred_locale", decode.string)
-  use public_updates_channel_id <- decode.field(
-    "public_updates_channel_id",
-    decode.optional(decode.string),
-  )
-  use max_video_channel_users <- decode.optional_field(
-    "max_video_channel_users",
-    None,
-    decode.optional(decode.int),
-  )
-  use max_stage_video_channel_users <- decode.optional_field(
-    "max_stage_video_channel_users",
-    None,
-    decode.optional(decode.int),
-  )
-  use approximate_member_count <- decode.optional_field(
-    "approximate_member_count",
-    None,
-    decode.optional(decode.int),
-  )
-  use approximate_presence_count <- decode.optional_field(
-    "approximate_presence_count",
-    None,
-    decode.optional(decode.int),
-  )
-  use welcome_screen <- decode.optional_field(
-    "welcome_screen",
-    None,
-    decode.optional(welcome_screen_decoder()),
-  )
-  use nsfw_level <- decode.field("nsfw_level", nsfw_level_decoder())
-  use stickers <- decode.optional_field(
-    "stickers",
-    None,
-    decode.optional(decode.list(sticker.decoder())),
-  )
-  use is_premium_progress_bar_enabled <- decode.field(
-    "premium_progress_bar_enabled",
-    decode.bool,
-  )
-  use safety_alerts_channel_id <- decode.field(
-    "safety_alerts_channel_id",
-    decode.optional(decode.string),
-  )
-  use incidents_data <- decode.field(
-    "incidents_data",
-    decode.optional(incidents_data_decoder()),
-  )
-  decode.success(Guild(
-    id:,
-    name:,
-    icon:,
-    icon_hash:,
-    splash:,
-    discovery_splash:,
-    is_current_user_owner:,
-    owner_id:,
-    current_user_permissions:,
-    afk_channel_id:,
-    afk_timeout:,
-    is_widget_enabled:,
-    widget_channel_id:,
-    verification_level:,
-    default_message_notification_setting:,
-    explicit_content_filter_setting:,
-    roles:,
-    emojis:,
-    features:,
-    mfa_level:,
-    application_id:,
-    system_channel_id:,
-    system_channel_flags:,
-    rules_channel_id:,
-    max_presences:,
-    max_members:,
-    vanity_url_code:,
-    description:,
-    banner_hash:,
-    premium_tier:,
-    premium_subscription_count:,
-    preferred_locale:,
-    public_updates_channel_id:,
-    max_video_channel_users:,
-    max_stage_video_channel_users:,
-    approximate_member_count:,
-    approximate_presence_count:,
-    welcome_screen:,
-    nsfw_level:,
-    stickers:,
-    is_premium_progress_bar_enabled:,
-    safety_alerts_channel_id:,
-    incidents_data:,
   ))
 }
 
@@ -761,45 +487,6 @@ pub fn widget_decoder() -> decode.Decoder(Widget) {
 }
 
 @internal
-pub fn integration_account_decoder() -> decode.Decoder(IntegrationAccount) {
-  use id <- decode.field("id", decode.string)
-  use name <- decode.field("name", decode.string)
-  decode.success(IntegrationAccount(id:, name:))
-}
-
-@internal
-pub fn integration_application_decoder() -> decode.Decoder(
-  IntegrationApplication,
-) {
-  use id <- decode.field("id", decode.string)
-  use name <- decode.field("name", decode.string)
-  use icon_hash <- decode.field("icon_hash", decode.optional(decode.string))
-  use description <- decode.field("description", decode.string)
-  use bot <- decode.optional_field("bot", None, decode.optional(user.decoder()))
-  decode.success(IntegrationApplication(
-    id:,
-    name:,
-    icon_hash:,
-    description:,
-    bot:,
-  ))
-}
-
-@internal
-pub fn integration_expire_behavior_decoder() {
-  use variant <- decode.then(decode.int)
-  case variant {
-    0 -> decode.success(RemoveRole)
-    1 -> decode.success(Kick)
-    _ ->
-      decode.failure(
-        InvalidIntegrationExpireBehavior,
-        "IntegrationExpireBehavior",
-      )
-  }
-}
-
-@internal
 pub fn integration_decoder() -> decode.Decoder(Integration) {
   use id <- decode.field("id", decode.string)
   use name <- decode.field("name", decode.string)
@@ -823,7 +510,7 @@ pub fn integration_decoder() -> decode.Decoder(Integration) {
   use expire_behavior <- decode.optional_field(
     "expire_behavior",
     None,
-    decode.optional(integration_expire_behavior_decoder()),
+    decode.optional(integration.expire_behavior_decoder()),
   )
   use expire_grace_period <- decode.optional_field(
     "expire_grace_period",
@@ -835,7 +522,7 @@ pub fn integration_decoder() -> decode.Decoder(Integration) {
     None,
     decode.optional(user.decoder()),
   )
-  use account <- decode.field("account", integration_account_decoder())
+  use account <- decode.field("account", integration.account_decoder())
   use synced_at <- decode.optional_field(
     "synced_at",
     None,
@@ -854,7 +541,7 @@ pub fn integration_decoder() -> decode.Decoder(Integration) {
   use application <- decode.optional_field(
     "application",
     None,
-    decode.optional(integration_application_decoder()),
+    decode.optional(integration.application_decoder()),
   )
   use scopes <- decode.optional_field(
     "scopes",

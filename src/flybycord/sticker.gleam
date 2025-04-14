@@ -67,7 +67,7 @@ pub fn decoder() -> decode.Decoder(Sticker) {
   use tags <- decode.field("tags", decode.string)
   use type_ <- decode.field("type", type_decoder())
   use format_type <- decode.field("format_type", format_type_decoder())
-  use available <- decode.field("available", decode.optional(decode.bool))
+  use is_available <- decode.field("available", decode.optional(decode.bool))
   use guild_id <- decode.optional_field(
     "guild_id",
     None,
@@ -91,7 +91,7 @@ pub fn decoder() -> decode.Decoder(Sticker) {
     tags:,
     type_:,
     format_type:,
-    available:,
+    is_available:,
     guild_id:,
     user:,
     sort_value:,

@@ -20,14 +20,14 @@ pub type Emoji {
 // DECODERS -------------------------------------------------------------------
 
 @internal
-pub fn emoji_decoder() -> decode.Decoder(Emoji) {
+pub fn decoder() -> decode.Decoder(Emoji) {
   use id <- decode.field("id", decode.optional(decode.string))
   use name <- decode.field("name", decode.optional(decode.string))
   use roles <- decode.optional_field("roles", [], decode.list(decode.string))
   use user <- decode.optional_field(
     "user",
     None,
-    decode.optional(user.user_decoder()),
+    decode.optional(user.decoder()),
   )
   use are_colons_required <- decode.optional_field(
     "require_colons",
