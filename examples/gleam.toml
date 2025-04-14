@@ -1,4 +1,4 @@
-name = "flybycord"
+name = "examples"
 version = "1.0.0"
 
 # Fill out these fields if you intend to generate HTML documentation or publish
@@ -14,10 +14,9 @@ version = "1.0.0"
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
-gleam_httpc = ">= 4.1.0 and < 5.0.0"
-gleam_http = ">= 4.0.0 and < 5.0.0"
-gleam_json = ">= 2.3.0 and < 3.0.0"
-gleam_time = ">= 1.1.0 and < 2.0.0"
+flybycord = { path = ".." }
+envoy = ">= 1.0.2 and < 2.0.0"
+dotenv_gleam = ">= 1.0.7 and < 2.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"

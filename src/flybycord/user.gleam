@@ -1,11 +1,12 @@
-import flybycord/client
+import flybycord/client.{type Client}
+import flybycord/image
 import flybycord/internal/error
 import flybycord/internal/requests
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
 import gleam/list
-import gleam/option.{type Option}
+import gleam/option.{type Option, None}
 import gleam/result
 
 // TYPES ----------------------------------------------------------------------
@@ -23,9 +24,8 @@ pub type User {
     banner_hash: Option(String),
     accent_color: Option(Int),
     locale: Option(String),
-    flags: Option(Int),
+    flags: Option(List(Flag)),
     premium_type: Option(PremiumType),
-    public_flags: Option(List(PublicFlag)),
     avatar_decoration_data: Option(AvatarDecorationData),
   )
 }
@@ -35,14 +35,14 @@ pub type AvatarDecorationData {
 }
 
 pub type PremiumType {
-  None
+  NoPremium
   NitroClassic
   Nitro
   NitroBasic
   Invalid
 }
 
-pub type PublicFlag {
+pub type Flag {
   Staff
   Partner
   Hypesquad
@@ -60,54 +60,93 @@ pub type PublicFlag {
   ActiveDeveloper
 }
 
+pub type ModifyCurrentUser {
+  ModifyCurrentUser(username: String, avatar: image.Data, banner: image.Data)
+}
+
 // CONSTANTS ------------------------------------------------------------------
 
 const bits_flags = [
+  // 1 << 0
   #(1, Staff),
+  // 1 << 1
   #(2, Partner),
+  // 1 << 2
   #(4, Hypesquad),
+  // 1 << 3
   #(8, BugHunterLevel1),
+  // 1 << 6
   #(64, HypesquadBravery),
+  // 1 << 7
   #(128, HypesquadBrilliance),
+  // 1 << 8
   #(256, HypesquadBalance),
+  // 1 << 9
   #(512, PremiumEarlySupporter),
+  // 1 << 10
   #(1024, TeamPseudoUser),
+  // 1 << 14
   #(16_384, BugHunterLevel2),
+  // 1 << 16
   #(65_536, VerifiedBot),
+  // 1 << 17
   #(131_072, VerifiedDeveloper),
+  // 1 << 18
   #(262_144, CertifiedModerator),
+  // 1 << 19
   #(524_288, BotHttpInteractions),
+  // 1 << 22
   #(4_194_304, ActiveDeveloper),
 ]
 
 // DECODERS -------------------------------------------------------------------
 
-fn user_decoder() -> decode.Decoder(User) {
+@internal
+pub fn decoder() -> decode.Decoder(User) {
   use id <- decode.field("id", decode.string)
   use username <- decode.field("username", decode.string)
   use discriminator <- decode.field("discriminator", decode.string)
   use global_name <- decode.field("global_name", decode.optional(decode.string))
   use avatar_hash <- decode.field("avatar", decode.optional(decode.string))
-  use is_bot <- decode.field("bot", decode.optional(decode.bool))
-  use is_system <- decode.field("system", decode.optional(decode.bool))
-  use is_mfa_enabled <- decode.field(
-    "mfa_enabled",
+  use is_bot <- decode.optional_field("bot", None, decode.optional(decode.bool))
+  use is_system <- decode.optional_field(
+    "system",
+    None,
     decode.optional(decode.bool),
   )
-  use banner_hash <- decode.field("banner", decode.optional(decode.string))
-  use accent_color <- decode.field("accent_color", decode.optional(decode.int))
-  use locale <- decode.field("locale", decode.optional(decode.string))
-  use flags <- decode.field("flags", decode.optional(decode.int))
-  use premium_type <- decode.field(
+  use is_mfa_enabled <- decode.optional_field(
+    "mfa_enabled",
+    None,
+    decode.optional(decode.bool),
+  )
+  use banner_hash <- decode.optional_field(
+    "banner",
+    None,
+    decode.optional(decode.string),
+  )
+  use accent_color <- decode.optional_field(
+    "accent_color",
+    None,
+    decode.optional(decode.int),
+  )
+  use locale <- decode.optional_field(
+    "locale",
+    None,
+    decode.optional(decode.string),
+  )
+  use flags <- decode.optional_field(
+    "flags",
+    None,
+    decode.optional(flags_decoder()),
+  )
+  use premium_type <- decode.optional_field(
     "premium_type",
+    None,
     decode.optional(premium_type_decoder()),
   )
-  use public_flags <- decode.field(
-    "public_flags",
-    decode.optional(public_flags_decoder()),
-  )
-  use avatar_decoration_data <- decode.field(
+  use avatar_decoration_data <- decode.optional_field(
     "avatar_decoration_data",
+    None,
     decode.optional(avatar_decoration_data_decoder()),
   )
   decode.success(User(
@@ -124,29 +163,31 @@ fn user_decoder() -> decode.Decoder(User) {
     locale:,
     flags:,
     premium_type:,
-    public_flags:,
     avatar_decoration_data:,
   ))
 }
 
-fn avatar_decoration_data_decoder() -> decode.Decoder(AvatarDecorationData) {
+@internal
+pub fn avatar_decoration_data_decoder() -> decode.Decoder(AvatarDecorationData) {
   use asset <- decode.field("asset", decode.string)
   use sku_id <- decode.field("sku_id", decode.string)
   decode.success(AvatarDecorationData(asset:, sku_id:))
 }
 
-fn premium_type_decoder() -> decode.Decoder(PremiumType) {
+@internal
+pub fn premium_type_decoder() -> decode.Decoder(PremiumType) {
   use variant <- decode.then(decode.int)
   case variant {
-    0 -> decode.success(None)
+    0 -> decode.success(NoPremium)
     1 -> decode.success(NitroClassic)
     2 -> decode.success(Nitro)
     3 -> decode.success(NitroBasic)
-    _ -> decode.success(Invalid)
+    _ -> decode.failure(Invalid, "Premium Type")
   }
 }
 
-fn public_flags_decoder() -> decode.Decoder(List(PublicFlag)) {
+@internal
+pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
   use flags <- decode.then(decode.int)
 
   bits_flags
@@ -160,10 +201,22 @@ fn public_flags_decoder() -> decode.Decoder(List(PublicFlag)) {
   |> decode.success
 }
 
-// PUBLIC FUNCTIONS -----------------------------------------------------------
+// ENCODERS -------------------------------------------------------------------
+
+fn encode_modify_current_user(
+  modify_current_user: ModifyCurrentUser,
+) -> json.Json {
+  json.object([
+    #("username", json.string(modify_current_user.username)),
+    #("avatar", json.string(modify_current_user.avatar)),
+    #("banner", json.string(modify_current_user.banner)),
+  ])
+}
+
+// PUBLIC API FUNCTIONS -------------------------------------------------------
 
 pub fn get_user(
-  client: client.Client,
+  client: Client,
   id: String,
 ) -> Result(User, error.FlybycordError) {
   use response <- result.try(
@@ -172,6 +225,47 @@ pub fn get_user(
   )
 
   response.body
-  |> json.parse(using: user_decoder())
+  |> json.parse(using: decoder())
   |> result.map_error(error.DecodeError)
+}
+
+pub fn get_current_user(
+  client: client.Client,
+) -> Result(User, error.FlybycordError) {
+  use response <- result.try(
+    client
+    |> requests.get(to: "/users/@me"),
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn modify_current_user(
+  client: Client,
+  with data: ModifyCurrentUser,
+) -> Result(User, error.FlybycordError) {
+  let json_data = data |> encode_modify_current_user
+
+  use response <- result.try(
+    client
+    |> requests.patch(to: "/users/@me", using: json_data),
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn leave_guild(
+  client: Client,
+  guild_id: String,
+) -> Result(Nil, error.FlybycordError) {
+  use _ <- result.try(
+    client
+    |> requests.delete(to: "/users/@me/guilds/" <> guild_id),
+  )
+
+  Ok(Nil)
 }
