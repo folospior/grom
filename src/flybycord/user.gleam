@@ -39,7 +39,6 @@ pub type PremiumType {
   NitroClassic
   Nitro
   NitroBasic
-  Invalid
 }
 
 pub type Flag {
@@ -67,35 +66,20 @@ pub type ModifyCurrentUser {
 // CONSTANTS ------------------------------------------------------------------
 
 const bits_flags = [
-  // 1 << 0
   #(1, Staff),
-  // 1 << 1
   #(2, Partner),
-  // 1 << 2
   #(4, Hypesquad),
-  // 1 << 3
   #(8, BugHunterLevel1),
-  // 1 << 6
   #(64, HypesquadBravery),
-  // 1 << 7
   #(128, HypesquadBrilliance),
-  // 1 << 8
   #(256, HypesquadBalance),
-  // 1 << 9
   #(512, PremiumEarlySupporter),
-  // 1 << 10
   #(1024, TeamPseudoUser),
-  // 1 << 14
   #(16_384, BugHunterLevel2),
-  // 1 << 16
   #(65_536, VerifiedBot),
-  // 1 << 17
   #(131_072, VerifiedDeveloper),
-  // 1 << 18
   #(262_144, CertifiedModerator),
-  // 1 << 19
   #(524_288, BotHttpInteractions),
-  // 1 << 22
   #(4_194_304, ActiveDeveloper),
 ]
 
@@ -182,7 +166,7 @@ pub fn premium_type_decoder() -> decode.Decoder(PremiumType) {
     1 -> decode.success(NitroClassic)
     2 -> decode.success(Nitro)
     3 -> decode.success(NitroBasic)
-    _ -> decode.failure(Invalid, "Premium Type")
+    _ -> decode.failure(NoPremium, "PremiumType")
   }
 }
 

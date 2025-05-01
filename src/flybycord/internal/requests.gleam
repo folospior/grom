@@ -31,7 +31,7 @@ fn ensure_status_code_success(
 ) -> Result(Response(String), error.FlybycordError) {
   case response.status {
     status if status >= 200 && status < 300 -> Ok(response)
-    _ -> Error(error.StatusCodeUnsuccessful(response.status))
+    _ -> Error(error.StatusCodeUnsuccessful(response))
   }
 }
 
