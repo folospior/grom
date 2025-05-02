@@ -11,7 +11,7 @@ pub type Role {
     name: String,
     color: Int,
     hoisted: Bool,
-    icon: Option(String),
+    icon_hash: Option(String),
     unicode_emoji: Option(String),
     position: Int,
     permissions: String,
@@ -51,7 +51,7 @@ pub fn decoder() -> decode.Decoder(Role) {
   use name <- decode.field("name", decode.string)
   use color <- decode.field("color", decode.int)
   use hoisted <- decode.field("hoisted", decode.bool)
-  use icon <- decode.optional_field(
+  use icon_hash <- decode.optional_field(
     "icon",
     None,
     decode.optional(decode.string),
@@ -76,7 +76,7 @@ pub fn decoder() -> decode.Decoder(Role) {
     name:,
     color:,
     hoisted:,
-    icon:,
+    icon_hash:,
     unicode_emoji:,
     position:,
     permissions:,
