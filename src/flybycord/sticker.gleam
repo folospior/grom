@@ -23,7 +23,6 @@ pub type Sticker {
 pub type Type {
   Standard
   Guild
-  InvalidType
 }
 
 pub type FormatType {
@@ -31,7 +30,6 @@ pub type FormatType {
   Apng
   Lottie
   Gif
-  InvalidFormatType
 }
 
 // DECODERS -------------------------------------------------------------------
@@ -42,7 +40,7 @@ pub fn type_decoder() -> decode.Decoder(Type) {
   case variant {
     0 -> decode.success(Standard)
     1 -> decode.success(Guild)
-    _ -> decode.failure(InvalidType, "Type")
+    _ -> decode.failure(Standard, "Type")
   }
 }
 
@@ -54,7 +52,7 @@ pub fn format_type_decoder() -> decode.Decoder(FormatType) {
     1 -> decode.success(Apng)
     2 -> decode.success(Lottie)
     3 -> decode.success(Gif)
-    _ -> decode.failure(InvalidFormatType, "FormatType")
+    _ -> decode.failure(Png, "FormatType")
   }
 }
 
