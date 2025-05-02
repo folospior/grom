@@ -1,3 +1,4 @@
+import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
 import gleam/int
 import gleam/list
@@ -14,7 +15,7 @@ pub type Role {
     icon_hash: Option(String),
     unicode_emoji: Option(String),
     position: Int,
-    permissions: String,
+    permissions: List(Permission),
     managed: Bool,
     is_mentionable: Bool,
     tags: Option(Tags),
