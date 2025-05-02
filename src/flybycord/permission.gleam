@@ -2,6 +2,8 @@ import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 
+// TYPES -----------------------------------------------------------------------
+
 pub type Permission {
   CreateInstantInvite
   KickMembers
@@ -53,6 +55,8 @@ pub type Permission {
   SendPolls
   UseExternalApps
 }
+
+// FLAGS -----------------------------------------------------------------------
 
 fn permissions_bits() -> List(#(Int, Permission)) {
   [
@@ -108,6 +112,8 @@ fn permissions_bits() -> List(#(Int, Permission)) {
   ]
 }
 
+// DECODERS --------------------------------------------------------------------
+
 @internal
 pub fn decoder() -> decode.Decoder(List(Permission)) {
   use permissions <- decode.then(decode.string)
@@ -127,4 +133,24 @@ pub fn decoder() -> decode.Decoder(List(Permission)) {
     }
     Error(_) -> decode.failure([], "Permission")
   }
+}
+
+// FUNCTIONS -------------------------------------------------------------------
+
+@internal
+pub fn to_string(permissions: List(Permission)) -> String {
+  permissions_bits()
+  |> list.filter_map(fn(item) {
+    let #(bit, flag) = item
+    let is_in_permissions =
+      permissions
+      |> list.any(fn(permission) { flag == permission })
+
+    case is_in_permissions {
+      True -> Ok(bit)
+      False -> Error(Nil)
+    }
+  })
+  |> int.sum
+  |> int.to_string
 }
