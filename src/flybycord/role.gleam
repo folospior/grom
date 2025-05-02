@@ -1,5 +1,9 @@
 import gleam/dynamic/decode
+import gleam/int
+import gleam/list
 import gleam/option.{type Option, None}
+
+// TYPES -----------------------------------------------------------------------
 
 pub type Role {
   Role(
@@ -13,13 +17,13 @@ pub type Role {
     permissions: String,
     managed: Bool,
     is_mentionable: Bool,
-    tags: Option(RoleTags),
-    flags: Int,
+    tags: Option(Tags),
+    flags: List(Flag),
   )
 }
 
-pub type RoleTags {
-  RoleTags(
+pub type Tags {
+  Tags(
     bot_id: Option(String),
     integration_id: Option(String),
     premium_subscriber: Option(Nil),
@@ -28,6 +32,18 @@ pub type RoleTags {
     guild_connections: Option(Nil),
   )
 }
+
+pub type Flag {
+  InPrompt
+}
+
+// FLAGS -----------------------------------------------------------------------
+
+fn bits_flags() -> List(#(Int, Flag)) {
+  [#(int.bitwise_shift_left(1, 0), InPrompt)]
+}
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn decoder() -> decode.Decoder(Role) {
@@ -54,7 +70,7 @@ pub fn decoder() -> decode.Decoder(Role) {
     None,
     decode.optional(tags_decoder()),
   )
-  use flags <- decode.field("flags", decode.int)
+  use flags <- decode.field("flags", flags_decoder())
   decode.success(Role(
     id:,
     name:,
@@ -72,7 +88,7 @@ pub fn decoder() -> decode.Decoder(Role) {
 }
 
 @internal
-pub fn tags_decoder() -> decode.Decoder(RoleTags) {
+pub fn tags_decoder() -> decode.Decoder(Tags) {
   use bot_id <- decode.field("bot_id", decode.optional(decode.string))
   use integration_id <- decode.field(
     "integration_id",
@@ -94,7 +110,7 @@ pub fn tags_decoder() -> decode.Decoder(RoleTags) {
     "guild_connections",
     decode.optional(decode.success(Nil)),
   )
-  decode.success(RoleTags(
+  decode.success(Tags(
     bot_id:,
     integration_id:,
     premium_subscriber:,
@@ -102,4 +118,18 @@ pub fn tags_decoder() -> decode.Decoder(RoleTags) {
     available_for_purchase:,
     guild_connections:,
   ))
+}
+
+@internal
+pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
+  use flags <- decode.then(decode.int)
+  bits_flags()
+  |> list.filter_map(fn(item) {
+    let #(bit, flag) = item
+    case int.bitwise_and(flags, bit) != 0 {
+      True -> Ok(flag)
+      False -> Error(Nil)
+    }
+  })
+  |> decode.success
 }
