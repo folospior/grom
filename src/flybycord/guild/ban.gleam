@@ -7,7 +7,7 @@ pub type Ban {
 }
 
 @internal
-pub fn ban_decoder() -> decode.Decoder(Ban) {
+pub fn decoder() -> decode.Decoder(Ban) {
   use reason <- decode.field("reason", decode.optional(decode.string))
   use user <- decode.field("user", user.decoder())
   decode.success(Ban(reason:, user:))
