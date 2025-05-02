@@ -16,7 +16,7 @@ pub type Role {
     unicode_emoji: Option(String),
     position: Int,
     permissions: List(Permission),
-    managed: Bool,
+    is_managed: Bool,
     is_mentionable: Bool,
     tags: Option(Tags),
     flags: List(Flag),
@@ -63,8 +63,8 @@ pub fn decoder() -> decode.Decoder(Role) {
     decode.optional(decode.string),
   )
   use position <- decode.field("position", decode.int)
-  use permissions <- decode.field("permissions", decode.string)
-  use managed <- decode.field("managed", decode.bool)
+  use permissions <- decode.field("permissions", permission.decoder())
+  use is_managed <- decode.field("managed", decode.bool)
   use is_mentionable <- decode.field("mentionable", decode.bool)
   use tags <- decode.optional_field(
     "tags",
@@ -81,7 +81,7 @@ pub fn decoder() -> decode.Decoder(Role) {
     unicode_emoji:,
     position:,
     permissions:,
-    managed:,
+    is_managed:,
     is_mentionable:,
     tags:,
     flags:,
