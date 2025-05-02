@@ -6,8 +6,8 @@ import gleam/time/timestamp.{type Timestamp}
 
 // TYPES -----------------------------------------------------------------------
 
-pub type GuildTemplate {
-  GuildTemplate(
+pub type Template {
+  Template(
     code: String,
     name: String,
     description: Option(String),
@@ -24,7 +24,7 @@ pub type GuildTemplate {
 // DECODERS -------------------------------------------------------------------
 
 @internal
-pub fn decoder() -> decode.Decoder(GuildTemplate) {
+pub fn decoder() -> decode.Decoder(Template) {
   use code <- decode.field("code", decode.string)
   use name <- decode.field("name", decode.string)
   use description <- decode.field("description", decode.optional(decode.string))
@@ -35,7 +35,7 @@ pub fn decoder() -> decode.Decoder(GuildTemplate) {
   use updated_at <- decode.field("updated_at", time_rfc3339.decoder())
   use source_guild_id <- decode.field("source_guild_id", decode.string)
   use is_dirty <- decode.field("is_dirty", decode.optional(decode.bool))
-  decode.success(GuildTemplate(
+  decode.success(Template(
     code:,
     name:,
     description:,
