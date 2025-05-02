@@ -120,11 +120,11 @@ pub fn decoder() -> decode.Decoder(List(Permission)) {
   let permissions = permissions |> int.parse
 
   case permissions {
-    Ok(permissions_int) -> {
+    Ok(permissions) -> {
       permissions_bits()
       |> list.filter_map(fn(item) {
         let #(bit, permission) = item
-        case int.bitwise_and(permissions_int, bit) != 0 {
+        case int.bitwise_and(permissions, bit) != 0 {
           True -> Ok(permission)
           False -> Error(Nil)
         }
