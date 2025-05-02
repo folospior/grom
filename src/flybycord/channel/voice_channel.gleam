@@ -1,9 +1,13 @@
 import gleam/dynamic/decode
 
+// TYPES -----------------------------------------------------------------------
+
 pub type VideoQualityMode {
   Auto
   Full
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn video_quality_mode_decoder() -> decode.Decoder(VideoQualityMode) {

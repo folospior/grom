@@ -6,6 +6,8 @@ import gleam/list
 import gleam/option.{type Option, None}
 import gleam/time/timestamp.{type Timestamp}
 
+// TYPES -----------------------------------------------------------------------
+
 pub type Member {
   Member(
     user: Option(User),
@@ -37,6 +39,8 @@ pub type Flag {
   DmSettingsUpsellAcknowledged
 }
 
+// FLAGS -----------------------------------------------------------------------
+
 const bits_flags = [
   #(1, DidRejoin),
   #(2, CompletedOnboarding),
@@ -48,6 +52,8 @@ const bits_flags = [
   #(128, AutomodQuarantinedUsername),
   #(512, DmSettingsUpsellAcknowledged),
 ]
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn decoder() -> decode.Decoder(Member) {

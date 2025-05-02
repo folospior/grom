@@ -3,8 +3,10 @@ import flybycord/user.{type User}
 import gleam/dynamic/decode
 import gleam/option.{type Option}
 
+// TYPES -----------------------------------------------------------------------
+
 pub type Settings {
-  WidgetSettings(is_enabled: Bool, channel_id: Option(String))
+  Settings(is_enabled: Bool, channel_id: Option(String))
 }
 
 pub type Widget {
@@ -18,11 +20,13 @@ pub type Widget {
   )
 }
 
+// DECODERS --------------------------------------------------------------------
+
 @internal
 pub fn settings_decoder() -> decode.Decoder(Settings) {
   use is_enabled <- decode.field("enabled", decode.bool)
   use channel_id <- decode.field("channel_id", decode.optional(decode.string))
-  decode.success(WidgetSettings(is_enabled:, channel_id:))
+  decode.success(Settings(is_enabled:, channel_id:))
 }
 
 @internal

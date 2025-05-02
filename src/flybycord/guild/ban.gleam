@@ -2,9 +2,13 @@ import flybycord/user.{type User}
 import gleam/dynamic/decode
 import gleam/option.{type Option}
 
+// TYPES -----------------------------------------------------------------------
+
 pub type Ban {
   Ban(reason: Option(String), user: User)
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn decoder() -> decode.Decoder(Ban) {

@@ -1,6 +1,8 @@
 import gleam/dynamic/decode
 import gleam/time/timestamp.{type Timestamp}
 
+// DECODERS --------------------------------------------------------------------
+
 @internal
 pub fn decoder() -> decode.Decoder(Timestamp) {
   use rfc3339 <- decode.then(decode.string)

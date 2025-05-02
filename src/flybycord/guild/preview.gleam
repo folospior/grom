@@ -4,6 +4,8 @@ import flybycord/sticker.{type Sticker}
 import gleam/dynamic/decode
 import gleam/option.{type Option}
 
+// TYPES -----------------------------------------------------------------------
+
 pub type Preview {
   Preview(
     id: String,
@@ -19,6 +21,8 @@ pub type Preview {
     stickers: List(Sticker),
   )
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn decoder() -> decode.Decoder(Preview) {

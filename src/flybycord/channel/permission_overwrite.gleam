@@ -1,6 +1,8 @@
 import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
 
+// TYPES -----------------------------------------------------------------------
+
 pub type PermissionOverwrite {
   PermissionOverwrite(
     id: String,
@@ -14,6 +16,8 @@ pub type Type {
   Role
   Member
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn decoder() -> decode.Decoder(PermissionOverwrite) {

@@ -1,5 +1,7 @@
 import gleam/bit_array
 
+// TYPES -----------------------------------------------------------------------
+
 pub type Data =
   String
 
@@ -8,6 +10,8 @@ pub type ContentType {
   Png
   Gif
 }
+
+// FUNCTIONS -------------------------------------------------------------------
 
 pub fn from_bit_array(
   image data: BitArray,

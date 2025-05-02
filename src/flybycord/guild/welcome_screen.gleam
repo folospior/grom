@@ -1,6 +1,8 @@
 import gleam/dynamic/decode
 import gleam/option.{type Option}
 
+// TYPES -----------------------------------------------------------------------
+
 pub type WelcomeScreen {
   WelcomeScreen(description: Option(String), welcome_channels: List(Channel))
 }
@@ -13,6 +15,8 @@ pub type Channel {
     emoji_name: Option(String),
   )
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn decoder() -> decode.Decoder(WelcomeScreen) {

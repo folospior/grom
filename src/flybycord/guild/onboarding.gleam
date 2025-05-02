@@ -2,6 +2,8 @@ import flybycord/emoji.{type Emoji}
 import gleam/dynamic/decode
 import gleam/option.{type Option, None}
 
+// TYPES -----------------------------------------------------------------------
+
 pub type Onboarding {
   Onboarding(
     guild_id: String,
@@ -46,6 +48,8 @@ pub type PromptType {
   MultipleChoice
   Dropdown
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn onboarding_decoder() -> decode.Decoder(Onboarding) {

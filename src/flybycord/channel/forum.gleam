@@ -1,6 +1,8 @@
 import gleam/dynamic/decode
 import gleam/option.{type Option}
 
+// TYPES -----------------------------------------------------------------------
+
 pub type Tag {
   Tag(
     id: String,
@@ -25,6 +27,8 @@ pub type LayoutType {
   ListView
   GalleryView
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn tag_decoder() -> decode.Decoder(Tag) {

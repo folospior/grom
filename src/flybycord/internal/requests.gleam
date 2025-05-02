@@ -7,9 +7,13 @@ import gleam/httpc
 import gleam/json
 import gleam/result
 
+// CONSTANTS -------------------------------------------------------------------
+
 const discord_url = "discord.com"
 
 const discord_api_path = "api/v10"
+
+// FUNCTIONS -------------------------------------------------------------------
 
 fn new_request(token: String, path: String) {
   request.new()
@@ -35,6 +39,7 @@ fn ensure_status_code_success(
   }
 }
 
+@internal
 pub fn get(
   client: Client,
   to path: String,
@@ -50,6 +55,7 @@ pub fn get(
   |> ensure_status_code_success
 }
 
+@internal
 pub fn patch(
   client: Client,
   to path: String,
@@ -67,6 +73,7 @@ pub fn patch(
   |> ensure_status_code_success
 }
 
+@internal
 pub fn delete(
   client: Client,
   to path: String,
