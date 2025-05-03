@@ -1,7 +1,6 @@
 import flybycord/client.{type Client}
 import flybycord/internal/error
 import flybycord/rest
-import flybycord/user/modify_current_user.{type ModifyCurrentUser}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request.{type Request}

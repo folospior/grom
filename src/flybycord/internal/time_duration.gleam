@@ -1,4 +1,5 @@
 import gleam/dynamic/decode
+import gleam/float
 import gleam/time/duration.{type Duration}
 
 // DECODERS --------------------------------------------------------------------
@@ -7,4 +8,14 @@ import gleam/time/duration.{type Duration}
 pub fn from_minutes_decoder() -> decode.Decoder(Duration) {
   use minutes <- decode.then(decode.int)
   decode.success(duration.seconds(minutes * 60))
+}
+
+@internal
+pub fn from_seconds_decoder() -> decode.Decoder(Duration) {
+  use seconds <- decode.then(decode.float)
+
+  seconds
+  |> float.round
+  |> duration.seconds
+  |> decode.success
 }

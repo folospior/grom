@@ -20,6 +20,10 @@ pub type Sticker {
   )
 }
 
+pub type Item {
+  Item(id: String, name: String, format_type: FormatType)
+}
+
 pub type Type {
   Standard
   Guild
@@ -94,4 +98,12 @@ pub fn decoder() -> decode.Decoder(Sticker) {
     user:,
     sort_value:,
   ))
+}
+
+@internal
+pub fn item_decoder() -> decode.Decoder(Item) {
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use format_type <- decode.field("format_type", format_type_decoder())
+  decode.success(Item(id:, name:, format_type:))
 }

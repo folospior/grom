@@ -17,8 +17,8 @@ pub type Member {
     roles: List(String),
     joined_at: Timestamp,
     premium_since: Option(Timestamp),
-    is_deaf: Bool,
-    is_mute: Bool,
+    is_deaf: Option(Bool),
+    is_mute: Option(Bool),
     flags: List(Flag),
     is_pending: Option(Bool),
     permissions: Option(String),
@@ -84,8 +84,16 @@ pub fn decoder() -> decode.Decoder(Member) {
     None,
     decode.optional(time_rfc3339.decoder()),
   )
-  use is_deaf <- decode.field("deaf", decode.bool)
-  use is_mute <- decode.field("mute", decode.bool)
+  use is_deaf <- decode.optional_field(
+    "deaf",
+    None,
+    decode.optional(decode.bool),
+  )
+  use is_mute <- decode.optional_field(
+    "mute",
+    None,
+    decode.optional(decode.bool),
+  )
   use flags <- decode.field("flags", flags_decoder())
   use is_pending <- decode.optional_field(
     "pending",

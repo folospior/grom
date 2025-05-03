@@ -141,6 +141,10 @@ pub type Type {
   GuildMedia
 }
 
+pub type Mention {
+  Mention(id: String, guild_id: String, type_: Type, name: String)
+}
+
 // DECODERS --------------------------------------------------------------------
 
 @internal
@@ -501,6 +505,15 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     16 -> decode.success(GuildMedia)
     _ -> decode.failure(GuildText, "Type")
   }
+}
+
+@internal
+pub fn mention_decoder() -> decode.Decoder(Mention) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use type_ <- decode.field("type", type_decoder())
+  use name <- decode.field("name", decode.string)
+  decode.success(Mention(id:, guild_id:, type_:, name:))
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
