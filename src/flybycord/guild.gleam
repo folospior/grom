@@ -1,9 +1,12 @@
+import flybycord/client.{type Client}
 import flybycord/emoji.{type Emoji}
 import flybycord/guild/welcome_screen.{type WelcomeScreen}
 import flybycord/internal/time_rfc3339
+import flybycord/rest
 import flybycord/role.{type Role}
 import flybycord/sticker.{type Sticker}
 import gleam/dynamic/decode
+import gleam/http
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None}
@@ -503,4 +506,11 @@ pub fn incidents_data_decoder() -> decode.Decoder(IncidentsData) {
     dms_spam_disabled_at:,
     raid_detected_at:,
   ))
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn leave(client: Client, guild_id: String) {
+  client
+  |> rest.new_request(http.Delete, "/users/@me/guilds/" <> guild_id)
 }

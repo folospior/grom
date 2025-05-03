@@ -2,12 +2,20 @@ import flybycord/channel/forum
 import flybycord/channel/permission_overwrite.{type PermissionOverwrite}
 import flybycord/channel/thread
 import flybycord/channel/voice_channel
+import flybycord/client.{type Client}
+import flybycord/internal/error
 import flybycord/internal/time_duration
 import flybycord/internal/time_rfc3339
 import flybycord/permission.{type Permission}
+import flybycord/rest
 import flybycord/user.{type User}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
+import gleam/http/response.{type Response}
+import gleam/json
 import gleam/option.{type Option, None}
+import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 
@@ -493,4 +501,26 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     16 -> decode.success(GuildMedia)
     _ -> decode.failure(GuildText, "Type")
   }
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn parse(
+  response: Result(Response(String), error.FlybycordError),
+) -> Result(Channel, error.FlybycordError) {
+  use response <- result.try(response)
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn create_dm(client: Client, recipient_id: String) {
+  let body =
+    json.object([#("recipient_id", json.string(recipient_id))])
+    |> json.to_string
+
+  client
+  |> rest.new_request(http.Post, "/users/@me/channels")
+  |> request.set_body(body)
 }

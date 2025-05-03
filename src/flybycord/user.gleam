@@ -1,8 +1,11 @@
 import flybycord/client.{type Client}
-import flybycord/image
 import flybycord/internal/error
-import flybycord/internal/requests
+import flybycord/rest
+import flybycord/user/modify_current_user.{type ModifyCurrentUser}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request.{type Request}
+import gleam/http/response.{type Response}
 import gleam/int
 import gleam/json
 import gleam/list
@@ -57,10 +60,6 @@ pub type Flag {
   CertifiedModerator
   BotHttpInteractions
   ActiveDeveloper
-}
-
-pub type ModifyCurrentUser {
-  ModifyCurrentUser(username: String, avatar: image.Data, banner: image.Data)
 }
 
 // CONSTANTS ------------------------------------------------------------------
@@ -185,71 +184,18 @@ pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
   |> decode.success
 }
 
-// ENCODERS -------------------------------------------------------------------
-
-fn encode_modify_current_user(
-  modify_current_user: ModifyCurrentUser,
-) -> json.Json {
-  json.object([
-    #("username", json.string(modify_current_user.username)),
-    #("avatar", json.string(modify_current_user.avatar)),
-    #("banner", json.string(modify_current_user.banner)),
-  ])
-}
-
 // PUBLIC API FUNCTIONS -------------------------------------------------------
 
-pub fn get_user(
-  client: Client,
-  id: String,
+pub fn parse(
+  response: Result(Response(String), error.FlybycordError),
 ) -> Result(User, error.FlybycordError) {
-  use response <- result.try(
-    client
-    |> requests.get("/users/" <> id),
-  )
-
+  use response <- result.try(response)
   response.body
   |> json.parse(using: decoder())
   |> result.map_error(error.DecodeError)
 }
 
-pub fn get_current_user(
-  client: client.Client,
-) -> Result(User, error.FlybycordError) {
-  use response <- result.try(
-    client
-    |> requests.get(to: "/users/@me"),
-  )
-
-  response.body
-  |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
-}
-
-pub fn modify_current_user(
-  client: Client,
-  with data: ModifyCurrentUser,
-) -> Result(User, error.FlybycordError) {
-  let json_data = data |> encode_modify_current_user
-
-  use response <- result.try(
-    client
-    |> requests.patch(to: "/users/@me", using: json_data),
-  )
-
-  response.body
-  |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
-}
-
-pub fn leave_guild(
-  client: Client,
-  guild_id: String,
-) -> Result(Nil, error.FlybycordError) {
-  use _ <- result.try(
-    client
-    |> requests.delete(to: "/users/@me/guilds/" <> guild_id),
-  )
-
-  Ok(Nil)
+pub fn get(client: Client, id: String) -> Request(String) {
+  client
+  |> rest.new_request(http.Get, "/users/" <> id)
 }

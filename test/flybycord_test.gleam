@@ -1,4 +1,6 @@
 import flybycord/permission
+import flybycord/user/modify_current_user
+import gleam/json
 import gleeunit
 import gleeunit/should
 
@@ -16,4 +18,12 @@ pub fn permission_to_string_test() {
   [permission.CreateInstantInvite, permission.Administrator]
   |> permission.to_string
   |> should.equal("9")
+}
+
+pub fn encode_modify_current_test() {
+  modify_current_user.new()
+  |> modify_current_user.with_username("fo1o")
+  |> modify_current_user.encode
+  |> json.to_string
+  |> should.equal("{\"username\":\"fo1o\"}")
 }

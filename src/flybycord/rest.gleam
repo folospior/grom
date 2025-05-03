@@ -1,10 +1,18 @@
+import flybycord/client.{type Client}
 import flybycord/internal/error
+import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/httpc
 import gleam/result
 
-// FUNCTIONS -------------------------------------------------------------------
+// CONSTANTS -------------------------------------------------------------------
+
+const discord_url = "discord.com"
+
+const discord_api_path = "api/v10"
+
+// PUBLIC FUNCTIONS ------------------------------------------------------------
 
 pub fn with_reason(request: Request(a), reason: String) -> Request(a) {
   request
@@ -24,7 +32,26 @@ pub fn execute(
   |> ensure_status_code_success
 }
 
-// HELPERS ---------------------------------------------------------------------
+// INTERNAL FUNCTIONS ----------------------------------------------------------
+
+@internal
+pub fn new_request(client: Client, method: http.Method, path: String) {
+  request.new()
+  |> request.set_scheme(http.Https)
+  |> request.set_host(discord_url)
+  |> request.set_path(discord_api_path <> path)
+  |> request.set_method(method)
+  |> request.prepend_header("authorization", "Bot" <> client.token)
+  |> request.prepend_header(
+    "user-agent",
+    "DiscordBot (https://github.com/folospior/flybycord, "
+      <> client.version()
+      <> ")",
+  )
+  |> request.prepend_header("content-type", "application/json")
+}
+
+// PRIVATE FUNCTIONS -----------------------------------------------------------
 
 fn ensure_status_code_success(
   response: Response(String),
