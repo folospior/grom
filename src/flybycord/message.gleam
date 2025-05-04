@@ -1,5 +1,6 @@
 import flybycord/application.{type Application}
 import flybycord/channel.{type Channel}
+import flybycord/guild/role.{type Role}
 import flybycord/internal/time_rfc3339
 import flybycord/message/activity.{type Activity}
 import flybycord/message/attachment.{type Attachment}
@@ -11,7 +12,6 @@ import flybycord/message/message_reference.{type MessageReference}
 import flybycord/message/poll.{type Poll}
 import flybycord/message/reaction.{type Reaction}
 import flybycord/message/resolved.{type Resolved}
-import flybycord/role.{type Role}
 import flybycord/sticker
 import flybycord/user.{type User}
 import gleam/dynamic/decode
