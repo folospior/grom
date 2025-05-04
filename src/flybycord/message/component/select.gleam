@@ -1,5 +1,5 @@
 import flybycord/channel.{type Channel}
-import flybycord/guild/role.{type Role}
+import flybycord/role.{type Role}
 import flybycord/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
