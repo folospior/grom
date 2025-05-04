@@ -1,5 +1,8 @@
 name = "flybycord"
-version = "1.0.0"
+version = "0.0.0"
+description = "Gleam wrapper for the Discord API"
+licenses = ["Apache-2.0", "MIT"]
+repository = { type = "github", user = "folospior", repo = "flybycord"}
 
 # Fill out these fields if you intend to generate HTML documentation or publish
 # your project to the Hex package manager.
