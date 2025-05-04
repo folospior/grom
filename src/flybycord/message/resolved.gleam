@@ -1,9 +1,9 @@
 import flybycord/channel
 import flybycord/channel/thread
 import flybycord/guild/member.{type Member}
+import flybycord/guild/role.{type Role}
 import flybycord/message/attachment.{type Attachment}
 import flybycord/permission.{type Permission}
-import flybycord/role.{type Role}
 import flybycord/user.{type User}
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
