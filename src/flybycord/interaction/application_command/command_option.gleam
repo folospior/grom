@@ -1,7 +1,9 @@
+//// This module has been named `command_option`, because `option` is a Gleam standard library module.
+//// So has its underlying type.
+//// This deviates from flybycord's naming convention.
+
 import flybycord/channel
-import flybycord/interaction/application_command/command_option_choice.{
-  type CommandOptionChoice,
-}
+import flybycord/interaction/application_command/choice.{type Choice}
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
 
@@ -26,7 +28,7 @@ pub type CommandOption {
     description: String,
     description_localizations: Option(Dict(String, String)),
     is_required: Bool,
-    choices: Option(List(CommandOptionChoice)),
+    choices: Option(List(Choice)),
     min_length: Option(Int),
     max_length: Option(Int),
     is_autocomplete: Bool,
@@ -37,7 +39,7 @@ pub type CommandOption {
     description: String,
     description_localizations: Option(Dict(String, String)),
     is_required: Bool,
-    choices: Option(List(CommandOptionChoice)),
+    choices: Option(List(Choice)),
     min_value: Option(Int),
     max_value: Option(Int),
     is_autocomplete: Bool,
@@ -84,7 +86,7 @@ pub type CommandOption {
     description: String,
     description_localizations: Option(Dict(String, String)),
     is_required: Bool,
-    choices: Option(List(CommandOptionChoice)),
+    choices: Option(List(Choice)),
     min_value: Option(Float),
     max_value: Option(Float),
     is_autocomplete: Bool,
