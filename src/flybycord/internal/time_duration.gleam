@@ -11,11 +11,20 @@ pub fn from_minutes_decoder() -> decode.Decoder(Duration) {
 }
 
 @internal
-pub fn from_seconds_decoder() -> decode.Decoder(Duration) {
+pub fn from_float_seconds_decoder() -> decode.Decoder(Duration) {
   use seconds <- decode.then(decode.float)
 
   seconds
   |> float.round
+  |> duration.seconds
+  |> decode.success
+}
+
+@internal
+pub fn from_int_seconds_decoder() -> decode.Decoder(Duration) {
+  use seconds <- decode.then(decode.int)
+
+  seconds
   |> duration.seconds
   |> decode.success
 }

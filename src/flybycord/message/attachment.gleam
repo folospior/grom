@@ -72,7 +72,10 @@ pub fn decoder() -> decode.Decoder(Attachment) {
     None,
     decode.optional(decode.bool),
   )
-  use duration <- decode.field("duration", time_duration.from_seconds_decoder())
+  use duration <- decode.field(
+    "duration",
+    time_duration.from_float_seconds_decoder(),
+  )
   use waveform <- decode.field("waveform", decode.optional(base64.decoder()))
   use flags <- decode.field("flags", decode.optional(flags_decoder()))
   decode.success(Attachment(
