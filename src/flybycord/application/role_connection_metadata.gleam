@@ -1,13 +1,16 @@
 import flybycord/client.{type Client}
+import flybycord/internal/error
 import flybycord/rest
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/function
 import gleam/http
 import gleam/http/request.{type Request}
+import gleam/http/response.{type Response}
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 
 // TYPES -----------------------------------------------------------------------
 
@@ -36,9 +39,7 @@ pub type Type {
 // DECODERS --------------------------------------------------------------------
 
 @internal
-pub fn role_connection_metadata_decoder() -> decode.Decoder(
-  RoleConnectionMetadata,
-) {
+pub fn decoder() -> decode.Decoder(RoleConnectionMetadata) {
   use type_ <- decode.field("type", type_decoder())
   use key <- decode.field("key", decode.string)
   use name <- decode.field("name", decode.string)
@@ -131,6 +132,16 @@ fn type_encode(type_: Type) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
+pub fn parse(
+  response: Result(Response(String), error.FlybycordError),
+) -> Result(List(RoleConnectionMetadata), error.FlybycordError) {
+  use response <- result.try(response)
+
+  response.body
+  |> json.parse(using: decode.list(decoder()))
+  |> result.map_error(error.DecodeError)
+}
+
 pub fn get(client: Client, application_id: String) -> Request(String) {
   client
   |> rest.new_request(
@@ -142,9 +153,9 @@ pub fn get(client: Client, application_id: String) -> Request(String) {
 pub fn modify(
   client: Client,
   application_id: String,
-  new_metadata new: RoleConnectionMetadata,
+  new_metadata metadata: List(RoleConnectionMetadata),
 ) -> Request(String) {
-  let json = encode(new)
+  let json = json.array(metadata, encode)
 
   client
   |> rest.new_request(
