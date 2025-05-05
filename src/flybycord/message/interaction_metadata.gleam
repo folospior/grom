@@ -11,7 +11,10 @@ pub type InteractionMetadata {
     id: String,
     type_: Type,
     user: User,
-    authorizing_integration_owners: Dict(application.IntegrationType, String),
+    authorizing_integration_owners: Dict(
+      application.InstallationContext,
+      String,
+    ),
     original_response_message_id: Option(String),
     target_user: Option(User),
     target_message_id: Option(String),
@@ -35,7 +38,7 @@ pub fn decoder() -> decode.Decoder(InteractionMetadata) {
   use user <- decode.field("user", user.decoder())
   use authorizing_integration_owners <- decode.field(
     "authorizing_integration_owners",
-    decode.dict(application.integration_type_decoder(), decode.string),
+    decode.dict(application.installation_context_decoder(), decode.string),
   )
   use original_response_message_id <- decode.optional_field(
     "original_response_message_id",

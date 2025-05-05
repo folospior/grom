@@ -1,5 +1,6 @@
 import flybycord/guild/auto_moderation/keyword_preset
 import gleam/dynamic/decode
+import gleam/int
 import gleam/option.{type Option, None}
 
 // TYPES -----------------------------------------------------------------------
@@ -35,6 +36,15 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     5 -> decode.success(MentionSpam)
     6 -> decode.success(MemberProfile)
     _ -> decode.failure(Keyword, "Type")
+  }
+}
+
+@internal
+pub fn type_string_decoder() -> decode.Decoder(Type) {
+  use variant <- decode.then(decode.string)
+  case int.parse(variant) {
+    Ok(_) -> type_decoder()
+    Error(_) -> decode.failure(Keyword, "Type")
   }
 }
 

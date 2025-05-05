@@ -10,7 +10,7 @@ pub type Integration {
   Integration(
     id: String,
     name: String,
-    type_: String,
+    type_: Type,
     is_enabled: Bool,
     is_syncing: Option(Bool),
     role_id: Option(String),
@@ -25,6 +25,13 @@ pub type Integration {
     application: Option(Application),
     scopes: Option(List(String)),
   )
+}
+
+pub type Type {
+  Twitch
+  YouTube
+  Discord
+  GuildSubscription
 }
 
 pub type Account {
@@ -52,7 +59,7 @@ pub type ExpireBehavior {
 pub fn decoder() -> decode.Decoder(Integration) {
   use id <- decode.field("id", decode.string)
   use name <- decode.field("name", decode.string)
-  use type_ <- decode.field("type", decode.string)
+  use type_ <- decode.field("type", type_decoder())
   use is_enabled <- decode.field("enabled", decode.bool)
   use is_syncing <- decode.optional_field(
     "syncing",
@@ -128,6 +135,18 @@ pub fn decoder() -> decode.Decoder(Integration) {
     application:,
     scopes:,
   ))
+}
+
+@internal
+pub fn type_decoder() -> decode.Decoder(Type) {
+  use variant <- decode.then(decode.string)
+  case variant {
+    "twitch" -> decode.success(Twitch)
+    "youtube" -> decode.success(YouTube)
+    "discord" -> decode.success(Discord)
+    "guild_subscription" -> decode.success(GuildSubscription)
+    _ -> decode.failure(Twitch, "Type")
+  }
 }
 
 @internal

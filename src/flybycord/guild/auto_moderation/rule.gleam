@@ -24,7 +24,7 @@ pub type Rule {
 // DECODERS --------------------------------------------------------------------
 
 @internal
-pub fn rule_decoder() -> decode.Decoder(Rule) {
+pub fn decoder() -> decode.Decoder(Rule) {
   use id <- decode.field("id", decode.string)
   use guild_id <- decode.field("guild_id", decode.string)
   use name <- decode.field("name", decode.string)

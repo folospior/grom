@@ -4,7 +4,7 @@ import flybycord/entitlement.{type Entitlement}
 import flybycord/guild.{type Guild}
 import flybycord/guild/member.{type Member}
 import flybycord/interaction/application_command
-import flybycord/interaction/context_type.{type InteractionContextType}
+import flybycord/interaction/context_type.{type ContextType}
 import flybycord/interaction/resolved.{type Resolved}
 import flybycord/message.{type Message}
 import flybycord/message/component.{type Component}
@@ -33,8 +33,11 @@ pub type Interaction {
     locale: Option(String),
     guild_locale: Option(String),
     entitlements: List(Entitlement),
-    authorizing_integration_owners: Dict(application.IntegrationType, String),
-    context: Option(InteractionContextType),
+    authorizing_integration_owners: Dict(
+      application.InstallationContext,
+      String,
+    ),
+    context: Option(ContextType),
     attachment_size_limit_bytes: Int,
   )
 }

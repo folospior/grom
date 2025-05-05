@@ -41,8 +41,8 @@ pub type Application {
     event_webhooks_types: Option(List(webhook_event.Type)),
     tags: Option(List(String)),
     install_params: Option(InstallParams),
-    integration_types_config: Option(
-      Dict(IntegrationType, IntegrationTypeConfig),
+    installation_context_config: Option(
+      Dict(InstallationContext, InstallationContextConfig),
     ),
     custom_install_url: Option(String),
   )
@@ -71,13 +71,13 @@ pub type InstallParams {
   InstallParams(scopes: List(String), permissions: List(Permission))
 }
 
-pub type IntegrationType {
+pub type InstallationContext {
   GuildInstall
   UserInstall
 }
 
-pub type IntegrationTypeConfig {
-  IntegrationTypeConfig(oauth2_install_params: Option(InstallParams))
+pub type InstallationContextConfig {
+  InstallationContextConfig(oauth2_install_params: Option(InstallParams))
 }
 
 // FLAGS -----------------------------------------------------------------------
@@ -212,12 +212,12 @@ pub fn decoder() -> decode.Decoder(Application) {
     None,
     decode.optional(install_params_decoder()),
   )
-  use integration_types_config <- decode.optional_field(
+  use installation_context_config <- decode.optional_field(
     "integration_types_config",
     None,
     decode.optional(decode.dict(
-      integration_type_decoder(),
-      integration_type_config_decoder(),
+      installation_context_decoder(),
+      installation_context_config_decoder(),
     )),
   )
   use custom_install_url <- decode.optional_field(
@@ -254,7 +254,7 @@ pub fn decoder() -> decode.Decoder(Application) {
     event_webhooks_types:,
     tags:,
     install_params:,
-    integration_types_config:,
+    installation_context_config:,
     custom_install_url:,
   ))
 }
@@ -281,7 +281,7 @@ pub fn install_params_decoder() -> decode.Decoder(InstallParams) {
 }
 
 @internal
-pub fn integration_type_decoder() -> decode.Decoder(IntegrationType) {
+pub fn installation_context_decoder() -> decode.Decoder(InstallationContext) {
   use variant <- decode.then(decode.int)
   case variant {
     0 -> decode.success(GuildInstall)
@@ -291,15 +291,15 @@ pub fn integration_type_decoder() -> decode.Decoder(IntegrationType) {
 }
 
 @internal
-pub fn integration_type_config_decoder() -> decode.Decoder(
-  IntegrationTypeConfig,
+pub fn installation_context_config_decoder() -> decode.Decoder(
+  InstallationContextConfig,
 ) {
   use oauth2_install_params <- decode.optional_field(
     "oauth2_install_params",
     None,
     decode.optional(install_params_decoder()),
   )
-  decode.success(IntegrationTypeConfig(oauth2_install_params:))
+  decode.success(InstallationContextConfig(oauth2_install_params:))
 }
 
 @internal
