@@ -143,7 +143,7 @@ pub fn encode(permissions: List(Permission)) -> Json {
   json.string(permissions |> to_string)
 }
 
-// FUNCTIONS -------------------------------------------------------------------
+// INTERNAL FUNCTIONS ----------------------------------------------------------
 
 @internal
 pub fn to_string(permissions: List(Permission)) -> String {
