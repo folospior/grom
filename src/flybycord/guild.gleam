@@ -1,9 +1,9 @@
 import flybycord/client.{type Client}
 import flybycord/emoji.{type Emoji}
+import flybycord/error
 import flybycord/guild/auto_moderation/rule.{type Rule}
 import flybycord/guild/role.{type Role}
 import flybycord/guild/welcome_screen.{type WelcomeScreen}
-import flybycord/internal/error
 import flybycord/internal/rest
 import flybycord/internal/time_rfc3339
 import flybycord/sticker.{type Sticker}

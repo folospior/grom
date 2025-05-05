@@ -3,7 +3,7 @@ import flybycord/channel/permission_overwrite.{type PermissionOverwrite}
 import flybycord/channel/thread
 import flybycord/channel/voice_channel
 import flybycord/client.{type Client}
-import flybycord/internal/error
+import flybycord/error
 import flybycord/internal/rest
 import flybycord/internal/time_duration
 import flybycord/internal/time_rfc3339

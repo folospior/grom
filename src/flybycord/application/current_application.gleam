@@ -1,8 +1,8 @@
 import flybycord/add_or_remove.{type AddOrRemove}
 import flybycord/application.{type Application}
 import flybycord/client.{type Client}
+import flybycord/error
 import flybycord/image
-import flybycord/internal/error
 import flybycord/internal/rest
 import flybycord/webhook_event
 import gleam/dict.{type Dict}

@@ -1,10 +1,10 @@
 import flybycord/channel.{type Channel}
 import flybycord/client.{type Client}
+import flybycord/error
 import flybycord/guild/audit_log/entry.{type Entry}
 import flybycord/guild/auto_moderation/rule.{type Rule}
 import flybycord/guild/scheduled_event.{type ScheduledEvent}
 import flybycord/interaction/application_command.{type ApplicationCommand}
-import flybycord/internal/error
 import flybycord/internal/rest
 import flybycord/user.{type User}
 import flybycord/webhook.{type Webhook}

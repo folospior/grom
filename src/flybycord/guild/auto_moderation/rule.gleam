@@ -1,8 +1,8 @@
 import flybycord/client.{type Client}
+import flybycord/error
 import flybycord/guild/auto_moderation/action.{type Action}
 import flybycord/guild/auto_moderation/event
 import flybycord/guild/auto_moderation/trigger
-import flybycord/internal/error
 import flybycord/internal/rest
 import gleam/dynamic/decode
 import gleam/http

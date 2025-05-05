@@ -1,5 +1,5 @@
 import flybycord/client.{type Client}
-import flybycord/internal/error
+import flybycord/error
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}

@@ -1,5 +1,5 @@
 import flybycord/client.{type Client}
-import flybycord/internal/error
+import flybycord/error
 import flybycord/internal/rest
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
