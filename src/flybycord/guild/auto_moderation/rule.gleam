@@ -3,10 +3,10 @@ import flybycord/guild/auto_moderation/action.{type Action}
 import flybycord/guild/auto_moderation/event
 import flybycord/guild/auto_moderation/trigger
 import flybycord/internal/error
-import flybycord/rest
+import flybycord/internal/rest
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request.{type Request}
+import gleam/http/request
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}

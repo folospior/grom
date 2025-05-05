@@ -3,7 +3,7 @@ import flybycord/application.{type Application}
 import flybycord/client.{type Client}
 import flybycord/image
 import flybycord/internal/error
-import flybycord/rest
+import flybycord/internal/rest
 import flybycord/webhook_event
 import gleam/dict.{type Dict}
 import gleam/http

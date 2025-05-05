@@ -4,8 +4,8 @@ import flybycord/guild/auto_moderation/rule.{type Rule}
 import flybycord/guild/role.{type Role}
 import flybycord/guild/welcome_screen.{type WelcomeScreen}
 import flybycord/internal/error
+import flybycord/internal/rest
 import flybycord/internal/time_rfc3339
-import flybycord/rest
 import flybycord/sticker.{type Sticker}
 import gleam/dynamic/decode
 import gleam/http

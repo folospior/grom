@@ -2,7 +2,7 @@ import flybycord/client.{type Client}
 import flybycord/guild/member.{type Member}
 import flybycord/image
 import flybycord/internal/error
-import flybycord/rest
+import flybycord/internal/rest
 import flybycord/user.{type User}
 import gleam/bool
 import gleam/http

@@ -5,13 +5,12 @@ import flybycord/guild/auto_moderation/rule.{type Rule}
 import flybycord/guild/scheduled_event.{type ScheduledEvent}
 import flybycord/interaction/application_command.{type ApplicationCommand}
 import flybycord/internal/error
-import flybycord/rest
+import flybycord/internal/rest
 import flybycord/user.{type User}
 import flybycord/webhook.{type Webhook}
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request.{type Request}
-import gleam/http/response.{type Response}
+import gleam/http/request
 import gleam/int
 import gleam/json
 import gleam/list
