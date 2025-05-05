@@ -1,5 +1,6 @@
 import gleam/dynamic/decode
 import gleam/int
+import gleam/json.{type Json}
 import gleam/list
 
 // TYPES -----------------------------------------------------------------------
@@ -133,6 +134,13 @@ pub fn decoder() -> decode.Decoder(List(Permission)) {
     }
     Error(_) -> decode.failure([], "Permission")
   }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn encode(permissions: List(Permission)) -> Json {
+  json.string(permissions |> to_string)
 }
 
 // FUNCTIONS -------------------------------------------------------------------

@@ -6,6 +6,7 @@ import flybycord/webhook_event
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None}
 
@@ -310,5 +311,69 @@ pub fn event_webhook_status_decoder() -> decode.Decoder(EventWebhookStatus) {
     2 -> decode.success(Enabled)
     3 -> decode.success(DisabledByDiscord)
     _ -> decode.failure(Disabled, "EventWebhookStatus")
+  }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn install_params_encode(install_params: InstallParams) -> json.Json {
+  let InstallParams(scopes:, permissions:) = install_params
+  json.object([
+    #("scopes", json.array(scopes, json.string)),
+    #("permissions", permission.encode(permissions)),
+  ])
+}
+
+@internal
+pub fn installation_context_to_string(context: InstallationContext) -> String {
+  case context {
+    GuildInstall -> 0
+    UserInstall -> 1
+  }
+  |> int.to_string
+}
+
+@internal
+pub fn installation_context_config_encode(
+  installation_context_config: InstallationContextConfig,
+) -> json.Json {
+  let InstallationContextConfig(oauth2_install_params:) =
+    installation_context_config
+  json.object([
+    #("oauth2_install_params", case oauth2_install_params {
+      None -> json.null()
+      option.Some(params) -> install_params_encode(params)
+    }),
+  ])
+}
+
+@internal
+pub fn flags_encode(flags: List(Flag)) -> json.Json {
+  json.int(flags |> flags_to_int)
+}
+
+@internal
+pub fn flags_to_int(flags: List(Flag)) -> Int {
+  bits_flags()
+  |> list.filter_map(fn(item) {
+    let #(bit, flag) = item
+    let is_in_flags = list.any(flags, fn(curr) { curr == flag })
+    case is_in_flags {
+      True -> Ok(bit)
+      False -> Error(Nil)
+    }
+  })
+  |> int.sum
+}
+
+@internal
+pub fn event_webhook_status_encode(
+  event_webhook_status: EventWebhookStatus,
+) -> json.Json {
+  case event_webhook_status {
+    Disabled -> json.int(1)
+    Enabled -> json.int(2)
+    DisabledByDiscord -> json.int(3)
   }
 }

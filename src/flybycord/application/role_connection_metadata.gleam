@@ -139,7 +139,7 @@ pub fn get(client: Client, application_id: String) -> Request(String) {
   )
 }
 
-pub fn update(
+pub fn modify(
   client: Client,
   application_id: String,
   new_metadata new: RoleConnectionMetadata,
