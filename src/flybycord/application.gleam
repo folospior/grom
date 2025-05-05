@@ -1,14 +1,17 @@
 import flybycord/application/team.{type Team}
 import flybycord/guild.{type Guild}
+import flybycord/internal/error
 import flybycord/permission.{type Permission}
 import flybycord/user.{type User}
 import flybycord/webhook_event
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
+import gleam/http/response.{type Response}
 import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None}
+import gleam/result
 
 // TYPES -----------------------------------------------------------------------
 
@@ -376,4 +379,16 @@ pub fn event_webhook_status_encode(
     Enabled -> json.int(2)
     DisabledByDiscord -> json.int(3)
   }
+}
+
+// PUBLIC FUNCTIONS ------------------------------------------------------------
+
+pub fn parse(
+  response: Result(Response(String), error.FlybycordError),
+) -> Result(Application, error.FlybycordError) {
+  use response <- result.try(response)
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
 }
