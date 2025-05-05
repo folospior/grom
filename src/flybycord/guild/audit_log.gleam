@@ -4,14 +4,18 @@ import flybycord/guild/audit_log/entry.{type Entry}
 import flybycord/guild/auto_moderation/rule.{type Rule}
 import flybycord/guild/scheduled_event.{type ScheduledEvent}
 import flybycord/interaction/application_command.{type ApplicationCommand}
+import flybycord/internal/error
 import flybycord/rest
 import flybycord/user.{type User}
 import flybycord/webhook.{type Webhook}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request.{type Request}
+import gleam/http/response.{type Response}
 import gleam/int
+import gleam/json
 import gleam/list
+import gleam/result
 
 // TYPES -----------------------------------------------------------------------
 
@@ -110,6 +114,16 @@ pub fn partial_user_decoder() -> decode.Decoder(PartialUser) {
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn parse(
+  response: Result(Response(String), error.FlybycordError),
+) -> Result(AuditLog, error.FlybycordError) {
+  use response <- result.try(response)
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
 
 pub fn get(client: Client, for guild_id: String) -> Request(String) {
   client
