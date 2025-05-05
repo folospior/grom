@@ -1,3 +1,7 @@
+//// An `Entitlement` is something a user is entitled to have. Crazy, right?
+////
+//// An example of an entitlement is a premium version of a bot.
+
 import flybycord/internal/time_rfc3339
 import gleam/dynamic/decode
 import gleam/option.{type Option, None}
@@ -16,6 +20,7 @@ pub type Entitlement {
     starts_at: Option(Timestamp),
     ends_at: Option(Timestamp),
     guild_id: Option(String),
+    /// Only present on consumable SKUs.
     is_consumed: Option(Bool),
   )
 }
