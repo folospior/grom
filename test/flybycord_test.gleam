@@ -1,5 +1,5 @@
 import flybycord/permission
-import flybycord/user/modify_current_user
+import flybycord/user/current_user
 import gleam/json
 import gleeunit
 import gleeunit/should
@@ -21,9 +21,9 @@ pub fn permission_to_string_test() {
 }
 
 pub fn encode_modify_current_test() {
-  modify_current_user.new()
-  |> modify_current_user.with_username("fo1o")
-  |> modify_current_user.encode
+  current_user.new_modify()
+  |> current_user.modify_username("fo1o")
+  |> current_user.modify_encode
   |> json.to_string
   |> should.equal("{\"username\":\"fo1o\"}")
 }
