@@ -289,6 +289,10 @@ pub fn modify(
   |> result.map_error(error.DecodeError)
 }
 
+pub fn new_modify() -> Modify {
+  Modify(None, None, None, None, None, None, None)
+}
+
 pub fn modify_name(modify: Modify, name: String) -> Modify {
   Modify(..modify, name: Some(name))
 }
