@@ -1,6 +1,9 @@
 import gleam/bit_array
 import gleam/dynamic/decode
 
+// DECODERS --------------------------------------------------------------------
+
+@internal
 pub fn decoder() -> decode.Decoder(BitArray) {
   use string <- decode.then(decode.string)
   case bit_array.base64_decode(string) {
