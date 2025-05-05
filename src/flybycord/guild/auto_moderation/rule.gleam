@@ -132,6 +132,7 @@ pub fn create_encode(create: Create) -> Json {
   |> json.object
 }
 
+@internal
 pub fn modify_encode(modify: Modify) -> Json {
   let name = case modify.name {
     Some(name) -> [#("name", json.string(name))]
