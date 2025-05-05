@@ -1,17 +1,14 @@
 import flybycord/application/team.{type Team}
 import flybycord/guild.{type Guild}
-import flybycord/internal/error
 import flybycord/permission.{type Permission}
 import flybycord/user.{type User}
 import flybycord/webhook_event
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
-import gleam/http/response.{type Response}
 import gleam/int
-import gleam/json
+import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None}
-import gleam/result
 
 // TYPES -----------------------------------------------------------------------
 
@@ -320,7 +317,7 @@ pub fn event_webhook_status_decoder() -> decode.Decoder(EventWebhookStatus) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn install_params_encode(install_params: InstallParams) -> json.Json {
+pub fn install_params_encode(install_params: InstallParams) -> Json {
   let InstallParams(scopes:, permissions:) = install_params
   json.object([
     #("scopes", json.array(scopes, json.string)),
@@ -340,7 +337,7 @@ pub fn installation_context_to_string(context: InstallationContext) -> String {
 @internal
 pub fn installation_context_config_encode(
   installation_context_config: InstallationContextConfig,
-) -> json.Json {
+) -> Json {
   let InstallationContextConfig(oauth2_install_params:) =
     installation_context_config
   json.object([
@@ -352,7 +349,7 @@ pub fn installation_context_config_encode(
 }
 
 @internal
-pub fn flags_encode(flags: List(Flag)) -> json.Json {
+pub fn flags_encode(flags: List(Flag)) -> Json {
   json.int(flags |> flags_to_int)
 }
 
@@ -373,22 +370,10 @@ pub fn flags_to_int(flags: List(Flag)) -> Int {
 @internal
 pub fn event_webhook_status_encode(
   event_webhook_status: EventWebhookStatus,
-) -> json.Json {
+) -> Json {
   case event_webhook_status {
     Disabled -> json.int(1)
     Enabled -> json.int(2)
     DisabledByDiscord -> json.int(3)
   }
-}
-
-// PUBLIC FUNCTIONS ------------------------------------------------------------
-
-pub fn parse(
-  response: Result(Response(String), error.FlybycordError),
-) -> Result(Application, error.FlybycordError) {
-  use response <- result.try(response)
-
-  response.body
-  |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
 }

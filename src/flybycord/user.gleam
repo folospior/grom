@@ -1,15 +1,7 @@
-import flybycord/client.{type Client}
-import flybycord/internal/error
-import flybycord/rest
 import gleam/dynamic/decode
-import gleam/http
-import gleam/http/request.{type Request}
-import gleam/http/response.{type Response}
 import gleam/int
-import gleam/json
 import gleam/list
 import gleam/option.{type Option, None}
-import gleam/result
 
 // TYPES ----------------------------------------------------------------------
 
@@ -181,20 +173,4 @@ pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
     }
   })
   |> decode.success
-}
-
-// PUBLIC API FUNCTIONS -------------------------------------------------------
-
-pub fn parse(
-  response: Result(Response(String), error.FlybycordError),
-) -> Result(User, error.FlybycordError) {
-  use response <- result.try(response)
-  response.body
-  |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
-}
-
-pub fn get(client: Client, id: String) -> Request(String) {
-  client
-  |> rest.new_request(http.Get, "/users/" <> id)
 }

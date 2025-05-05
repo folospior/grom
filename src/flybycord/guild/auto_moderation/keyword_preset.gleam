@@ -1,4 +1,5 @@
 import gleam/dynamic/decode
+import gleam/json.{type Json}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -19,4 +20,16 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     3 -> decode.success(Slurs)
     _ -> decode.failure(Profanity, "Type")
   }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn type_encode(type_: Type) -> Json {
+  case type_ {
+    Profanity -> 1
+    SexualContent -> 2
+    Slurs -> 3
+  }
+  |> json.int
 }

@@ -518,22 +518,20 @@ pub fn mention_decoder() -> decode.Decoder(Mention) {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn parse(
-  response: Result(Response(String), error.FlybycordError),
+pub fn create_dm(
+  client: Client,
+  recipient_id: String,
 ) -> Result(Channel, error.FlybycordError) {
-  use response <- result.try(response)
+  let json = json.object([#("recipient_id", json.string(recipient_id))])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/users/@me/channels")
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
 
   response.body
   |> json.parse(using: decoder())
   |> result.map_error(error.DecodeError)
-}
-
-pub fn create_dm(client: Client, recipient_id: String) {
-  let body =
-    json.object([#("recipient_id", json.string(recipient_id))])
-    |> json.to_string
-
-  client
-  |> rest.new_request(http.Post, "/users/@me/channels")
-  |> request.set_body(body)
 }

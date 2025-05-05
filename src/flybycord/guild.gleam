@@ -1,15 +1,19 @@
 import flybycord/client.{type Client}
 import flybycord/emoji.{type Emoji}
+import flybycord/guild/auto_moderation/rule.{type Rule}
 import flybycord/guild/role.{type Role}
 import flybycord/guild/welcome_screen.{type WelcomeScreen}
+import flybycord/internal/error
 import flybycord/internal/time_rfc3339
 import flybycord/rest
 import flybycord/sticker.{type Sticker}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None}
+import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 
 // TYPES ----------------------------------------------------------------------
@@ -510,7 +514,33 @@ pub fn incidents_data_decoder() -> decode.Decoder(IncidentsData) {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn leave(client: Client, guild_id: String) {
-  client
-  |> rest.new_request(http.Delete, "/users/@me/guilds/" <> guild_id)
+pub fn leave(
+  client: Client,
+  guild_id: String,
+) -> Result(Nil, error.FlybycordError) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(http.Delete, "/users/@me/guilds/" <> guild_id)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn get_auto_moderation_rules(
+  client: Client,
+  guild_id: String,
+) -> Result(List(Rule), error.FlybycordError) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/guilds/" <> guild_id <> "/auto-moderation/rules",
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(rule.decoder()))
+  |> result.map_error(error.DecodeError)
 }

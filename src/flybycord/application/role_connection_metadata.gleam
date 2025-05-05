@@ -5,8 +5,7 @@ import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/function
 import gleam/http
-import gleam/http/request.{type Request}
-import gleam/http/response.{type Response}
+import gleam/http/request
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -132,35 +131,42 @@ fn type_encode(type_: Type) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn parse(
-  response: Result(Response(String), error.FlybycordError),
+pub fn get(
+  client: Client,
+  application_id: String,
 ) -> Result(List(RoleConnectionMetadata), error.FlybycordError) {
-  use response <- result.try(response)
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/applications/" <> application_id <> "/role-connections/metadata",
+    )
+    |> rest.execute,
+  )
 
   response.body
   |> json.parse(using: decode.list(decoder()))
   |> result.map_error(error.DecodeError)
 }
 
-pub fn get(client: Client, application_id: String) -> Request(String) {
-  client
-  |> rest.new_request(
-    http.Get,
-    "/applications/" <> application_id <> "/role-connections/metadata",
-  )
-}
-
 pub fn modify(
   client: Client,
   application_id: String,
-  new_metadata metadata: List(RoleConnectionMetadata),
-) -> Request(String) {
+  new metadata: List(RoleConnectionMetadata),
+) -> Result(List(RoleConnectionMetadata), error.FlybycordError) {
   let json = json.array(metadata, encode)
 
-  client
-  |> rest.new_request(
-    http.Put,
-    "/applications/" <> application_id <> "/role-connections/metadata",
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Put,
+      "/applications/" <> application_id <> "/role-connections/metadata",
+    )
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
   )
-  |> request.set_body(json |> json.to_string)
+
+  response.body
+  |> json.parse(using: decode.list(decoder()))
+  |> result.map_error(error.DecodeError)
 }

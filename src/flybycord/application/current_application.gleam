@@ -1,15 +1,17 @@
 import flybycord/add_or_remove.{type AddOrRemove}
-import flybycord/application
+import flybycord/application.{type Application}
 import flybycord/client.{type Client}
 import flybycord/image
+import flybycord/internal/error
 import flybycord/rest
 import flybycord/webhook_event
 import gleam/dict.{type Dict}
 import gleam/http
-import gleam/http/request.{type Request}
+import gleam/http/request
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 
 // TYPES -----------------------------------------------------------------------
 
@@ -147,16 +149,34 @@ fn modify_encode(modify: Modify) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(client: Client) -> Request(String) {
-  client
-  |> rest.new_request(http.Get, "/applications/@me")
+pub fn get(client: Client) -> Result(Application, error.FlybycordError) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/applications/@me")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: application.decoder())
+  |> result.map_error(error.DecodeError)
 }
 
-pub fn modify(client: Client, modify: Modify) -> Request(String) {
+pub fn modify(
+  client: Client,
+  with modify: Modify,
+) -> Result(Application, error.FlybycordError) {
   let json = modify |> modify_encode
-  client
-  |> rest.new_request(http.Patch, "/applications/@me")
-  |> request.set_body(json |> json.to_string)
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/applications/@me")
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: application.decoder())
+  |> result.map_error(error.DecodeError)
 }
 
 pub fn new_modify() -> Modify {

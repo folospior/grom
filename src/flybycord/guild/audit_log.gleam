@@ -115,39 +115,36 @@ pub fn partial_user_decoder() -> decode.Decoder(PartialUser) {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn parse(
-  response: Result(Response(String), error.FlybycordError),
+pub fn get(
+  client: Client,
+  for guild_id: String,
+  with query: List(GetQuery),
 ) -> Result(AuditLog, error.FlybycordError) {
-  use response <- result.try(response)
+  let query =
+    query
+    |> list.map(fn(parameter) {
+      case parameter {
+        UserId(id) -> #("user_id", id)
+        EntryType(type_) -> #(
+          "action_type",
+          type_
+            |> entry.type_to_int
+            |> int.to_string,
+        )
+        BeforeId(id) -> #("before", id)
+        AfterId(id) -> #("after", id)
+        Limit(limit) -> #("limit", limit |> int.to_string)
+      }
+    })
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/audit-logs")
+    |> request.set_query(query)
+    |> rest.execute,
+  )
 
   response.body
   |> json.parse(using: decoder())
   |> result.map_error(error.DecodeError)
-}
-
-pub fn get(client: Client, for guild_id: String) -> Request(String) {
-  client
-  |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/audit-logs")
-}
-
-pub fn get_with(
-  request: Request(String),
-  query: List(GetQuery),
-) -> Request(String) {
-  query
-  |> list.map(fn(parameter) {
-    case parameter {
-      UserId(id) -> #("user_id", id)
-      EntryType(type_) -> #(
-        "action_type",
-        type_
-          |> entry.type_to_int
-          |> int.to_string,
-      )
-      BeforeId(id) -> #("before", id)
-      AfterId(id) -> #("after", id)
-      Limit(limit) -> #("limit", limit |> int.to_string)
-    }
-  })
-  |> request.set_query(request, _)
 }

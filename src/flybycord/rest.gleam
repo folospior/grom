@@ -4,6 +4,7 @@ import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/httpc
+import gleam/option.{type Option, None, Some}
 import gleam/result
 
 // CONSTANTS -------------------------------------------------------------------
@@ -14,11 +15,18 @@ const discord_api_path = "api/v10"
 
 // PUBLIC FUNCTIONS ------------------------------------------------------------
 
-pub fn with_reason(request: Request(a), reason: String) -> Request(a) {
-  request
-  |> request.prepend_header("x-audit-log-reason", reason)
+pub fn with_reason(request: Request(a), reason: Option(String)) -> Request(a) {
+  case reason {
+    Some(reason) ->
+      request
+      |> request.prepend_header("x-audit-log-reason", reason)
+    None -> request
+  }
 }
 
+// INTERNAL FUNCTIONS ----------------------------------------------------------
+
+@internal
 pub fn execute(
   request: Request(String),
 ) -> Result(Response(String), error.FlybycordError) {
@@ -31,8 +39,6 @@ pub fn execute(
   response
   |> ensure_status_code_success
 }
-
-// INTERNAL FUNCTIONS ----------------------------------------------------------
 
 @internal
 pub fn new_request(client: Client, method: http.Method, path: String) {

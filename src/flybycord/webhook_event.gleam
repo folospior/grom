@@ -3,7 +3,7 @@ import flybycord/guild.{type Guild}
 import flybycord/internal/time_rfc3339
 import flybycord/user.{type User}
 import gleam/dynamic/decode
-import gleam/json
+import gleam/json.{type Json}
 import gleam/option.{type Option, None}
 import gleam/time/timestamp.{type Timestamp}
 
@@ -135,7 +135,7 @@ pub fn body_decoder() -> decode.Decoder(Body) {
 // DECODERS --------------------------------------------------------------------
 
 @internal
-pub fn type_encode(type_: Type) -> json.Json {
+pub fn type_encode(type_: Type) -> Json {
   case type_ {
     ApplicationAuthorized -> json.string("APPLICATION_AUTHORIZED")
     EntitlementCreate -> json.string("ENTITLEMENT_CREATE")

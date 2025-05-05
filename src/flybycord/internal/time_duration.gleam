@@ -28,3 +28,11 @@ pub fn from_int_seconds_decoder() -> decode.Decoder(Duration) {
   |> duration.seconds
   |> decode.success
 }
+
+// ENCODERS --------------------------------------------------------------------
+
+pub fn to_int_seconds(duration: Duration) -> Int {
+  duration
+  |> duration.to_seconds
+  |> float.round
+}
