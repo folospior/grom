@@ -326,3 +326,77 @@ pub fn info_decoder(type_: Type) -> decode.Decoder(Info) {
     _ -> decode.failure(ApplicationCommandPermissionUpdated(""), "Info")
   }
 }
+
+// INTERNAL FUNCTIONS ----------------------------------------------------------
+
+@internal
+pub fn type_to_int(type_: Type) -> Int {
+  case type_ {
+    GuildUpdate -> 1
+    ChannelCreate -> 10
+    ChannelUpdate -> 11
+    ChannelDelete -> 12
+    ChannelOverwriteCreate -> 13
+    ChannelOverwriteUpdate -> 14
+    ChannelOverwriteDelete -> 15
+    MemberKick -> 20
+    MemberPrune -> 21
+    MemberBanAdd -> 22
+    MemberBanRemove -> 23
+    MemberUpdate -> 24
+    MemberRoleUpdate -> 25
+    MemberMove -> 26
+    MemberDisconnect -> 27
+    BotAdd -> 28
+    RoleCreate -> 30
+    RoleUpdate -> 31
+    RoleDelete -> 32
+    InviteCreate -> 40
+    InviteUpdate -> 41
+    InviteDelete -> 42
+    WebhookCreate -> 50
+    WebhookUpdate -> 51
+    WebhookDelete -> 52
+    EmojiCreate -> 60
+    EmojiUpdate -> 61
+    EmojiDelete -> 62
+    MessageDelete -> 72
+    MessageBulkDelete -> 73
+    MessagePin -> 74
+    MessageUnpin -> 75
+    IntegrationCreate -> 80
+    IntegrationUpdate -> 81
+    IntegrationDelete -> 82
+    StageInstanceCreate -> 83
+    StageInstanceUpdate -> 84
+    StageInstanceDelete -> 85
+    StickerCreate -> 90
+    StickerUpdate -> 91
+    StickerDelete -> 92
+    ScheduledEventCreate -> 100
+    ScheduledEventUpdate -> 101
+    ScheduledEventDelete -> 102
+    ThreadCreate -> 110
+    ThreadUpdate -> 111
+    ThreadDelete -> 112
+    ApplicationCommandPermissionUpdate -> 121
+    SoundboardSoundCreate -> 130
+    SoundboardSoundUpdate -> 131
+    SoundboardSoundDelete -> 132
+    AutoModerationRuleCreate -> 140
+    AutoModerationRuleUpdate -> 141
+    AutoModerationRuleDelete -> 142
+    AutoModerationBlockMessage -> 143
+    AutoModerationFlagToChannel -> 145
+    AutoModerationUserCommunicationDisabled -> 146
+    CreatorMonetizationRequestCreated -> 150
+    CreatorMonetizationTermsAccepted -> 151
+    OnboardingPromptCreate -> 163
+    OnboardingPromptUpdate -> 164
+    OnboardingPromptDelete -> 165
+    OnboardingCreate -> 166
+    OnboardingUpdate -> 167
+    HomeSettingsCreate -> 190
+    HomeSettingsUpdate -> 191
+  }
+}

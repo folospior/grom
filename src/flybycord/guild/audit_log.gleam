@@ -1,11 +1,17 @@
 import flybycord/channel.{type Channel}
+import flybycord/client.{type Client}
 import flybycord/guild/audit_log/entry.{type Entry}
 import flybycord/guild/auto_moderation/rule.{type Rule}
 import flybycord/guild/scheduled_event.{type ScheduledEvent}
 import flybycord/interaction/application_command.{type ApplicationCommand}
+import flybycord/rest
 import flybycord/user.{type User}
 import flybycord/webhook.{type Webhook}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request.{type Request}
+import gleam/int
+import gleam/list
 
 // TYPES -----------------------------------------------------------------------
 
@@ -34,6 +40,14 @@ pub type PartialIntegration {
 
 pub type PartialUser {
   PartialUser(name: String, id: String)
+}
+
+pub type GetQuery {
+  UserId(String)
+  EntryType(entry.Type)
+  BeforeId(String)
+  AfterId(String)
+  Limit(Int)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -93,4 +107,33 @@ pub fn partial_user_decoder() -> decode.Decoder(PartialUser) {
   use name <- decode.field("name", decode.string)
   use id <- decode.field("id", decode.string)
   decode.success(PartialUser(name:, id:))
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get(client: Client, for guild_id: String) -> Request(String) {
+  client
+  |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/audit-logs")
+}
+
+pub fn get_with(
+  request: Request(String),
+  query: List(GetQuery),
+) -> Request(String) {
+  query
+  |> list.map(fn(parameter) {
+    case parameter {
+      UserId(id) -> #("user_id", id)
+      EntryType(type_) -> #(
+        "action_type",
+        type_
+          |> entry.type_to_int
+          |> int.to_string,
+      )
+      BeforeId(id) -> #("before", id)
+      AfterId(id) -> #("after", id)
+      Limit(limit) -> #("limit", limit |> int.to_string)
+    }
+  })
+  |> request.set_query(request, _)
 }
