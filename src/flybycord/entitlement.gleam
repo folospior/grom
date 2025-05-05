@@ -1,6 +1,7 @@
 //// An `Entitlement` is something a user is entitled to have. Crazy, right?
 ////
-//// An example of an entitlement is a premium version of a bot.
+//// An example of an entitlement is the license key for the premium version of your bot.
+//// See [SKU](flybycord/sku).
 
 import flybycord/internal/time_rfc3339
 import gleam/dynamic/decode
