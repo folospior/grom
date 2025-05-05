@@ -1,4 +1,4 @@
-//// A SKU is an offer on Discord. (I still have no idea why they call it that).
+//// A SKU is an offer on Discord.
 ////
 //// For example, if you're offering a premium subscription for your bot, you must create an SKU.
 
