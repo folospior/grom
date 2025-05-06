@@ -1,9 +1,9 @@
-import flybycord/add_or_remove.{type AddOrRemove}
 import flybycord/application.{type Application}
 import flybycord/client.{type Client}
 import flybycord/error
 import flybycord/image
 import flybycord/internal/rest
+import flybycord/modification.{type Modification, Delete, New, Skip}
 import flybycord/webhook_event
 import gleam/dict.{type Dict}
 import gleam/http
@@ -28,8 +28,8 @@ pub opaque type Modify {
       ),
     ),
     flags: Option(List(application.Flag)),
-    icon: Option(AddOrRemove(image.Data)),
-    cover_image: Option(AddOrRemove(image.Data)),
+    icon: Modification(image.Data),
+    cover_image: Modification(image.Data),
     interactions_endpoint_url: Option(String),
     tags: Option(List(String)),
     event_webhooks_url: Option(String),
@@ -85,15 +85,15 @@ fn modify_encode(modify: Modify) -> Json {
   }
 
   let icon = case modify.icon {
-    Some(add_or_remove.Add(image)) -> [#("icon", json.string(image))]
-    Some(add_or_remove.Remove) -> [#("icon", json.null())]
-    None -> []
+    New(image) -> [#("icon", json.string(image))]
+    Delete -> [#("icon", json.null())]
+    Skip -> []
   }
 
   let cover_image = case modify.cover_image {
-    Some(add_or_remove.Add(image)) -> [#("cover_image", json.string(image))]
-    Some(add_or_remove.Remove) -> [#("cover_image", json.null())]
-    None -> []
+    New(image) -> [#("cover_image", json.string(image))]
+    Delete -> [#("cover_image", json.null())]
+    Skip -> []
   }
 
   let interactions_endpoint_url = case modify.interactions_endpoint_url {
@@ -181,19 +181,19 @@ pub fn modify(
 
 pub fn new_modify() -> Modify {
   Modify(
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
+    custom_install_url: None,
+    description: None,
+    role_connections_verification_url: None,
+    install_params: None,
+    installation_contexts_config: None,
+    flags: None,
+    icon: Skip,
+    cover_image: Skip,
+    interactions_endpoint_url: None,
+    tags: None,
+    event_webhooks_url: None,
+    event_webhooks_status: None,
+    event_webhooks_types: None,
   )
 }
 
@@ -225,15 +225,15 @@ pub fn modify_flags(modify: Modify, flags: List(application.Flag)) -> Modify {
   Modify(..modify, flags: Some(flags))
 }
 
-pub fn modify_icon(modify: Modify, icon: AddOrRemove(image.Data)) -> Modify {
-  Modify(..modify, icon: Some(icon))
+pub fn modify_icon(modify: Modify, icon: Modification(image.Data)) -> Modify {
+  Modify(..modify, icon:)
 }
 
 pub fn modify_cover_image(
   modify: Modify,
-  cover_image: AddOrRemove(image.Data),
+  cover_image: Modification(image.Data),
 ) -> Modify {
-  Modify(..modify, cover_image: Some(cover_image))
+  Modify(..modify, cover_image:)
 }
 
 pub fn modify_interactions_endpoint_url(modify: Modify, url: String) -> Modify {
