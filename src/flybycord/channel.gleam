@@ -4,6 +4,7 @@ import flybycord/channel/thread
 import flybycord/channel/voice_channel
 import flybycord/client.{type Client}
 import flybycord/error
+import flybycord/internal/flags
 import flybycord/internal/rest
 import flybycord/internal/time_duration
 import flybycord/internal/time_rfc3339
@@ -317,7 +318,7 @@ pub fn decoder() -> decode.Decoder(Channel) {
         None,
         decode.optional(permission.decoder()),
       )
-      use flags <- decode.field("flags", thread.flags_decoder())
+      use flags <- decode.field("flags", flags.decoder(todo))
       use total_message_sent <- decode.field("total_message_sent", decode.int)
       use applied_tags_ids <- decode.optional_field(
         "applied_tags_ids",

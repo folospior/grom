@@ -1,6 +1,7 @@
 import flybycord/application.{type Application}
 import flybycord/channel.{type Channel}
 import flybycord/guild/role.{type Role}
+import flybycord/internal/flags
 import flybycord/internal/time_rfc3339
 import flybycord/message/activity.{type Activity}
 import flybycord/message/attachment.{type Attachment}
@@ -16,7 +17,6 @@ import flybycord/sticker
 import flybycord/user.{type User}
 import gleam/dynamic/decode
 import gleam/int
-import gleam/list
 import gleam/option.{type Option, None}
 import gleam/time/timestamp.{type Timestamp}
 
@@ -232,7 +232,7 @@ pub fn message_decoder() -> decode.Decoder(Message) {
   use flags <- decode.optional_field(
     "flags",
     None,
-    decode.optional(flags_decoder()),
+    decode.optional(flags.decoder(bits_flags())),
   )
   use reference <- decode.optional_field(
     "message_reference",
@@ -392,20 +392,6 @@ pub fn type_decoder() -> decode.Decoder(Type) {
 }
 
 @internal
-pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
-  use bits <- decode.then(decode.int)
-  bits_flags()
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(bits, bit) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
-}
-
-@internal
 pub fn snapshot_decoder() -> decode.Decoder(Snapshot) {
   decode.at(["message"], {
     use type_ <- decode.field("type", type_decoder())
@@ -423,7 +409,7 @@ pub fn snapshot_decoder() -> decode.Decoder(Snapshot) {
     use flags <- decode.optional_field(
       "flags",
       None,
-      decode.optional(flags_decoder()),
+      decode.optional(flags.decoder(bits_flags())),
     )
     use mentions_users <- decode.field("mentions", decode.list(user.decoder()))
     use mentions_roles <- decode.field(

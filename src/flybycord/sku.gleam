@@ -2,9 +2,9 @@
 ////
 //// For example, if you're offering a premium subscription for your bot, you must create an SKU.
 
+import flybycord/internal/flags
 import gleam/dynamic/decode
 import gleam/int
-import gleam/list
 
 // TYPES -----------------------------------------------------------------------
 
@@ -51,7 +51,7 @@ pub fn sku_decoder() -> decode.Decoder(Sku) {
   use application_id <- decode.field("application_id", decode.string)
   use name <- decode.field("name", decode.string)
   use slug <- decode.field("slug", decode.string)
-  use flags <- decode.field("flags", flags_decoder())
+  use flags <- decode.field("flags", flags.decoder(bits_flags()))
   decode.success(Sku(id:, type_:, application_id:, name:, slug:, flags:))
 }
 
@@ -65,19 +65,4 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     6 -> decode.success(SubscriptionGroup)
     _ -> decode.failure(Durable, "Type")
   }
-}
-
-@internal
-pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
-  use bits <- decode.then(decode.int)
-
-  bits_flags()
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(bits, bit) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
 }

@@ -1,5 +1,6 @@
 import flybycord/application/team.{type Team}
 import flybycord/guild.{type Guild}
+import flybycord/internal/flags
 import flybycord/permission.{type Permission}
 import flybycord/user.{type User}
 import flybycord/webhook_event
@@ -7,7 +8,6 @@ import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json.{type Json}
-import gleam/list
 import gleam/option.{type Option, None}
 
 // TYPES -----------------------------------------------------------------------
@@ -161,7 +161,7 @@ pub fn decoder() -> decode.Decoder(Application) {
   use flags <- decode.optional_field(
     "flags",
     None,
-    decode.optional(flags_decoder()),
+    decode.optional(flags.decoder(bits_flags())),
   )
   use approximate_guild_count <- decode.optional_field(
     "approximate_guild_count",
@@ -261,20 +261,6 @@ pub fn decoder() -> decode.Decoder(Application) {
 }
 
 @internal
-pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
-  use flags <- decode.then(decode.int)
-  bits_flags()
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(bit, flags) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
-}
-
-@internal
 pub fn install_params_decoder() -> decode.Decoder(InstallParams) {
   use scopes <- decode.field("scopes", decode.list(decode.string))
   use permissions <- decode.field("permissions", permission.decoder())
@@ -346,25 +332,6 @@ pub fn installation_context_config_encode(
       option.Some(params) -> install_params_encode(params)
     }),
   ])
-}
-
-@internal
-pub fn flags_encode(flags: List(Flag)) -> Json {
-  json.int(flags |> flags_to_int)
-}
-
-@internal
-pub fn flags_to_int(flags: List(Flag)) -> Int {
-  bits_flags()
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    let is_in_flags = list.any(flags, fn(curr) { curr == flag })
-    case is_in_flags {
-      True -> Ok(bit)
-      False -> Error(Nil)
-    }
-  })
-  |> int.sum
 }
 
 @internal

@@ -1,8 +1,8 @@
 import flybycord/internal/base64
+import flybycord/internal/flags
 import flybycord/internal/time_duration
 import gleam/dynamic/decode
 import gleam/int
-import gleam/list
 import gleam/option.{type Option, None}
 import gleam/time/duration.{type Duration}
 
@@ -77,7 +77,10 @@ pub fn decoder() -> decode.Decoder(Attachment) {
     time_duration.from_float_seconds_decoder(),
   )
   use waveform <- decode.field("waveform", decode.optional(base64.decoder()))
-  use flags <- decode.field("flags", decode.optional(flags_decoder()))
+  use flags <- decode.field(
+    "flags",
+    decode.optional(flags.decoder(bits_flags())),
+  )
   decode.success(Attachment(
     id:,
     filename:,
@@ -94,18 +97,4 @@ pub fn decoder() -> decode.Decoder(Attachment) {
     waveform:,
     flags:,
   ))
-}
-
-@internal
-pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
-  use bits <- decode.then(decode.int)
-  bits_flags()
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(bits, bit) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
 }

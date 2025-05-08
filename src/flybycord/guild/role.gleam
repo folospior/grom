@@ -1,7 +1,7 @@
+import flybycord/internal/flags
 import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
 import gleam/int
-import gleam/list
 import gleam/option.{type Option, None}
 
 // TYPES -----------------------------------------------------------------------
@@ -71,7 +71,7 @@ pub fn decoder() -> decode.Decoder(Role) {
     None,
     decode.optional(tags_decoder()),
   )
-  use flags <- decode.field("flags", flags_decoder())
+  use flags <- decode.field("flags", flags.decoder(bits_flags()))
   decode.success(Role(
     id:,
     name:,
@@ -119,18 +119,4 @@ pub fn tags_decoder() -> decode.Decoder(Tags) {
     available_for_purchase:,
     guild_connections:,
   ))
-}
-
-@internal
-pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
-  use flags <- decode.then(decode.int)
-  bits_flags()
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(flags, bit) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
 }

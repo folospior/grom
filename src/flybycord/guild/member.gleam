@@ -1,8 +1,8 @@
+import flybycord/internal/flags
 import flybycord/internal/time_rfc3339
 import flybycord/user.{type User}
 import gleam/dynamic/decode
 import gleam/int
-import gleam/list
 import gleam/option.{type Option, None}
 import gleam/time/timestamp.{type Timestamp}
 
@@ -41,17 +41,19 @@ pub type Flag {
 
 // FLAGS -----------------------------------------------------------------------
 
-const bits_flags = [
-  #(1, DidRejoin),
-  #(2, CompletedOnboarding),
-  #(4, BypassesVerification),
-  #(8, StartedOnboarding),
-  #(16, IsGuest),
-  #(32, StartedHomeActions),
-  #(64, CompletedHomeActions),
-  #(128, AutomodQuarantinedUsername),
-  #(512, DmSettingsUpsellAcknowledged),
-]
+fn bits_flags() {
+  [
+    #(int.bitwise_shift_left(1, 0), DidRejoin),
+    #(int.bitwise_shift_left(1, 1), CompletedOnboarding),
+    #(int.bitwise_shift_left(1, 2), BypassesVerification),
+    #(int.bitwise_shift_left(1, 3), StartedOnboarding),
+    #(int.bitwise_shift_left(1, 4), IsGuest),
+    #(int.bitwise_shift_left(1, 5), StartedHomeActions),
+    #(int.bitwise_shift_left(1, 6), CompletedHomeActions),
+    #(int.bitwise_shift_left(1, 7), AutomodQuarantinedUsername),
+    #(int.bitwise_shift_left(1, 9), DmSettingsUpsellAcknowledged),
+  ]
+}
 
 // DECODERS --------------------------------------------------------------------
 
@@ -94,7 +96,7 @@ pub fn decoder() -> decode.Decoder(Member) {
     None,
     decode.optional(decode.bool),
   )
-  use flags <- decode.field("flags", flags_decoder())
+  use flags <- decode.field("flags", flags.decoder(bits_flags()))
   use is_pending <- decode.optional_field(
     "pending",
     None,
@@ -131,19 +133,4 @@ pub fn decoder() -> decode.Decoder(Member) {
     communication_disabled_until:,
     avatar_decoration_data:,
   ))
-}
-
-@internal
-pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
-  use flags <- decode.then(decode.int)
-
-  bits_flags
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(flags, bit) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
 }

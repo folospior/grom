@@ -1,3 +1,4 @@
+import flybycord/internal/flags
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json.{type Json}
@@ -140,25 +141,5 @@ pub fn decoder() -> decode.Decoder(List(Permission)) {
 
 @internal
 pub fn encode(permissions: List(Permission)) -> Json {
-  json.string(permissions |> to_string)
-}
-
-// INTERNAL FUNCTIONS ----------------------------------------------------------
-
-@internal
-pub fn to_string(permissions: List(Permission)) -> String {
-  permissions_bits()
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    let is_in_permissions =
-      permissions
-      |> list.any(fn(permission) { flag == permission })
-
-    case is_in_permissions {
-      True -> Ok(bit)
-      False -> Error(Nil)
-    }
-  })
-  |> int.sum
-  |> int.to_string
+  json.string(permissions |> flags.to_int(permissions_bits()) |> int.to_string)
 }

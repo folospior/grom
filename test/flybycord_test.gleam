@@ -1,4 +1,3 @@
-import flybycord/permission
 import flybycord/user/current_user
 import gleam/json
 import gleeunit
@@ -12,12 +11,6 @@ pub fn main() {
 pub fn hello_world_test() {
   1
   |> should.equal(1)
-}
-
-pub fn permission_to_string_test() {
-  [permission.CreateInstantInvite, permission.Administrator]
-  |> permission.to_string
-  |> should.equal("9")
 }
 
 pub fn encode_modify_current_test() {

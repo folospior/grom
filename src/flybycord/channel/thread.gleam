@@ -2,7 +2,6 @@ import flybycord/guild/member.{type Member as GuildMember}
 import flybycord/internal/time_rfc3339
 import gleam/dynamic/decode
 import gleam/int
-import gleam/list
 import gleam/option.{type Option, None}
 import gleam/time/timestamp.{type Timestamp}
 
@@ -90,18 +89,4 @@ pub fn member_decoder() -> decode.Decoder(Member) {
   use join_timestamp <- decode.field("join_timestamp", time_rfc3339.decoder())
   use member <- decode.field("member", member.decoder())
   decode.success(Member(thread_id:, user_id:, join_timestamp:, member:))
-}
-
-@internal
-pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
-  use flags <- decode.then(decode.int)
-  bits_flags()
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(flags, bit) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
 }

@@ -1,6 +1,6 @@
+import flybycord/internal/flags
 import gleam/dynamic/decode
 import gleam/int
-import gleam/list
 import gleam/option.{type Option, None}
 
 // TYPES ----------------------------------------------------------------------
@@ -55,23 +55,25 @@ pub type Flag {
 
 // CONSTANTS ------------------------------------------------------------------
 
-const bits_flags = [
-  #(1, Staff),
-  #(2, Partner),
-  #(4, Hypesquad),
-  #(8, BugHunterLevel1),
-  #(64, HypesquadBravery),
-  #(128, HypesquadBrilliance),
-  #(256, HypesquadBalance),
-  #(512, PremiumEarlySupporter),
-  #(1024, TeamPseudoUser),
-  #(16_384, BugHunterLevel2),
-  #(65_536, VerifiedBot),
-  #(131_072, VerifiedDeveloper),
-  #(262_144, CertifiedModerator),
-  #(524_288, BotHttpInteractions),
-  #(4_194_304, ActiveDeveloper),
-]
+fn bits_flags() -> List(#(Int, Flag)) {
+  [
+    #(int.bitwise_shift_left(1, 0), Staff),
+    #(int.bitwise_shift_left(1, 1), Partner),
+    #(int.bitwise_shift_left(1, 2), Hypesquad),
+    #(int.bitwise_shift_left(1, 3), BugHunterLevel1),
+    #(int.bitwise_shift_left(1, 6), HypesquadBravery),
+    #(int.bitwise_shift_left(1, 7), HypesquadBrilliance),
+    #(int.bitwise_shift_left(1, 8), HypesquadBalance),
+    #(int.bitwise_shift_left(1, 9), PremiumEarlySupporter),
+    #(int.bitwise_shift_left(1, 10), TeamPseudoUser),
+    #(int.bitwise_shift_left(1, 14), BugHunterLevel2),
+    #(int.bitwise_shift_left(1, 16), VerifiedBot),
+    #(int.bitwise_shift_left(1, 17), VerifiedDeveloper),
+    #(int.bitwise_shift_left(1, 18), CertifiedModerator),
+    #(int.bitwise_shift_left(1, 19), BotHttpInteractions),
+    #(int.bitwise_shift_left(1, 22), ActiveDeveloper),
+  ]
+}
 
 // DECODERS -------------------------------------------------------------------
 
@@ -111,7 +113,7 @@ pub fn decoder() -> decode.Decoder(User) {
   use flags <- decode.optional_field(
     "flags",
     None,
-    decode.optional(flags_decoder()),
+    decode.optional(flags.decoder(bits_flags())),
   )
   use premium_type <- decode.optional_field(
     "premium_type",
@@ -158,19 +160,4 @@ pub fn premium_type_decoder() -> decode.Decoder(PremiumType) {
     3 -> decode.success(NitroBasic)
     _ -> decode.failure(NoPremium, "PremiumType")
   }
-}
-
-@internal
-pub fn flags_decoder() -> decode.Decoder(List(Flag)) {
-  use flags <- decode.then(decode.int)
-
-  bits_flags
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(flags, bit) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
 }

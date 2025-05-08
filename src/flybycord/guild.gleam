@@ -4,6 +4,7 @@ import flybycord/error
 import flybycord/guild/auto_moderation/rule.{type Rule}
 import flybycord/guild/role.{type Role}
 import flybycord/guild/welcome_screen.{type WelcomeScreen}
+import flybycord/internal/flags
 import flybycord/internal/rest
 import flybycord/internal/time_rfc3339
 import flybycord/sticker.{type Sticker}
@@ -11,7 +12,6 @@ import gleam/dynamic/decode
 import gleam/http
 import gleam/int
 import gleam/json
-import gleam/list
 import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
@@ -154,16 +154,24 @@ pub type NsfwLevel {
   AgeRestricted
 }
 
-// CONSTANTS ------------------------------------------------------------------
+// FLAGS ------------------------------------------------------------------
 
-const bits_system_channel_flags = [
-  #(1, SuppressJoinNotifications),
-  #(2, SuppressPremiumSubscriptions),
-  #(4, SuppressGuildReminderNotifications),
-  #(8, SuppressJoinNotificationReplies),
-  #(16, SuppressRoleSubscriptionPurchaseNotifications),
-  #(32, SuppressRoleSubscriptionPurchaseNotificationReplies),
-]
+fn bits_system_channel_flags() -> List(#(Int, SystemChannelFlag)) {
+  [
+    #(int.bitwise_shift_left(1, 0), SuppressJoinNotifications),
+    #(int.bitwise_shift_left(1, 1), SuppressPremiumSubscriptions),
+    #(int.bitwise_shift_left(1, 2), SuppressGuildReminderNotifications),
+    #(int.bitwise_shift_left(1, 3), SuppressJoinNotificationReplies),
+    #(
+      int.bitwise_shift_left(1, 4),
+      SuppressRoleSubscriptionPurchaseNotifications,
+    ),
+    #(
+      int.bitwise_shift_left(1, 5),
+      SuppressRoleSubscriptionPurchaseNotificationReplies,
+    ),
+  ]
+}
 
 // DECODERS -------------------------------------------------------------------
 
@@ -234,7 +242,7 @@ pub fn decoder() -> decode.Decoder(Guild) {
   )
   use system_channel_flags <- decode.field(
     "system_channel_flags",
-    system_channel_flags_decoder(),
+    flags.decoder(bits_system_channel_flags()),
   )
   use rules_channel_id <- decode.field(
     "rules_channel_id",
@@ -468,20 +476,6 @@ pub fn premium_tier_decoder() -> decode.Decoder(PremiumTier) {
     3 -> decode.success(Tier3)
     _ -> decode.failure(NoTier, "PremiumTier")
   }
-}
-
-@internal
-pub fn system_channel_flags_decoder() -> decode.Decoder(List(SystemChannelFlag)) {
-  use flags <- decode.then(decode.int)
-  bits_system_channel_flags
-  |> list.filter_map(fn(item) {
-    let #(bit, flag) = item
-    case int.bitwise_and(flags, bit) != 0 {
-      True -> Ok(flag)
-      False -> Error(Nil)
-    }
-  })
-  |> decode.success
 }
 
 @internal
