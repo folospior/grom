@@ -85,17 +85,13 @@ fn modify_encode(modify: Modify) -> Json {
     None -> []
   }
 
-  let icon = case modify.icon {
-    New(image) -> [#("icon", json.string(image))]
-    Delete -> [#("icon", json.null())]
-    Skip -> []
-  }
+  let icon =
+    modify.icon
+    |> modification.encode("icon", json.string)
 
-  let cover_image = case modify.cover_image {
-    New(image) -> [#("cover_image", json.string(image))]
-    Delete -> [#("cover_image", json.null())]
-    Skip -> []
-  }
+  let cover_image =
+    modify.cover_image
+    |> modification.encode("cover_image", json.string)
 
   let interactions_endpoint_url = case modify.interactions_endpoint_url {
     Some(url) -> [#("interactions_endpoint_url", json.string(url))]
