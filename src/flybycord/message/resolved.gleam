@@ -1,5 +1,5 @@
 import flybycord/channel
-import flybycord/channel/thread
+import flybycord/channel/guild/thread
 import flybycord/guild/member.{type Member}
 import flybycord/guild/role.{type Role}
 import flybycord/message/attachment.{type Attachment}
@@ -74,7 +74,9 @@ pub fn decoder() -> decode.Decoder(Resolved) {
 pub fn partial_channel_decoder() -> decode.Decoder(PartialChannel) {
   use variant <- decode.field("type", channel.type_decoder())
   case variant {
-    channel.AnnouncementThread | channel.PublicThread | channel.PrivateThread -> {
+    channel.AnnouncementThreadChannel
+    | channel.PublicThreadChannel
+    | channel.PrivateThreadChannel -> {
       use id <- decode.field("id", decode.string)
       use name <- decode.field("name", decode.string)
       use type_ <- decode.field("type", channel.type_decoder())

@@ -1,5 +1,5 @@
 import flybycord/channel
-import flybycord/channel/thread
+import flybycord/channel/guild/thread
 import flybycord/guild/member.{type Member}
 import flybycord/guild/role.{type Role}
 import flybycord/message.{type Message}
