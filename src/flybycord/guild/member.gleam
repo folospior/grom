@@ -41,7 +41,8 @@ pub type Flag {
 
 // FLAGS -----------------------------------------------------------------------
 
-fn bits_flags() {
+@internal
+pub fn bits_flags() {
   [
     #(int.bitwise_shift_left(1, 0), DidRejoin),
     #(int.bitwise_shift_left(1, 1), CompletedOnboarding),

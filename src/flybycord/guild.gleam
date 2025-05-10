@@ -156,7 +156,8 @@ pub type NsfwLevel {
 
 // FLAGS ------------------------------------------------------------------
 
-fn bits_system_channel_flags() -> List(#(Int, SystemChannelFlag)) {
+@internal
+pub fn bits_system_channel_flags() -> List(#(Int, SystemChannelFlag)) {
   [
     #(int.bitwise_shift_left(1, 0), SuppressJoinNotifications),
     #(int.bitwise_shift_left(1, 1), SuppressPremiumSubscriptions),

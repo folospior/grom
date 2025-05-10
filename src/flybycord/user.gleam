@@ -55,7 +55,8 @@ pub type Flag {
 
 // CONSTANTS ------------------------------------------------------------------
 
-fn bits_flags() -> List(#(Int, Flag)) {
+@internal
+pub fn bits_flags() -> List(#(Int, Flag)) {
   [
     #(int.bitwise_shift_left(1, 0), Staff),
     #(int.bitwise_shift_left(1, 1), Partner),

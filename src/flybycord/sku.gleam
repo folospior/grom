@@ -34,7 +34,8 @@ pub type Flag {
 
 // FLAGS -----------------------------------------------------------------------
 
-fn bits_flags() -> List(#(Int, Flag)) {
+@internal
+pub fn bits_flags() -> List(#(Int, Flag)) {
   [
     #(int.bitwise_shift_left(1, 2), Available),
     #(int.bitwise_shift_left(1, 7), GuildSubscription),

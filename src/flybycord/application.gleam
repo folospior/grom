@@ -83,7 +83,8 @@ pub type InstallationContextConfig {
 
 // FLAGS -----------------------------------------------------------------------
 
-fn bits_flags() -> List(#(Int, Flag)) {
+@internal
+pub fn bits_flags() -> List(#(Int, Flag)) {
   [
     #(int.bitwise_shift_left(1, 6), ApplicationAutoModerationRuleCreateBadge),
     #(int.bitwise_shift_left(1, 12), GatewayPresence),
