@@ -2,6 +2,7 @@ import flybycord/application.{type Application}
 import flybycord/client.{type Client}
 import flybycord/error
 import flybycord/image
+import flybycord/internal/flags
 import flybycord/internal/rest
 import flybycord/modification.{type Modification, Delete, New, Skip}
 import flybycord/webhook_event
@@ -80,7 +81,7 @@ fn modify_encode(modify: Modify) -> Json {
   }
 
   let flags = case modify.flags {
-    Some(flags) -> [#("flags", todo)]
+    Some(flags) -> [#("flags", flags.encode(flags, application.bits_flags()))]
     None -> []
   }
 
