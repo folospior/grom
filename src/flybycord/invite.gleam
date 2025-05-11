@@ -10,7 +10,6 @@ import flybycord/user.{type User}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
-import gleam/http/response
 import gleam/json.{type Json}
 import gleam/option.{type Option, None}
 import gleam/result
@@ -286,7 +285,10 @@ pub fn create_encode(create: Create) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get_many(client: Client, for channel_id: String) {
+pub fn get_many(
+  client: Client,
+  for channel_id: String,
+) -> Result(List(WithMetadata), error.FlybycordError) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/invites")
@@ -303,7 +305,7 @@ pub fn create(
   for channel_id: String,
   with create: Create,
   reason reason: Option(String),
-) {
+) -> Result(WithoutMetadata, error.FlybycordError) {
   let json = create |> create_encode
 
   use response <- result.try(
