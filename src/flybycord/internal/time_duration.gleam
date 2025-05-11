@@ -1,5 +1,6 @@
 import gleam/dynamic/decode
 import gleam/float
+import gleam/json.{type Json}
 import gleam/time/duration.{type Duration}
 
 // DECODERS --------------------------------------------------------------------
@@ -31,6 +32,16 @@ pub fn from_int_seconds_decoder() -> decode.Decoder(Duration) {
 
 // ENCODERS --------------------------------------------------------------------
 
+@internal
+pub fn to_int_seconds_encode(duration: Duration) -> Json {
+  duration
+  |> to_int_seconds
+  |> json.int
+}
+
+// INTERNAL FUNCTIONS ----------------------------------------------------------
+
+@internal
 pub fn to_int_seconds(duration: Duration) -> Int {
   duration
   |> duration.to_seconds

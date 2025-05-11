@@ -1,7 +1,10 @@
 import flybycord/channel/permission_overwrite.{type PermissionOverwrite}
+import flybycord/modification.{type Modification}
 import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -13,6 +16,14 @@ pub type Channel {
     permission_overwrites: List(PermissionOverwrite),
     name: String,
     current_user_permissions: Option(List(Permission)),
+  )
+}
+
+pub type Modify {
+  Modify(
+    name: Option(String),
+    position: Modification(Int),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
   )
 }
 
@@ -45,4 +56,29 @@ pub fn channel_decoder() -> decode.Decoder(Channel) {
     name:,
     current_user_permissions:,
   ))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn modify_encode(modify: Modify) -> Json {
+  let name = case modify.name {
+    Some(name) -> [#("name", json.string(name))]
+    None -> []
+  }
+
+  let position =
+    modify.position
+    |> modification.encode("position", json.int)
+
+  let permission_overwrites =
+    modify.permission_overwrites
+    |> modification.encode("permission_overwrites", fn(overwrites) {
+      overwrites
+      |> json.array(permission_overwrite.create_encode)
+    })
+
+  [name, position, permission_overwrites]
+  |> list.flatten
+  |> json.object
 }

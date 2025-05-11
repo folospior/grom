@@ -1,3 +1,4 @@
+import flybycord/channel/guild/announcement
 import flybycord/channel/guild/category
 import flybycord/channel/guild/forum
 import flybycord/channel/guild/media
@@ -11,7 +12,7 @@ import flybycord/internal/rest
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
-import gleam/json
+import gleam/json.{type Json}
 import gleam/result
 
 // TYPES -----------------------------------------------------------------------
@@ -19,6 +20,7 @@ import gleam/result
 pub type Channel {
   GuildText(text.Channel)
   Dm(dm.Channel)
+  GuildAnnouncement(announcement.Channel)
   GuildVoice(voice.Channel)
   GuildCategory(category.Channel)
   Thread(thread.Thread)
@@ -55,13 +57,17 @@ pub type Mention {
 pub fn decoder() -> decode.Decoder(Channel) {
   use variant <- decode.field("type", type_decoder())
   case variant {
-    GuildTextChannel | GuildAnnouncementChannel -> {
+    GuildTextChannel -> {
       use channel <- decode.then(text.channel_decoder())
       decode.success(GuildText(channel))
     }
     DmChannel -> {
       use channel <- decode.then(dm.channel_decoder())
       decode.success(Dm(channel))
+    }
+    GuildAnnouncementChannel -> {
+      use channel <- decode.then(announcement.channel_decoder())
+      decode.success(GuildAnnouncement(channel))
     }
     GuildVoiceChannel | GuildStageVoiceChannel -> {
       use channel <- decode.then(voice.channel_decoder())
@@ -114,11 +120,43 @@ pub fn mention_decoder() -> decode.Decoder(Mention) {
   decode.success(Mention(id:, guild_id:, channel_type:, channel_name:))
 }
 
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn type_encode(type_: Type) -> Json {
+  case type_ {
+    GuildTextChannel -> 0
+    DmChannel -> 1
+    GuildVoiceChannel -> 2
+    GuildCategoryChannel -> 4
+    GuildAnnouncementChannel -> 5
+    AnnouncementThreadChannel -> 10
+    PublicThreadChannel -> 11
+    PrivateThreadChannel -> 12
+    GuildStageVoiceChannel -> 13
+    GuildForumChannel -> 15
+    GuildMediaChannel -> 16
+  }
+  |> json.int
+}
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get(client: Client, id channel_id: String) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/channels/" <> channel_id)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
 
 pub fn create_dm(
   client: Client,
-  recipient_id: String,
+  to recipient_id: String,
 ) -> Result(Channel, error.FlybycordError) {
   let json = json.object([#("recipient_id", json.string(recipient_id))])
 

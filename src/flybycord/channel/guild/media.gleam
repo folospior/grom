@@ -1,11 +1,15 @@
 import flybycord/channel/guild/forum
+import flybycord/channel/guild/forum/tag.{type Tag}
 import flybycord/channel/permission_overwrite.{type PermissionOverwrite}
 import flybycord/internal/flags
 import flybycord/internal/time_duration
+import flybycord/modification.{type Modification}
 import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
 import gleam/int
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/time/duration.{type Duration}
 
 // TYPES -----------------------------------------------------------------------
@@ -25,10 +29,28 @@ pub type Channel {
     default_auto_archive_duration: Option(Duration),
     current_user_permissions: Option(List(Permission)),
     flags: List(Flag),
-    available_tags: List(forum.Tag),
+    available_tags: List(Tag),
     default_reaction_emoji: Option(forum.DefaultReaction),
     default_thread_rate_limit_per_user: Option(Duration),
     default_sort_order: Option(forum.SortOrderType),
+  )
+}
+
+pub type Modify {
+  Modify(
+    name: Option(String),
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
+    parent_id: Modification(String),
+    default_auto_archive_duration: Modification(Duration),
+    flags: Option(List(Flag)),
+    available_tags: Option(List(tag.Create)),
+    default_reaction_emoji: Modification(forum.DefaultReaction),
+    default_thread_rate_limit_per_user: Option(Duration),
+    default_sort_order: Modification(forum.SortOrderType),
   )
 }
 
@@ -87,7 +109,7 @@ pub fn channel_decoder() {
   use flags <- decode.field("flags", flags.decoder(bits_flags()))
   use available_tags <- decode.field(
     "available_tags",
-    decode.list(forum.tag_decoder()),
+    decode.list(tag.decoder()),
   )
   use default_reaction_emoji <- decode.field(
     "default_reaction_emoji",
@@ -121,4 +143,102 @@ pub fn channel_decoder() {
     default_thread_rate_limit_per_user:,
     default_sort_order:,
   ))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+pub fn modify_encode(modify: Modify) -> Json {
+  let name = case modify.name {
+    Some(name) -> [#("name", json.string(name))]
+    None -> []
+  }
+
+  let position =
+    modify.position
+    |> modification.encode("position", json.int)
+
+  let topic =
+    modify.topic
+    |> modification.encode("topic", json.string)
+
+  let is_nsfw = case modify.is_nsfw {
+    Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
+    None -> []
+  }
+
+  let rate_limit_per_user =
+    modify.rate_limit_per_user
+    |> modification.encode(
+      "rate_limit_per_user",
+      time_duration.to_int_seconds_encode,
+    )
+
+  let permission_overwrites =
+    modify.permission_overwrites
+    |> modification.encode("permission_overwrites", fn(overwrites) {
+      overwrites
+      |> json.array(permission_overwrite.create_encode)
+    })
+
+  let parent_id =
+    modify.parent_id
+    |> modification.encode("parent_id", json.string)
+
+  let default_auto_archive_duration =
+    modify.default_auto_archive_duration
+    |> modification.encode(
+      "default_auto_archive_duration",
+      time_duration.to_int_seconds_encode,
+    )
+
+  let flags = case modify.flags {
+    Some(flags) -> [#("flags", flags.encode(flags, bits_flags()))]
+    None -> []
+  }
+
+  let available_tags = case modify.available_tags {
+    Some(tags) -> [#("available_tags", json.array(tags, tag.create_encode))]
+    None -> []
+  }
+
+  let default_reaction_emoji =
+    modify.default_reaction_emoji
+    |> modification.encode(
+      "default_reaction_emoji",
+      forum.default_reaction_encode,
+    )
+
+  let default_thread_rate_limit_per_user = case
+    modify.default_thread_rate_limit_per_user
+  {
+    Some(limit) -> [
+      #(
+        "default_thread_rate_limit_per_user",
+        time_duration.to_int_seconds_encode(limit),
+      ),
+    ]
+    None -> []
+  }
+
+  let default_sort_order =
+    modify.default_sort_order
+    |> modification.encode("default_sort_order", forum.sort_order_type_encode)
+
+  [
+    name,
+    position,
+    topic,
+    is_nsfw,
+    rate_limit_per_user,
+    permission_overwrites,
+    parent_id,
+    default_auto_archive_duration,
+    flags,
+    available_tags,
+    default_reaction_emoji,
+    default_thread_rate_limit_per_user,
+    default_sort_order,
+  ]
+  |> list.flatten
+  |> json.object
 }

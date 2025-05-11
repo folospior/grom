@@ -4,7 +4,7 @@ import flybycord/error
 import flybycord/image
 import flybycord/internal/flags
 import flybycord/internal/rest
-import flybycord/modification.{type Modification, Delete, New, Skip}
+import flybycord/modification.{type Modification, Skip}
 import flybycord/webhook_event
 import gleam/dict.{type Dict}
 import gleam/http
