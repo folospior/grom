@@ -10,6 +10,7 @@ import flybycord/error
 import flybycord/internal/rest
 import gleam/dynamic/decode
 import gleam/http
+import gleam/http/request
 import gleam/json.{type Json}
 import gleam/option.{type Option}
 import gleam/result
@@ -38,6 +39,10 @@ pub type Type {
   GuildStageVoiceChannel
   GuildForumChannel
   GuildMediaChannel
+}
+
+pub type FollowedChannel {
+  FollowedChannel(channel_id: String, webhook_id: String)
 }
 
 pub type Mention {
@@ -84,6 +89,13 @@ pub fn decoder() -> decode.Decoder(Channel) {
       decode.success(GuildMedia(channel))
     }
   }
+}
+
+@internal
+pub fn followed_channel_decoder() -> decode.Decoder(FollowedChannel) {
+  use channel_id <- decode.field("channel_id", decode.string)
+  use webhook_id <- decode.field("webhook_id", decode.string)
+  decode.success(FollowedChannel(channel_id:, webhook_id:))
 }
 
 @internal
@@ -165,5 +177,27 @@ pub fn delete(
 
   response.body
   |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn announcement_follow(
+  client: Client,
+  from channel_id: String,
+  to webhook_channel_id: String,
+  reason reason: Option(String),
+) -> Result(FollowedChannel, error.FlybycordError) {
+  let json =
+    json.object([#("webhook_channel_id", json.string(webhook_channel_id))])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/followers")
+    |> rest.with_reason(reason)
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: followed_channel_decoder())
   |> result.map_error(error.DecodeError)
 }
