@@ -1,10 +1,16 @@
 import flybycord/channel/permission_overwrite.{type PermissionOverwrite}
-import flybycord/modification.{type Modification}
+import flybycord/client.{type Client}
+import flybycord/error
+import flybycord/internal/rest
+import flybycord/modification.{type Modification, Skip}
 import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 
 // TYPES -----------------------------------------------------------------------
 
@@ -19,7 +25,7 @@ pub type Channel {
   )
 }
 
-pub type Modify {
+pub opaque type Modify {
   Modify(
     name: Option(String),
     position: Modification(Int),
@@ -81,4 +87,49 @@ pub fn modify_encode(modify: Modify) -> Json {
   [name, position, permission_overwrites]
   |> list.flatten
   |> json.object
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn modify(
+  client: Client,
+  id channel_id: String,
+  with modify: Modify,
+  reason reason: Option(String),
+) {
+  let json = modify |> modify_encode
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/channels/" <> channel_id)
+    |> request.set_body(json |> json.to_string)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: channel_decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn new_modify() -> Modify {
+  Modify(name: None, position: Skip, permission_overwrites: Skip)
+}
+
+pub fn modify_name(modify: Modify, new name: String) -> Modify {
+  Modify(..modify, name: Some(name))
+}
+
+pub fn modify_position(
+  modify: Modify,
+  position position: Modification(Int),
+) -> Modify {
+  Modify(..modify, position:)
+}
+
+pub fn modify_permission_overwrites(
+  modify: Modify,
+  overwrites overwrites: Modification(List(permission_overwrite.Create)),
+) -> Modify {
+  Modify(..modify, permission_overwrites: overwrites)
 }

@@ -30,7 +30,11 @@ pub fn execute(
 }
 
 @internal
-pub fn new_request(client: Client, method: http.Method, path: String) {
+pub fn new_request(
+  client: Client,
+  method: http.Method,
+  path: String,
+) -> Request(String) {
   request.new()
   |> request.set_scheme(http.Https)
   |> request.set_host(discord_url)

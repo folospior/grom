@@ -1,14 +1,20 @@
+import flybycord/client.{type Client}
+import flybycord/error
 import flybycord/guild/member.{type Member as GuildMember}
 import flybycord/internal/flags
+import flybycord/internal/rest
 import flybycord/internal/time_duration
 import flybycord/internal/time_rfc3339
-import flybycord/modification.{type Modification}
+import flybycord/modification.{type Modification, Skip}
 import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 
@@ -34,7 +40,7 @@ pub type Thread {
   )
 }
 
-pub type Modify {
+pub opaque type Modify {
   Modify(
     name: Option(String),
     is_archived: Option(Bool),
@@ -249,4 +255,84 @@ pub fn modify_encode(modify: Modify) -> Json {
   ]
   |> list.flatten
   |> json.object
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn modify(
+  client: Client,
+  id channel_id: String,
+  with modify: Modify,
+  reason reason: Option(String),
+) {
+  let json = modify |> modify_encode
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/channels/" <> channel_id)
+    |> request.set_body(json |> json.to_string)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn new_modify() -> Modify {
+  Modify(
+    name: None,
+    is_archived: None,
+    auto_archive_duration: None,
+    is_locked: None,
+    is_invitable: None,
+    rate_limit_per_user: Skip,
+    flags: Skip,
+    applied_tags_ids: Skip,
+  )
+}
+
+pub fn modify_name(modify: Modify, new name: String) -> Modify {
+  Modify(..modify, name: Some(name))
+}
+
+pub fn modify_is_archived(modify: Modify, new is_archived: Bool) -> Modify {
+  Modify(..modify, is_archived: Some(is_archived))
+}
+
+pub fn modify_auto_archive_duration(
+  modify: Modify,
+  new duration: Duration,
+) -> Modify {
+  Modify(..modify, auto_archive_duration: Some(duration))
+}
+
+pub fn modify_is_locked(modify: Modify, new is_locked: Bool) -> Modify {
+  Modify(..modify, is_locked: Some(is_locked))
+}
+
+pub fn modify_is_invitable(modify: Modify, new is_invitable: Bool) -> Modify {
+  Modify(..modify, is_invitable: Some(is_invitable))
+}
+
+pub fn modify_rate_limit_per_user(
+  modify: Modify,
+  limit limit: Modification(Duration),
+) -> Modify {
+  Modify(..modify, rate_limit_per_user: limit)
+}
+
+pub fn modify_flags(
+  modify: Modify,
+  flags flags: Modification(List(Flag)),
+) -> Modify {
+  Modify(..modify, flags:)
+}
+
+pub fn modify_applied_tags_ids(
+  modify: Modify,
+  ids ids: Modification(List(String)),
+) -> Modify {
+  Modify(..modify, applied_tags_ids: ids)
 }

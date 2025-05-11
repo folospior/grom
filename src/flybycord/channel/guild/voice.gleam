@@ -1,11 +1,17 @@
 import flybycord/channel/permission_overwrite.{type PermissionOverwrite}
+import flybycord/client.{type Client}
+import flybycord/error
+import flybycord/internal/rest
 import flybycord/internal/time_duration
-import flybycord/modification.{type Modification}
+import flybycord/modification.{type Modification, Skip}
 import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/time/duration.{type Duration}
 
 // TYPES -----------------------------------------------------------------------
@@ -28,7 +34,7 @@ pub type Channel {
   )
 }
 
-pub type Modify {
+pub opaque type Modify {
   Modify(
     name: Option(String),
     position: Modification(Int),
@@ -181,4 +187,99 @@ pub fn video_quality_mode_encode(video_quality_mode: VideoQualityMode) -> Json {
     Full -> 2
   }
   |> json.int
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn modify(
+  client: Client,
+  id channel_id: String,
+  with modify: Modify,
+  reason reason: Option(String),
+) {
+  let json = modify |> modify_encode
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/channels/" <> channel_id)
+    |> request.set_body(json |> json.to_string)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: channel_decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn new_modify() -> Modify {
+  Modify(
+    name: None,
+    position: Skip,
+    is_nsfw: None,
+    rate_limit_per_user: Skip,
+    bitrate: Skip,
+    user_limit: Skip,
+    permission_overwrites: Skip,
+    parent_id: Skip,
+    rtc_region: Skip,
+    video_quality_mode: Skip,
+  )
+}
+
+pub fn modify_name(modify: Modify, new name: String) -> Modify {
+  Modify(..modify, name: Some(name))
+}
+
+pub fn modify_position(
+  modify: Modify,
+  position position: Modification(Int),
+) -> Modify {
+  Modify(..modify, position:)
+}
+
+pub fn modify_is_nsfw(modify: Modify, new is_nsfw: Bool) -> Modify {
+  Modify(..modify, is_nsfw: Some(is_nsfw))
+}
+
+pub fn modify_bitrate(
+  modify: Modify,
+  bitrate bitrate: Modification(Int),
+) -> Modify {
+  Modify(..modify, bitrate:)
+}
+
+pub fn modify_user_limit(
+  modify: Modify,
+  limit user_limit: Modification(Int),
+) -> Modify {
+  Modify(..modify, user_limit:)
+}
+
+pub fn modify_permission_overwrites(
+  modify: Modify,
+  overwrites overwrites: Modification(List(permission_overwrite.Create)),
+) -> Modify {
+  Modify(..modify, permission_overwrites: overwrites)
+}
+
+pub fn modify_parent_id(
+  modify: Modify,
+  id parent_id: Modification(String),
+) -> Modify {
+  Modify(..modify, parent_id:)
+}
+
+pub fn modify_rtc_region(
+  modify: Modify,
+  region rtc_region: Modification(String),
+) -> Modify {
+  Modify(..modify, rtc_region:)
+}
+
+pub fn modify_video_quality_mode(
+  modify: Modify,
+  mode video_quality_mode: Modification(VideoQualityMode),
+) -> Modify {
+  Modify(..modify, video_quality_mode:)
 }

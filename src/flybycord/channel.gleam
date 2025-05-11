@@ -1,4 +1,3 @@
-import flybycord/channel/guild/announcement
 import flybycord/channel/guild/category
 import flybycord/channel/guild/forum
 import flybycord/channel/guild/media
@@ -20,7 +19,6 @@ import gleam/result
 pub type Channel {
   GuildText(text.Channel)
   Dm(dm.Channel)
-  GuildAnnouncement(announcement.Channel)
   GuildVoice(voice.Channel)
   GuildCategory(category.Channel)
   Thread(thread.Thread)
@@ -57,17 +55,13 @@ pub type Mention {
 pub fn decoder() -> decode.Decoder(Channel) {
   use variant <- decode.field("type", type_decoder())
   case variant {
-    GuildTextChannel -> {
+    GuildTextChannel | GuildAnnouncementChannel -> {
       use channel <- decode.then(text.channel_decoder())
       decode.success(GuildText(channel))
     }
     DmChannel -> {
       use channel <- decode.then(dm.channel_decoder())
       decode.success(Dm(channel))
-    }
-    GuildAnnouncementChannel -> {
-      use channel <- decode.then(announcement.channel_decoder())
-      decode.success(GuildAnnouncement(channel))
     }
     GuildVoiceChannel | GuildStageVoiceChannel -> {
       use channel <- decode.then(voice.channel_decoder())
