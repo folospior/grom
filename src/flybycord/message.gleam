@@ -504,3 +504,22 @@ pub fn pin(
 
   Ok(Nil)
 }
+
+pub fn unpin(
+  client: Client,
+  from channel_id: String,
+  id message_id: String,
+  reason reason: Option(String),
+) -> Result(Nil, error.FlybycordError) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/channels/" <> channel_id <> "/pins/" <> message_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
