@@ -10,6 +10,7 @@ import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
+import gleam/http/response
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -58,6 +59,16 @@ pub opaque type StartFromMessage {
   StartFromMessage(
     name: String,
     auto_archive_duration: Option(Duration),
+    rate_limit_per_user: Option(Duration),
+  )
+}
+
+pub opaque type StartWithoutMessage {
+  StartWithoutMessage(
+    name: String,
+    auto_archive_duration: Option(Duration),
+    type_: Option(Type),
+    is_invitable: Option(Bool),
     rate_limit_per_user: Option(Duration),
   )
 }
@@ -224,6 +235,16 @@ pub fn type_decoder() -> decode.Decoder(Type) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
+pub fn type_encode(type_: Type) -> Json {
+  case type_ {
+    Announcement -> 10
+    Public -> 11
+    Private -> 12
+  }
+  |> json.int
+}
+
+@internal
 pub fn modify_encode(modify: Modify) -> Json {
   let name = case modify.name {
     Some(name) -> [#("name", json.string(name))]
@@ -304,6 +325,41 @@ pub fn start_from_message_encode(start_from_message: StartFromMessage) -> Json {
   }
 
   [name, auto_archive_duration, rate_limit_per_user]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn start_without_message_encode(
+  start_without_message: StartWithoutMessage,
+) -> Json {
+  let name = [#("name", json.string(start_without_message.name))]
+
+  let auto_archive_duration = case start_without_message.auto_archive_duration {
+    Some(duration) -> [
+      #("auto_archive_duration", time_duration.to_int_seconds_encode(duration)),
+    ]
+    None -> []
+  }
+
+  let type_ = case start_without_message.type_ {
+    Some(type_) -> [#("type", type_encode(type_))]
+    None -> []
+  }
+
+  let is_invitable = case start_without_message.is_invitable {
+    Some(invitable) -> [#("invitable", json.bool(invitable))]
+    None -> []
+  }
+
+  let rate_limit_per_user = case start_without_message.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  [name, auto_archive_duration, type_, is_invitable, rate_limit_per_user]
   |> list.flatten
   |> json.object
 }
@@ -433,4 +489,66 @@ pub fn start_from_message_with_rate_limit_per_user(
   limit: Duration,
 ) -> StartFromMessage {
   StartFromMessage(..start_from_message, rate_limit_per_user: Some(limit))
+}
+
+pub fn start_without_message(
+  client: Client,
+  in channel_id: String,
+  with start_without_message: StartWithoutMessage,
+  reason reason: Option(String),
+) -> Result(Thread, error.FlybycordError) {
+  let json = start_without_message |> start_without_message_encode
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/threads")
+    |> rest.with_reason(reason)
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn new_start_without_message(name: String) -> StartWithoutMessage {
+  StartWithoutMessage(
+    name:,
+    auto_archive_duration: None,
+    type_: None,
+    is_invitable: None,
+    rate_limit_per_user: None,
+  )
+}
+
+pub fn start_without_message_with_auto_archive_duration(
+  start_without_message: StartWithoutMessage,
+  duration: Duration,
+) -> StartWithoutMessage {
+  StartWithoutMessage(
+    ..start_without_message,
+    auto_archive_duration: Some(duration),
+  )
+}
+
+pub fn start_without_message_with_type(
+  start_without_message: StartWithoutMessage,
+  type_: Type,
+) -> StartWithoutMessage {
+  StartWithoutMessage(..start_without_message, type_: Some(type_))
+}
+
+pub fn start_without_message_with_is_invitable(
+  start_without_message: StartWithoutMessage,
+  is_invitable: Bool,
+) -> StartWithoutMessage {
+  StartWithoutMessage(..start_without_message, is_invitable: Some(is_invitable))
+}
+
+pub fn start_without_message_with_rate_limit_per_user(
+  start_without_message: StartWithoutMessage,
+  limit: Duration,
+) -> StartWithoutMessage {
+  StartWithoutMessage(..start_without_message, rate_limit_per_user: Some(limit))
 }
