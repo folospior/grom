@@ -1,7 +1,14 @@
+import flybycord/client.{type Client}
+import flybycord/error
+import flybycord/internal/rest
 import flybycord/permission.{type Permission}
 import flybycord/user.{type User}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
+import gleam/json
 import gleam/option.{type Option, None}
+import gleam/result
 
 // TYPES -----------------------------------------------------------------------
 
@@ -35,4 +42,24 @@ pub fn channel_decoder() {
     recipients:,
     current_user_permissions:,
   ))
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn create(
+  client: Client,
+  to recipient_id: String,
+) -> Result(Channel, error.FlybycordError) {
+  let json = json.object([#("recipient_id", json.string(recipient_id))])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/users/@me/channels")
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: channel_decoder())
+  |> result.map_error(error.DecodeError)
 }
