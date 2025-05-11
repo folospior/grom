@@ -201,3 +201,16 @@ pub fn announcement_follow(
   |> json.parse(using: followed_channel_decoder())
   |> result.map_error(error.DecodeError)
 }
+
+pub fn trigger_typing_indicator(
+  client: Client,
+  in channel_id: String,
+) -> Result(Nil, error.FlybycordError) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/typing")
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
