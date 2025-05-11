@@ -1,11 +1,19 @@
 import flybycord/application.{type Application}
 import flybycord/channel.{type Channel}
+import flybycord/client.{type Client}
+import flybycord/error
 import flybycord/guild.{type Guild}
+import flybycord/internal/rest
 import flybycord/internal/time_duration
 import flybycord/internal/time_rfc3339
 import flybycord/user.{type User}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
+import gleam/http/response
+import gleam/json.{type Json}
 import gleam/option.{type Option, None}
+import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 
@@ -45,6 +53,17 @@ pub type WithMetadata {
     max_age: Duration,
     is_temporary: Bool,
     created_at: Timestamp,
+  )
+}
+
+pub type Create {
+  Create(
+    max_age: Option(Duration),
+    max_uses: Option(Int),
+    is_temporary: Option(Bool),
+    target_type: Option(TargetType),
+    target_user_id: Option(String),
+    target_application_id: Option(String),
   )
 }
 
@@ -214,4 +233,88 @@ pub fn target_type_decoder() -> decode.Decoder(TargetType) {
     2 -> decode.success(EmbeddedApplication)
     _ -> decode.failure(Stream, "TargetType")
   }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn target_type_encode(target_type: TargetType) -> Json {
+  case target_type {
+    Stream -> 1
+    EmbeddedApplication -> 2
+  }
+  |> json.int
+}
+
+@internal
+pub fn create_encode(create: Create) -> Json {
+  let Create(
+    max_age:,
+    max_uses:,
+    is_temporary:,
+    target_type:,
+    target_user_id:,
+    target_application_id:,
+  ) = create
+  json.object([
+    #("max_age", case max_age {
+      None -> json.null()
+      option.Some(value) -> time_duration.to_int_seconds_encode(value)
+    }),
+    #("max_uses", case max_uses {
+      None -> json.null()
+      option.Some(value) -> json.int(value)
+    }),
+    #("is_temporary", case is_temporary {
+      None -> json.null()
+      option.Some(value) -> json.bool(value)
+    }),
+    #("target_type", case target_type {
+      None -> json.null()
+      option.Some(value) -> target_type_encode(value)
+    }),
+    #("target_user_id", case target_user_id {
+      None -> json.null()
+      option.Some(value) -> json.string(value)
+    }),
+    #("target_application_id", case target_application_id {
+      None -> json.null()
+      option.Some(value) -> json.string(value)
+    }),
+  ])
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get_many(client: Client, for channel_id: String) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/invites")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(with_metadata_decoder()))
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn create(
+  client: Client,
+  for channel_id: String,
+  with create: Create,
+  reason reason: Option(String),
+) {
+  let json = create |> create_encode
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/invites")
+    |> rest.with_reason(reason)
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: without_metadata_decoder())
+  |> result.map_error(error.DecodeError)
 }

@@ -10,7 +10,6 @@ import flybycord/error
 import flybycord/internal/rest
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request
 import gleam/json.{type Json}
 import gleam/option.{type Option}
 import gleam/result
@@ -137,7 +136,10 @@ pub fn type_encode(type_: Type) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(client: Client, id channel_id: String) {
+pub fn get(
+  client: Client,
+  id channel_id: String,
+) -> Result(Channel, error.FlybycordError) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/channels/" <> channel_id)
@@ -153,7 +155,7 @@ pub fn delete(
   client: Client,
   id channel_id: String,
   reason reason: Option(String),
-) {
+) -> Result(Channel, error.FlybycordError) {
   use response <- result.try(
     client
     |> rest.new_request(http.Delete, "/channels/" <> channel_id)
