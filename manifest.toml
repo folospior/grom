@@ -9,6 +9,7 @@ packages = [
   { name = "gleam_stdlib", version = "0.59.0", build_tools = ["gleam"], requirements = [], otp_app = "gleam_stdlib", source = "hex", outer_checksum = "F8FEE9B35797301994B81AF75508CF87C328FE1585558B0FFD188DC2B32EAA95" },
   { name = "gleam_time", version = "1.1.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_time", source = "hex", outer_checksum = "CBAA68E215BEA961B40F3B1BA7B88741B1EB49572EF5E1154E357A5D152A2A2C" },
   { name = "gleeunit", version = "1.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "0E6C83834BA65EDCAAF4FE4FB94AC697D9262D83E6F58A750D63C9F6C8A9D9FF" },
+  { name = "multipart_form", version = "1.0.0", build_tools = ["gleam"], requirements = ["gleam_http", "gleam_stdlib"], otp_app = "multipart_form", source = "hex", outer_checksum = "700FEC9E7C82DB2EA3B048AC6C2869095560AB68EBDC97BF207E8DAD9BB3C022" },
 ]
 
 [requirements]
@@ -18,3 +19,4 @@ gleam_json = { version = ">= 2.3.0 and < 3.0.0" }
 gleam_stdlib = { version = ">= 0.44.0 and < 2.0.0" }
 gleam_time = { version = ">= 1.1.0 and < 2.0.0" }
 gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
+multipart_form = { version = ">= 1.0.0 and < 2.0.0" }
