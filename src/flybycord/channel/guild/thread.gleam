@@ -23,6 +23,7 @@ import gleam/time/timestamp.{type Timestamp}
 pub type Thread {
   Thread(
     id: String,
+    type_: Type,
     guild_id: Option(String),
     name: String,
     last_message_id: Option(String),
@@ -53,6 +54,14 @@ pub opaque type Modify {
   )
 }
 
+pub opaque type StartFromMessage {
+  StartFromMessage(
+    name: String,
+    auto_archive_duration: Option(Duration),
+    rate_limit_per_user: Option(Duration),
+  )
+}
+
 pub type Metadata {
   Metadata(
     is_archived: Bool,
@@ -77,6 +86,12 @@ pub type Flag {
   Pinned
 }
 
+pub type Type {
+  Announcement
+  Public
+  Private
+}
+
 // FLAGS -----------------------------------------------------------------------
 
 @internal
@@ -89,6 +104,7 @@ pub fn bits_flags() -> List(#(Int, Flag)) {
 @internal
 pub fn decoder() -> decode.Decoder(Thread) {
   use id <- decode.field("id", decode.string)
+  use type_ <- decode.field("type", type_decoder())
   use guild_id <- decode.optional_field(
     "guild_id",
     None,
@@ -130,6 +146,7 @@ pub fn decoder() -> decode.Decoder(Thread) {
   )
   decode.success(Thread(
     id:,
+    type_:,
     guild_id:,
     name:,
     last_message_id:,
@@ -193,6 +210,17 @@ pub fn member_decoder() -> decode.Decoder(Member) {
   decode.success(Member(thread_id:, user_id:, join_timestamp:, guild_member:))
 }
 
+@internal
+pub fn type_decoder() -> decode.Decoder(Type) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    10 -> decode.success(Announcement)
+    11 -> decode.success(Public)
+    12 -> decode.success(Private)
+    _ -> decode.failure(Announcement, "Type")
+  }
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -253,6 +281,29 @@ pub fn modify_encode(modify: Modify) -> Json {
     flags,
     applied_tags_ids,
   ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn start_from_message_encode(start_from_message: StartFromMessage) -> Json {
+  let name = [#("name", json.string(start_from_message.name))]
+
+  let auto_archive_duration = case start_from_message.auto_archive_duration {
+    Some(duration) -> [
+      #("auto_archive_duration", time_duration.to_int_seconds_encode(duration)),
+    ]
+    None -> []
+  }
+
+  let rate_limit_per_user = case start_from_message.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  [name, auto_archive_duration, rate_limit_per_user]
   |> list.flatten
   |> json.object
 }
@@ -335,4 +386,51 @@ pub fn modify_applied_tags_ids(
   ids ids: Modification(List(String)),
 ) -> Modify {
   Modify(..modify, applied_tags_ids: ids)
+}
+
+pub fn start_from_message(
+  client: Client,
+  in channel_id: String,
+  from message_id: String,
+  with start_from_message: StartFromMessage,
+  reason reason: Option(String),
+) -> Result(Thread, error.FlybycordError) {
+  let json = start_from_message |> start_from_message_encode
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Post,
+      "/channels/" <> channel_id <> "/messages/" <> message_id <> "/threads",
+    )
+    |> rest.with_reason(reason)
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn new_start_from_message(name: String) -> StartFromMessage {
+  StartFromMessage(
+    name:,
+    auto_archive_duration: None,
+    rate_limit_per_user: None,
+  )
+}
+
+pub fn start_from_message_with_auto_archive_duration(
+  start_from_message: StartFromMessage,
+  duration: Duration,
+) -> StartFromMessage {
+  StartFromMessage(..start_from_message, auto_archive_duration: Some(duration))
+}
+
+pub fn start_from_message_with_rate_limit_per_user(
+  start_from_message: StartFromMessage,
+  limit: Duration,
+) -> StartFromMessage {
+  StartFromMessage(..start_from_message, rate_limit_per_user: Some(limit))
 }
