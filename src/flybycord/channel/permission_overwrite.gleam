@@ -1,7 +1,13 @@
+import flybycord/client.{type Client}
+import flybycord/error
+import flybycord/internal/rest
 import flybycord/permission.{type Permission}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/json.{type Json}
 import gleam/option.{type Option}
+import gleam/result
 
 // TYPES -----------------------------------------------------------------------
 
@@ -66,4 +72,29 @@ pub fn type_encode(type_: Type) -> Json {
     Member -> 1
   }
   |> json.int
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn edit(
+  client: Client,
+  in channel_id: String,
+  id overwrite_id: String,
+  new overwrite: Create,
+  reason reason: Option(String),
+) -> Result(Nil, error.FlybycordError) {
+  let json = overwrite |> create_encode
+
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Put,
+      "/channels/" <> channel_id <> "/permissions/" <> overwrite_id,
+    )
+    |> rest.with_reason(reason)
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
 }
