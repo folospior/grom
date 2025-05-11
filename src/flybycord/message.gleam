@@ -485,3 +485,22 @@ pub fn get_pinned(
   |> json.parse(using: decode.list(decoder()))
   |> result.map_error(error.DecodeError)
 }
+
+pub fn pin(
+  client: Client,
+  in channel_id: String,
+  id message_id: String,
+  reason reason: Option(String),
+) -> Result(Nil, error.FlybycordError) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Put,
+      "/channels/" <> channel_id <> "/pins/" <> message_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
