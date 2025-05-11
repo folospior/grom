@@ -78,7 +78,7 @@ pub fn type_encode(type_: Type) -> Json {
 
 pub fn edit(
   client: Client,
-  in channel_id: String,
+  for channel_id: String,
   id overwrite_id: String,
   new overwrite: Create,
   reason reason: Option(String),
