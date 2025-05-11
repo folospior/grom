@@ -12,6 +12,7 @@ import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
 import gleam/json.{type Json}
+import gleam/option.{type Option}
 import gleam/result
 
 // TYPES -----------------------------------------------------------------------
@@ -140,6 +141,23 @@ pub fn get(client: Client, id channel_id: String) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/channels/" <> channel_id)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.DecodeError)
+}
+
+pub fn delete(
+  client: Client,
+  id channel_id: String,
+  reason reason: Option(String),
+) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Delete, "/channels/" <> channel_id)
+    |> rest.with_reason(reason)
     |> rest.execute,
   )
 
