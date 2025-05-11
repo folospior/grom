@@ -25,7 +25,7 @@ pub type PartialChannel {
   PartialChannel(
     id: String,
     name: String,
-    type_: channel.Type,
+    type_: Type,
     permissions: List(Permission),
   )
   PartialThread(
@@ -36,6 +36,20 @@ pub type PartialChannel {
     metadata: thread.Metadata,
     parent_id: String,
   )
+}
+
+pub type Type {
+  GuildTextChannel
+  DmChannel
+  GuildVoiceChannel
+  GuildCategoryChannel
+  GuildAnnouncementChannel
+  AnnouncementThreadChannel
+  PublicThreadChannel
+  PrivateThreadChannel
+  GuildStageVoiceChannel
+  GuildForumChannel
+  GuildMediaChannel
 }
 
 // DECODERS --------------------------------------------------------------------

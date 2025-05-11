@@ -1,7 +1,10 @@
 import flybycord/application.{type Application}
 import flybycord/channel.{type Channel}
+import flybycord/client.{type Client}
+import flybycord/error
 import flybycord/guild/role.{type Role}
 import flybycord/internal/flags
+import flybycord/internal/rest
 import flybycord/internal/time_rfc3339
 import flybycord/message/activity.{type Activity}
 import flybycord/message/attachment.{type Attachment}
@@ -16,8 +19,11 @@ import flybycord/message/resolved.{type Resolved}
 import flybycord/sticker
 import flybycord/user.{type User}
 import gleam/dynamic/decode
+import gleam/http
 import gleam/int
+import gleam/json
 import gleam/option.{type Option, None}
+import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 
 // TYPES -----------------------------------------------------------------------
@@ -171,7 +177,7 @@ pub fn bits_flags() -> List(#(Int, Flag)) {
 // DECODERS --------------------------------------------------------------------
 
 @internal
-pub fn message_decoder() -> decode.Decoder(Message) {
+pub fn decoder() -> decode.Decoder(Message) {
   use id <- decode.field("id", decode.string)
   use channel_id <- decode.field("channel_id", decode.string)
   use author <- decode.field("author", user.decoder())
@@ -248,7 +254,7 @@ pub fn message_decoder() -> decode.Decoder(Message) {
   use refrenced_message <- decode.optional_field(
     "refrenced_message",
     None,
-    decode.optional(message_decoder()),
+    decode.optional(decoder()),
   )
   use interaction_metadata <- decode.optional_field(
     "interaction_metadata",
@@ -461,4 +467,21 @@ pub fn role_subscription_data_decoder() -> decode.Decoder(RoleSubscriptionData) 
     total_months_subscribed:,
     is_renewal:,
   ))
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get_pinned(
+  client: Client,
+  in channel_id: String,
+) -> Result(List(Message), error.FlybycordError) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/pins")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(decoder()))
+  |> result.map_error(error.DecodeError)
 }
