@@ -98,3 +98,22 @@ pub fn edit(
 
   Ok(Nil)
 }
+
+pub fn delete(
+  client: Client,
+  for channel_id: String,
+  id overwrite_id: String,
+  reason reason: Option(String),
+) -> Result(Nil, error.FlybycordError) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/channels/" <> channel_id <> "/permissions/" <> overwrite_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
