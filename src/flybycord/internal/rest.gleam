@@ -1,11 +1,16 @@
 import flybycord/client.{type Client}
 import flybycord/error
+import flybycord/file.{type File}
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/httpc
+import gleam/int
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import multipart_form
+import multipart_form/field
 
 // CONSTANTS -------------------------------------------------------------------
 
@@ -40,7 +45,7 @@ pub fn new_request(
   |> request.set_host(discord_url)
   |> request.set_path(discord_api_path <> path)
   |> request.set_method(method)
-  |> request.prepend_header("authorization", "Bot" <> client.token)
+  |> request.prepend_header("authorization", "Bot " <> client.token)
   |> request.prepend_header(
     "user-agent",
     "DiscordBot (https://github.com/folospior/flybycord, "
@@ -48,6 +53,38 @@ pub fn new_request(
       <> ")",
   )
   |> request.prepend_header("content-type", "application/json")
+}
+
+@internal
+pub fn new_multipart_request(
+  client: Client,
+  method: http.Method,
+  path: String,
+  payload_json: String,
+  files: List(File),
+) {
+  let #(_, file_parts) =
+    files
+    |> list.map_fold(0, fn(acc, file) {
+      #(acc + 1, #(
+        "files[" <> acc |> int.to_string <> "]",
+        field.File(file.name, file.content_type, file.content),
+      ))
+    })
+
+  new_request(client, method, path)
+  |> multipart_form.to_request(
+    [
+      [
+        #(
+          "payload_json",
+          field.StringWithType(payload_json, "application/json"),
+        ),
+      ],
+      file_parts,
+    ]
+    |> list.flatten,
+  )
 }
 
 @internal
