@@ -3,8 +3,8 @@ import gleam/option.{type Option, None}
 
 // TYPES -----------------------------------------------------------------------
 
-pub type MentionableSelect {
-  MentionableSelect(
+pub type RoleSelect {
+  RoleSelect(
     id: Option(Int),
     custom_id: String,
     placeholder: Option(String),
@@ -16,30 +16,29 @@ pub type MentionableSelect {
 }
 
 pub type DefaultValue {
-  User(id: String)
-  Role(id: String)
-  Channel(id: String)
+  DefaultValue(id: String)
 }
 
 // DECODERS --------------------------------------------------------------------
 
 @internal
-pub fn decoder() -> decode.Decoder(MentionableSelect) {
-  use id <- decode.field("id", decode.optional(decode.int))
+pub fn decoder() -> decode.Decoder(RoleSelect) {
+  use id <- decode.optional_field("id", None, decode.optional(decode.int))
   use custom_id <- decode.field("custom_id", decode.string)
   use placeholder <- decode.optional_field(
     "placeholder",
     None,
     decode.optional(decode.string),
   )
-  use default_values <- decode.field(
+  use default_values <- decode.optional_field(
     "default_values",
+    None,
     decode.optional(decode.list(default_value_decoder())),
   )
   use min_values <- decode.optional_field("min_values", 1, decode.int)
   use max_values <- decode.optional_field("max_values", 1, decode.int)
   use is_disabled <- decode.optional_field("is_disabled", False, decode.bool)
-  decode.success(MentionableSelect(
+  decode.success(RoleSelect(
     id:,
     custom_id:,
     placeholder:,
@@ -52,13 +51,6 @@ pub fn decoder() -> decode.Decoder(MentionableSelect) {
 
 @internal
 pub fn default_value_decoder() -> decode.Decoder(DefaultValue) {
-  use type_ <- decode.field("type", decode.string)
   use id <- decode.field("id", decode.string)
-
-  case type_ {
-    "user" -> decode.success(User(id:))
-    "role" -> decode.success(Role(id:))
-    "channel" -> decode.success(Channel(id:))
-    _ -> decode.failure(User(""), "DefaultValue")
-  }
+  decode.success(DefaultValue(id:))
 }

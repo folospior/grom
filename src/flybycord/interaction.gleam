@@ -8,7 +8,6 @@ import flybycord/interaction/context_type.{type ContextType}
 import flybycord/interaction/resolved.{type Resolved}
 import flybycord/message.{type Message}
 import flybycord/message/component.{type Component}
-import flybycord/message/component/select
 import flybycord/permission.{type Permission}
 import flybycord/user.{type User}
 import gleam/dict.{type Dict}
@@ -60,10 +59,9 @@ pub type Data {
     guild_id: Option(String),
     target_id: Option(String),
   )
-  MessageComponentData(
+  StringSelectData(
     custom_id: String,
-    component_type: MessageComponentDataComponentType,
-    values: List(select.Value),
+    values: List(String),
     resolved: Option(Resolved),
   )
   ModalSubmitData(custom_id: String, components: List(Component))
