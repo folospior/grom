@@ -1,7 +1,7 @@
 import dotenv_gleam
 import envoy
-import flybycord/client
-import flybycord/user
+import grom/client
+import grom/user
 
 pub fn main() {
   dotenv_gleam.config()

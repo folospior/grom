@@ -1,8 +1,8 @@
-name = "flybycord"
+name = "grom"
 version = "0.0.0"
 description = "Gleam wrapper for the Discord API"
 licenses = ["Apache-2.0", "MIT"]
-repository = { type = "github", user = "folospior", repo = "flybycord"}
+repository = { type = "github", user = "folospior", repo = "grom"}
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"

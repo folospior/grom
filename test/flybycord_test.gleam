@@ -1,12 +1,12 @@
-import flybycord/client
-import flybycord/file.{File}
-import flybycord/internal/rest
-import flybycord/user/current_user
 import gleam/http
 import gleam/http/request
 import gleam/json
 import gleeunit
 import gleeunit/should
+import grom/client
+import grom/file.{File}
+import grom/internal/rest
+import grom/user/current_user
 
 pub fn main() {
   gleeunit.main()

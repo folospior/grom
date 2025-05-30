@@ -14,7 +14,7 @@ version = "1.0.0"
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
-flybycord = { path = ".." }
+grom = { path = ".." }
 envoy = ">= 1.0.2 and < 2.0.0"
 dotenv_gleam = ">= 1.0.7 and < 2.0.0"
 
