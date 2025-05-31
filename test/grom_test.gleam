@@ -41,10 +41,16 @@ pub fn multipart_request_test() {
     )
 
   let result =
-    rest.new_multipart_request(client.Client("token"), http.Post, "/", "{}", [
-      File("name", "image/png", <<"test":utf8>>),
-      File("name2", "image/jpeg", <<"jpeg":utf8>>),
-    ])
+    rest.new_multipart_request(
+      client.Client("token"),
+      http.Post,
+      "/",
+      json.object([]),
+      [
+        File("name", "image/png", <<"test":utf8>>),
+        File("name2", "image/jpeg", <<"jpeg":utf8>>),
+      ],
+    )
 
   result
   |> should.equal(expected)

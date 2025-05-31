@@ -3,6 +3,7 @@ import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/httpc
 import gleam/int
+import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -58,7 +59,7 @@ pub fn new_multipart_request(
   client: Client,
   method: http.Method,
   path: String,
-  payload_json: String,
+  payload_json: Json,
   files: List(File),
 ) {
   let #(_, file_parts) =
@@ -76,7 +77,10 @@ pub fn new_multipart_request(
       [
         #(
           "payload_json",
-          field.StringWithType(payload_json, "application/json"),
+          field.StringWithType(
+            payload_json |> json.to_string,
+            "application/json",
+          ),
         ),
       ],
       file_parts,
