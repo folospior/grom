@@ -9,7 +9,6 @@ import grom/application.{type Application}
 import grom/channel.{type Channel}
 import grom/client.{type Client}
 import grom/error
-import grom/guild/role.{type Role}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
@@ -39,7 +38,8 @@ pub type Message {
     is_tts: Bool,
     mentions_everyone: Bool,
     mentions_users: List(User),
-    mentions_roles: List(Role),
+    // TODO: Fix this being List(Role), not List(String)
+    mentions_roles: List(String),
     mentions_channels: Option(List(channel.Mention)),
     attachments: List(Attachment),
     embeds: List(Embed),
@@ -147,7 +147,7 @@ pub type Snapshot {
     last_edited_at: Option(Timestamp),
     flags: Option(List(Flag)),
     mentions_users: List(User),
-    mentions_roles: List(Role),
+    mentions_roles: List(String),
     sticker_items: Option(List(sticker.Item)),
     components: Option(List(Component)),
   )
@@ -192,7 +192,7 @@ pub fn decoder() -> decode.Decoder(Message) {
   use mentions_users <- decode.field("mentions", decode.list(user.decoder()))
   use mentions_roles <- decode.field(
     "mention_roles",
-    decode.list(role.decoder()),
+    decode.list(decode.string),
   )
   use mentions_channels <- decode.optional_field(
     "mention_channels",
@@ -421,7 +421,7 @@ pub fn snapshot_decoder() -> decode.Decoder(Snapshot) {
     use mentions_users <- decode.field("mentions", decode.list(user.decoder()))
     use mentions_roles <- decode.field(
       "mention_roles",
-      decode.list(role.decoder()),
+      decode.list(decode.string),
     )
     use sticker_items <- decode.optional_field(
       "sticker_items",
