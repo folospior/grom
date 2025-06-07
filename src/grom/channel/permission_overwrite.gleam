@@ -82,7 +82,7 @@ pub fn edit(
   id overwrite_id: String,
   new overwrite: Create,
   reason reason: Option(String),
-) -> Result(Nil, error.FlybycordError) {
+) -> Result(Nil, error.Error) {
   let json = overwrite |> create_encode
 
   use _response <- result.try(
@@ -104,7 +104,7 @@ pub fn delete(
   for channel_id: String,
   id overwrite_id: String,
   reason reason: Option(String),
-) -> Result(Nil, error.FlybycordError) {
+) -> Result(Nil, error.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(

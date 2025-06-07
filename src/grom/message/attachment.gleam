@@ -27,6 +27,10 @@ pub type Attachment {
   )
 }
 
+pub opaque type Create {
+  Create(filename: String, description: Option(String))
+}
+
 pub type Flag {
   IsRemix
 }

@@ -509,10 +509,7 @@ pub fn incidents_data_decoder() -> decode.Decoder(IncidentsData) {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn leave(
-  client: Client,
-  guild_id: String,
-) -> Result(Nil, error.FlybycordError) {
+pub fn leave(client: Client, guild_id: String) -> Result(Nil, error.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(http.Delete, "/users/@me/guilds/" <> guild_id)
@@ -525,7 +522,7 @@ pub fn leave(
 pub fn get_auto_moderation_rules(
   client: Client,
   guild_id: String,
-) -> Result(List(Rule), error.FlybycordError) {
+) -> Result(List(Rule), error.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -537,5 +534,5 @@ pub fn get_auto_moderation_rules(
 
   response.body
   |> json.parse(using: decode.list(rule.decoder()))
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }

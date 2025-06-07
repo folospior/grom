@@ -146,7 +146,7 @@ fn modify_encode(modify: Modify) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(client: Client) -> Result(Application, error.FlybycordError) {
+pub fn get(client: Client) -> Result(Application, error.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/applications/@me")
@@ -155,13 +155,13 @@ pub fn get(client: Client) -> Result(Application, error.FlybycordError) {
 
   response.body
   |> json.parse(using: application.decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn modify(
   client: Client,
   with modify: Modify,
-) -> Result(Application, error.FlybycordError) {
+) -> Result(Application, error.Error) {
   let json = modify |> modify_encode
 
   use response <- result.try(
@@ -173,7 +173,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: application.decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn new_modify() -> Modify {

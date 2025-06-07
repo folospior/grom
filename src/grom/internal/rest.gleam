@@ -24,7 +24,7 @@ const discord_api_path = "api/v10"
 @internal
 pub fn execute(
   request: Request(String),
-) -> Result(Response(String), error.FlybycordError) {
+) -> Result(Response(String), error.Error) {
   use response <- result.try(
     request
     |> httpc.send
@@ -103,7 +103,7 @@ pub fn with_reason(request: Request(a), reason: Option(String)) -> Request(a) {
 
 fn ensure_status_code_success(
   response: Response(String),
-) -> Result(Response(String), error.FlybycordError) {
+) -> Result(Response(String), error.Error) {
   case response.status {
     status if status >= 200 && status < 300 -> Ok(response)
     _ -> Error(error.StatusCodeUnsuccessful(response))

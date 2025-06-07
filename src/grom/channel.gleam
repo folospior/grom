@@ -2,54 +2,288 @@ import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
 import gleam/json.{type Json}
-import gleam/option.{type Option}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
-import grom/channel/guild/category
+import gleam/time/duration.{type Duration}
+import gleam/time/timestamp.{type Timestamp}
 import grom/channel/guild/forum
 import grom/channel/guild/media
-import grom/channel/guild/text
 import grom/channel/guild/thread
-import grom/channel/guild/voice
-import grom/channel/user/dm
+import grom/channel/permission_overwrite.{type PermissionOverwrite}
 import grom/client.{type Client}
-import grom/error
+import grom/error.{type Error}
+import grom/internal/flags
 import grom/internal/rest
+import grom/internal/time_duration
+import grom/internal/time_rfc3339
+import grom/modification.{type Modification, Skip}
+import grom/permission.{type Permission}
+import grom/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
 
 pub type Channel {
-  GuildText(text.Channel)
-  Dm(dm.Channel)
-  GuildVoice(voice.Channel)
-  GuildCategory(category.Channel)
-  Thread(thread.Thread)
-  GuildForum(forum.Channel)
-  GuildMedia(media.Channel)
+  Text(
+    id: String,
+    guild_id: Option(String),
+    position: Int,
+    permission_overwrites: List(PermissionOverwrite),
+    name: String,
+    topic: Option(String),
+    is_nsfw: Bool,
+    last_message_id: Option(String),
+    rate_limit_per_user: Duration,
+    parent_id: Option(String),
+    last_pin_timestamp: Option(Timestamp),
+    current_user_permissions: Option(List(Permission)),
+    default_auto_archive_duration: Duration,
+  )
+  Dm(
+    id: String,
+    last_message_id: Option(String),
+    recipients: List(User),
+    current_user_permissions: Option(List(Permission)),
+  )
+  Voice(
+    id: String,
+    guild_id: String,
+    position: Int,
+    permission_overwrites: List(PermissionOverwrite),
+    name: String,
+    is_nsfw: Bool,
+    last_message_id: Option(String),
+    bitrate: Int,
+    user_limit: Int,
+    rate_limit_per_user: Duration,
+    parent_id: Option(String),
+    rtc_region_id: Option(String),
+    video_quality_mode: VideoQualityMode,
+    current_user_permissions: Option(List(Permission)),
+  )
+  Category(
+    id: String,
+    guild_id: Option(String),
+    position: Int,
+    permission_overwrites: List(PermissionOverwrite),
+    name: String,
+    current_user_permissions: Option(List(Permission)),
+  )
+  Announcement(
+    id: String,
+    guild_id: Option(String),
+    position: Int,
+    permission_overwrites: List(PermissionOverwrite),
+    name: String,
+    topic: Option(String),
+    is_nsfw: Bool,
+    last_message_id: Option(String),
+    parent_id: Option(String),
+    last_pin_timestamp: Option(Timestamp),
+    current_user_permissions: Option(List(Permission)),
+    default_auto_archive_duration: Duration,
+  )
+  Thread(
+    id: String,
+    type_: thread.Type,
+    guild_id: Option(String),
+    name: String,
+    last_message_id: Option(String),
+    rate_limit_per_user: Duration,
+    parent_id: String,
+    last_pin_timestamp: Option(Timestamp),
+    message_count: Int,
+    member_count: Int,
+    metadata: thread.Metadata,
+    current_member: Option(thread.Member),
+    current_user_permissions: Option(List(Permission)),
+    flags: List(thread.Flag),
+    total_message_sent: Int,
+    applied_tags_ids: Option(List(String)),
+  )
+  Stage(
+    id: String,
+    guild_id: String,
+    position: Int,
+    permission_overwrites: List(PermissionOverwrite),
+    name: String,
+    is_nsfw: Bool,
+    last_message_id: Option(String),
+    bitrate: Int,
+    user_limit: Int,
+    rate_limit_per_user: Duration,
+    parent_id: Option(String),
+    rtc_region_id: Option(String),
+    video_quality_mode: VideoQualityMode,
+    current_user_permissions: Option(List(Permission)),
+  )
+  Forum(
+    id: String,
+    guild_id: Option(String),
+    position: Int,
+    permission_overwrites: List(PermissionOverwrite),
+    name: String,
+    topic: Option(String),
+    is_nsfw: Bool,
+    last_thread_id: Option(String),
+    rate_limit_per_user: Duration,
+    parent_id: Option(String),
+    default_auto_archive_duration: Option(Duration),
+    current_user_permissions: Option(List(Permission)),
+    flags: List(forum.Flag),
+    available_tags: List(forum.Tag),
+    default_reaction_emoji: Option(forum.DefaultReaction),
+    default_thread_rate_limit_per_user: Duration,
+    default_sort_order: Option(forum.SortOrder),
+    default_layout: forum.Layout,
+  )
+  Media(
+    id: String,
+    guild_id: Option(String),
+    position: Int,
+    permission_overwrites: List(PermissionOverwrite),
+    name: String,
+    topic: Option(String),
+    is_nsfw: Bool,
+    last_thread_id: Option(String),
+    rate_limit_per_user: Duration,
+    parent_id: Option(String),
+    default_auto_archive_duration: Option(Duration),
+    current_user_permissions: Option(List(Permission)),
+    flags: List(media.Flag),
+    available_tags: List(forum.Tag),
+    default_reaction_emoji: Option(forum.DefaultReaction),
+    default_thread_rate_limit_per_user: Option(Duration),
+    default_sort_order: Option(forum.SortOrder),
+  )
 }
 
-pub type Type {
-  GuildTextChannel
-  DmChannel
-  GuildVoiceChannel
-  GuildCategoryChannel
-  GuildAnnouncementChannel
-  AnnouncementThreadChannel
-  PublicThreadChannel
-  PrivateThreadChannel
-  GuildStageVoiceChannel
-  GuildForumChannel
-  GuildMediaChannel
+pub opaque type Modify {
+  ModifyText(
+    name: Option(String),
+    convert_to_announcement: Bool,
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
+    parent_id: Modification(String),
+    default_auto_archive_duration: Modification(Duration),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+  ModifyVoice(
+    name: Option(String),
+    position: Modification(Int),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    bitrate: Modification(Int),
+    user_limit: Modification(Int),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
+    parent_id: Modification(String),
+    rtc_region_id: Modification(String),
+    video_quality_mode: Modification(VideoQualityMode),
+  )
+  ModifyCategory(
+    name: Option(String),
+    position: Modification(Int),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
+  )
+  ModifyAnnouncement(
+    name: Option(String),
+    convert_to_text: Bool,
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
+    parent_id: Modification(String),
+    default_auto_archive_duration: Modification(Duration),
+  )
+  ModifyThread(
+    name: Option(String),
+    is_archived: Option(Bool),
+    auto_archive_duration: Option(Duration),
+    is_locked: Option(Bool),
+    is_invitable: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    flags: Option(List(thread.Flag)),
+    applied_tags_ids: Option(List(String)),
+  )
+  ModifyStage(
+    name: Option(String),
+    position: Modification(Int),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    bitrate: Modification(Int),
+    user_limit: Modification(Int),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
+    parent_id: Modification(String),
+    rtc_region_id: Modification(String),
+    video_quality_mode: Modification(VideoQualityMode),
+  )
+  ModifyForum(
+    name: Option(String),
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
+    parent_id: Modification(String),
+    default_auto_archive_duration: Modification(Duration),
+    flags: Option(List(forum.Flag)),
+    available_tags: Option(List(forum.Tag)),
+    default_reaction_emoji: Modification(forum.DefaultReaction),
+    default_thread_rate_limit_per_user: Option(Duration),
+    default_sort_order: Modification(forum.SortOrder),
+    default_layout: Option(forum.Layout),
+  )
+  ModifyMedia(
+    name: Option(String),
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    permission_overwrites: Modification(List(permission_overwrite.Create)),
+    parent_id: Modification(String),
+    default_auto_archive_duration: Modification(Duration),
+    flags: Option(List(media.Flag)),
+    available_tags: Option(List(forum.Tag)),
+    default_reaction_emoji: Modification(forum.DefaultReaction),
+    default_thread_rate_limit_per_user: Option(Duration),
+    default_sort_order: Modification(forum.SortOrder),
+  )
 }
 
 pub type FollowedChannel {
   FollowedChannel(channel_id: String, webhook_id: String)
 }
 
+pub type VideoQualityMode {
+  AutomaticVideoQuality
+  HDVideoQuality
+}
+
 pub type Mention {
-  Mention(
-    id: String,
+  TextMention(channel_id: String, guild_id: String, channel_name: String)
+  VoiceMention(channel_id: String, guild_id: String, channel_name: String)
+  CategoryMention(channel_id: String, guild_id: String, channel_name: String)
+  AnnouncementMention(
+    channel_id: String,
     guild_id: String,
-    channel_type: Type,
+    channel_name: String,
+  )
+  AnnouncementThreadMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  PublicThreadMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  PrivateThreadMention(
+    channel_id: String,
+    guild_id: String,
     channel_name: String,
   )
 }
@@ -58,36 +292,524 @@ pub type Mention {
 
 @internal
 pub fn decoder() -> decode.Decoder(Channel) {
-  use variant <- decode.field("type", type_decoder())
+  use type_ <- decode.field("type", decode.int)
+  case type_ {
+    0 -> text_decoder()
+    1 -> dm_decoder()
+    2 -> voice_decoder()
+    4 -> category_decoder()
+    5 -> announcement_decoder()
+    10 | 11 | 12 -> thread_decoder()
+    13 -> stage_decoder()
+    15 -> forum_decoder()
+    16 -> media_decoder()
+    _ ->
+      decode.failure(
+        Text(
+          "",
+          None,
+          0,
+          [],
+          "",
+          None,
+          False,
+          None,
+          duration.seconds(0),
+          None,
+          None,
+          None,
+          duration.seconds(0),
+        ),
+        "Channel",
+      )
+  }
+}
+
+@internal
+pub fn text_decoder() -> decode.Decoder(Channel) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use position <- decode.field("position", decode.int)
+  use permission_overwrites <- decode.field(
+    "permission_overwrites",
+    decode.list(permission_overwrite.decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use topic <- decode.field("topic", decode.optional(decode.string))
+  use is_nsfw <- decode.field("nsfw", decode.bool)
+  use last_message_id <- decode.field(
+    "last_message_id",
+    decode.optional(decode.string),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    time_duration.from_minutes_decoder(),
+  )
+  use parent_id <- decode.field("parent_id", decode.optional(decode.string))
+  use last_pin_timestamp <- decode.field(
+    "last_pin_timestamp",
+    decode.optional(time_rfc3339.decoder()),
+  )
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  use default_auto_archive_duration <- decode.field(
+    "default_auto_archive_duration",
+    time_duration.from_int_seconds_decoder(),
+  )
+  decode.success(Text(
+    id:,
+    guild_id:,
+    position:,
+    permission_overwrites:,
+    name:,
+    topic:,
+    is_nsfw:,
+    last_message_id:,
+    rate_limit_per_user:,
+    parent_id:,
+    last_pin_timestamp:,
+    current_user_permissions:,
+    default_auto_archive_duration:,
+  ))
+}
+
+@internal
+pub fn dm_decoder() {
+  use id <- decode.field("id", decode.string)
+  use last_message_id <- decode.field(
+    "last_message_id",
+    decode.optional(decode.string),
+  )
+  use recipients <- decode.field("recipients", decode.list(user.decoder()))
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  decode.success(Dm(
+    id:,
+    last_message_id:,
+    recipients:,
+    current_user_permissions:,
+  ))
+}
+
+@internal
+pub fn voice_decoder() -> decode.Decoder(Channel) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use position <- decode.field("position", decode.int)
+  use permission_overwrites <- decode.field(
+    "permission_overwrites",
+    decode.list(permission_overwrite.decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use is_nsfw <- decode.field("nsfw", decode.bool)
+  use last_message_id <- decode.field(
+    "last_message_id",
+    decode.optional(decode.string),
+  )
+  use bitrate <- decode.field("bitrate", decode.int)
+  use user_limit <- decode.field("user_limit", decode.int)
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    time_duration.from_int_seconds_decoder(),
+  )
+  use parent_id <- decode.field("parent_id", decode.optional(decode.string))
+  use rtc_region_id <- decode.field(
+    "rtc_region",
+    decode.optional(decode.string),
+  )
+  use video_quality_mode <- decode.optional_field(
+    "video_quality_mode",
+    AutomaticVideoQuality,
+    video_quality_mode_decoder(),
+  )
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  decode.success(Voice(
+    id:,
+    guild_id:,
+    position:,
+    permission_overwrites:,
+    name:,
+    is_nsfw:,
+    last_message_id:,
+    bitrate:,
+    user_limit:,
+    rate_limit_per_user:,
+    parent_id:,
+    rtc_region_id:,
+    video_quality_mode:,
+    current_user_permissions:,
+  ))
+}
+
+@internal
+pub fn category_decoder() -> decode.Decoder(Channel) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use position <- decode.field("position", decode.int)
+  use permission_overwrites <- decode.field(
+    "permission_overwrites",
+    decode.list(permission_overwrite.decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  decode.success(Category(
+    id:,
+    guild_id:,
+    position:,
+    permission_overwrites:,
+    name:,
+    current_user_permissions:,
+  ))
+}
+
+@internal
+pub fn announcement_decoder() -> decode.Decoder(Channel) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use position <- decode.field("position", decode.int)
+  use permission_overwrites <- decode.field(
+    "permission_overwrites",
+    decode.list(permission_overwrite.decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use topic <- decode.field("topic", decode.optional(decode.string))
+  use is_nsfw <- decode.field("nsfw", decode.bool)
+  use last_message_id <- decode.field(
+    "last_message_id",
+    decode.optional(decode.string),
+  )
+  use parent_id <- decode.field("parent_id", decode.optional(decode.string))
+  use last_pin_timestamp <- decode.field(
+    "last_pin_timestamp",
+    decode.optional(time_rfc3339.decoder()),
+  )
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  use default_auto_archive_duration <- decode.field(
+    "default_auto_archive_duration",
+    time_duration.from_int_seconds_decoder(),
+  )
+  decode.success(Announcement(
+    id:,
+    guild_id:,
+    position:,
+    permission_overwrites:,
+    name:,
+    topic:,
+    is_nsfw:,
+    last_message_id:,
+    parent_id:,
+    last_pin_timestamp:,
+    current_user_permissions:,
+    default_auto_archive_duration:,
+  ))
+}
+
+@internal
+pub fn thread_decoder() -> decode.Decoder(Channel) {
+  use id <- decode.field("id", decode.string)
+  use type_ <- decode.field("type", thread.type_decoder())
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use name <- decode.field("name", decode.string)
+  use last_message_id <- decode.field(
+    "last_message_id",
+    decode.optional(decode.string),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    time_duration.from_minutes_decoder(),
+  )
+  use parent_id <- decode.field("parent_id", decode.string)
+  use last_pin_timestamp <- decode.field(
+    "last_pin_timestamp",
+    decode.optional(time_rfc3339.decoder()),
+  )
+  use message_count <- decode.field("message_count", decode.int)
+  use member_count <- decode.field("member_count", decode.int)
+  use metadata <- decode.field("metadata", thread.metadata_decoder())
+  use current_member <- decode.optional_field(
+    "current_member",
+    None,
+    decode.optional(thread.member_decoder()),
+  )
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  use flags <- decode.field("flags", flags.decoder(thread.bits_flags()))
+  use total_message_sent <- decode.field("total_message_sent", decode.int)
+  use applied_tags_ids <- decode.optional_field(
+    "applied_tags_ids",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+  decode.success(Thread(
+    id:,
+    type_:,
+    guild_id:,
+    name:,
+    last_message_id:,
+    rate_limit_per_user:,
+    parent_id:,
+    last_pin_timestamp:,
+    message_count:,
+    member_count:,
+    metadata:,
+    current_member:,
+    current_user_permissions:,
+    flags:,
+    total_message_sent:,
+    applied_tags_ids:,
+  ))
+}
+
+@internal
+pub fn stage_decoder() -> decode.Decoder(Channel) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use position <- decode.field("position", decode.int)
+  use permission_overwrites <- decode.field(
+    "permission_overwrites",
+    decode.list(permission_overwrite.decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use is_nsfw <- decode.field("nsfw", decode.bool)
+  use last_message_id <- decode.field(
+    "last_message_id",
+    decode.optional(decode.string),
+  )
+  use bitrate <- decode.field("bitrate", decode.int)
+  use user_limit <- decode.field("user_limit", decode.int)
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    time_duration.from_int_seconds_decoder(),
+  )
+  use parent_id <- decode.field("parent_id", decode.optional(decode.string))
+  use rtc_region_id <- decode.field(
+    "rtc_region",
+    decode.optional(decode.string),
+  )
+  use video_quality_mode <- decode.optional_field(
+    "video_quality_mode",
+    AutomaticVideoQuality,
+    video_quality_mode_decoder(),
+  )
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  decode.success(Stage(
+    id:,
+    guild_id:,
+    position:,
+    permission_overwrites:,
+    name:,
+    is_nsfw:,
+    last_message_id:,
+    bitrate:,
+    user_limit:,
+    rate_limit_per_user:,
+    parent_id:,
+    rtc_region_id:,
+    video_quality_mode:,
+    current_user_permissions:,
+  ))
+}
+
+@internal
+pub fn forum_decoder() -> decode.Decoder(Channel) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use position <- decode.field("position", decode.int)
+  use permission_overwrites <- decode.field(
+    "permission_overwrites",
+    decode.list(permission_overwrite.decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use topic <- decode.field("topic", decode.optional(decode.string))
+  use is_nsfw <- decode.field("is_nsfw", decode.bool)
+  use last_thread_id <- decode.field(
+    "last_thread_id",
+    decode.optional(decode.string),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    time_duration.from_minutes_decoder(),
+  )
+  use parent_id <- decode.field("parent_id", decode.optional(decode.string))
+  use default_auto_archive_duration <- decode.optional_field(
+    "default_auto_archive_duration",
+    None,
+    decode.optional(time_duration.from_minutes_decoder()),
+  )
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  use flags <- decode.field("flags", flags.decoder(forum.bits_flags()))
+  use available_tags <- decode.field(
+    "available_tags",
+    decode.list(forum.tag_decoder()),
+  )
+  use default_reaction_emoji <- decode.field(
+    "default_reaction_emoji",
+    decode.optional(forum.default_reaction_decoder()),
+  )
+  use default_thread_rate_limit_per_user <- decode.field(
+    "default_thread_rate_limit_per_user",
+    time_duration.from_int_seconds_decoder(),
+  )
+  use default_sort_order <- decode.field(
+    "default_sort_order",
+    decode.optional(forum.sort_order_type_decoder()),
+  )
+  use default_layout <- decode.field(
+    "default_layout",
+    forum.layout_type_decoder(),
+  )
+  decode.success(Forum(
+    id:,
+    guild_id:,
+    position:,
+    permission_overwrites:,
+    name:,
+    topic:,
+    is_nsfw:,
+    last_thread_id:,
+    rate_limit_per_user:,
+    parent_id:,
+    default_auto_archive_duration:,
+    current_user_permissions:,
+    available_tags:,
+    flags:,
+    default_reaction_emoji:,
+    default_thread_rate_limit_per_user:,
+    default_sort_order:,
+    default_layout:,
+  ))
+}
+
+@internal
+pub fn media_decoder() -> decode.Decoder(Channel) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use position <- decode.field("position", decode.int)
+  use permission_overwrites <- decode.field(
+    "permission_overwrites",
+    decode.list(permission_overwrite.decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use topic <- decode.field("topic", decode.optional(decode.string))
+  use is_nsfw <- decode.field("is_nsfw", decode.bool)
+  use last_thread_id <- decode.field(
+    "last_thread_id",
+    decode.optional(decode.string),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    time_duration.from_minutes_decoder(),
+  )
+  use parent_id <- decode.field("parent_id", decode.optional(decode.string))
+  use default_auto_archive_duration <- decode.optional_field(
+    "default_auto_archive_duration",
+    None,
+    decode.optional(time_duration.from_minutes_decoder()),
+  )
+  use current_user_permissions <- decode.optional_field(
+    "permissions",
+    None,
+    decode.optional(permission.decoder()),
+  )
+  use flags <- decode.field("flags", flags.decoder(media.bits_flags()))
+  use available_tags <- decode.field(
+    "available_tags",
+    decode.list(forum.tag_decoder()),
+  )
+  use default_reaction_emoji <- decode.field(
+    "default_reaction_emoji",
+    decode.optional(forum.default_reaction_decoder()),
+  )
+  use default_thread_rate_limit_per_user <- decode.optional_field(
+    "default_thread_rate_limit_per_user",
+    None,
+    decode.optional(time_duration.from_minutes_decoder()),
+  )
+  use default_sort_order <- decode.field(
+    "default_sort_order",
+    decode.optional(forum.sort_order_type_decoder()),
+  )
+  decode.success(Media(
+    id:,
+    guild_id:,
+    position:,
+    permission_overwrites:,
+    name:,
+    topic:,
+    is_nsfw:,
+    last_thread_id:,
+    rate_limit_per_user:,
+    parent_id:,
+    default_auto_archive_duration:,
+    current_user_permissions:,
+    flags:,
+    available_tags:,
+    default_reaction_emoji:,
+    default_thread_rate_limit_per_user:,
+    default_sort_order:,
+  ))
+}
+
+@internal
+pub fn video_quality_mode_decoder() -> decode.Decoder(VideoQualityMode) {
+  use variant <- decode.then(decode.int)
   case variant {
-    GuildTextChannel | GuildAnnouncementChannel -> {
-      use channel <- decode.then(text.channel_decoder())
-      decode.success(GuildText(channel))
-    }
-    DmChannel -> {
-      use channel <- decode.then(dm.channel_decoder())
-      decode.success(Dm(channel))
-    }
-    GuildVoiceChannel | GuildStageVoiceChannel -> {
-      use channel <- decode.then(voice.channel_decoder())
-      decode.success(GuildVoice(channel))
-    }
-    GuildCategoryChannel -> {
-      use channel <- decode.then(category.channel_decoder())
-      decode.success(GuildCategory(channel))
-    }
-    AnnouncementThreadChannel | PublicThreadChannel | PrivateThreadChannel -> {
-      use thread <- decode.then(thread.decoder())
-      decode.success(Thread(thread))
-    }
-    GuildForumChannel -> {
-      use channel <- decode.then(forum.channel_decoder())
-      decode.success(GuildForum(channel))
-    }
-    GuildMediaChannel -> {
-      use channel <- decode.then(media.channel_decoder())
-      decode.success(GuildMedia(channel))
-    }
+    1 -> decode.success(AutomaticVideoQuality)
+    2 -> decode.success(HDVideoQuality)
+    _ -> decode.failure(AutomaticVideoQuality, "VideoQualityMode")
   }
 }
 
@@ -99,59 +821,570 @@ pub fn followed_channel_decoder() -> decode.Decoder(FollowedChannel) {
 }
 
 @internal
-pub fn type_decoder() -> decode.Decoder(Type) {
-  use variant <- decode.then(decode.int)
-  case variant {
-    0 -> decode.success(GuildTextChannel)
-    1 -> decode.success(DmChannel)
-    2 -> decode.success(GuildVoiceChannel)
-    4 -> decode.success(GuildCategoryChannel)
-    5 -> decode.success(GuildAnnouncementChannel)
-    10 -> decode.success(AnnouncementThreadChannel)
-    11 -> decode.success(PublicThreadChannel)
-    12 -> decode.success(PrivateThreadChannel)
-    13 -> decode.success(GuildStageVoiceChannel)
-    15 -> decode.success(GuildForumChannel)
-    16 -> decode.success(GuildMediaChannel)
-    _ -> decode.failure(GuildTextChannel, "Type")
-  }
-}
-
-@internal
 pub fn mention_decoder() -> decode.Decoder(Mention) {
-  use id <- decode.field("id", decode.string)
-  use guild_id <- decode.field("guild_id", decode.string)
-  use channel_type <- decode.field("type", type_decoder())
-  use channel_name <- decode.field("name", decode.string)
-  decode.success(Mention(id:, guild_id:, channel_type:, channel_name:))
+  todo
 }
 
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn type_encode(type_: Type) -> Json {
-  case type_ {
-    GuildTextChannel -> 0
-    DmChannel -> 1
-    GuildVoiceChannel -> 2
-    GuildCategoryChannel -> 4
-    GuildAnnouncementChannel -> 5
-    AnnouncementThreadChannel -> 10
-    PublicThreadChannel -> 11
-    PrivateThreadChannel -> 12
-    GuildStageVoiceChannel -> 13
-    GuildForumChannel -> 15
-    GuildMediaChannel -> 16
+pub fn modify_to_json(modify: Modify) -> Json {
+  case modify {
+    ModifyText(..) -> {
+      let name = case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      }
+
+      let type_ = case modify.convert_to_announcement {
+        True -> [#("type", json.int(5))]
+        False -> []
+      }
+
+      let position =
+        modify.position
+        |> modification.encode("position", json.int)
+
+      let topic =
+        modify.topic
+        |> modification.encode("topic", json.string)
+
+      let is_nsfw = case modify.is_nsfw {
+        Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
+        None -> []
+      }
+
+      let rate_limit_per_user =
+        modify.rate_limit_per_user
+        |> modification.encode(
+          "rate_limit_per_user",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let permission_overwrites =
+        modify.permission_overwrites
+        |> modification.encode("permission_overwrites", json.array(
+          _,
+          permission_overwrite.create_encode,
+        ))
+
+      let parent_id =
+        modify.parent_id
+        |> modification.encode("parent_id", json.string)
+
+      let default_auto_archive_duration =
+        modify.default_auto_archive_duration
+        |> modification.encode(
+          "default_auto_archive_duration",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let default_thread_rate_limit_per_user = case
+        modify.default_thread_rate_limit_per_user
+      {
+        Some(limit) -> [
+          #(
+            "default_thread_rate_limit_per_user",
+            time_duration.to_int_seconds_encode(limit),
+          ),
+        ]
+        None -> []
+      }
+
+      [
+        name,
+        type_,
+        position,
+        topic,
+        is_nsfw,
+        rate_limit_per_user,
+        permission_overwrites,
+        parent_id,
+        default_auto_archive_duration,
+        default_thread_rate_limit_per_user,
+      ]
+      |> list.flatten
+      |> json.object
+    }
+    ModifyVoice(..) -> {
+      let name = case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      }
+
+      let position =
+        modify.position
+        |> modification.encode("position", json.int)
+
+      let is_nsfw = case modify.is_nsfw {
+        Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
+        None -> []
+      }
+
+      let rate_limit_per_user =
+        modify.rate_limit_per_user
+        |> modification.encode(
+          "rate_limit_per_user",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let bitrate =
+        modify.bitrate
+        |> modification.encode("bitrate", json.int)
+
+      let user_limit =
+        modify.user_limit
+        |> modification.encode("user_limit", json.int)
+
+      let permission_overwrites =
+        modify.permission_overwrites
+        |> modification.encode("permission_overwrites", json.array(
+          _,
+          permission_overwrite.create_encode,
+        ))
+
+      let parent_id =
+        modify.parent_id
+        |> modification.encode("parent_id", json.string)
+
+      let rtc_region_id =
+        modify.rtc_region_id
+        |> modification.encode("rtc_region", json.string)
+
+      let video_quality_mode =
+        modify.video_quality_mode
+        |> modification.encode("video_quality_mode", video_quality_mode_to_json)
+
+      [
+        name,
+        position,
+        is_nsfw,
+        rate_limit_per_user,
+        bitrate,
+        user_limit,
+        permission_overwrites,
+        parent_id,
+        rtc_region_id,
+        video_quality_mode,
+      ]
+      |> list.flatten
+      |> json.object
+    }
+    ModifyCategory(..) -> {
+      let name = case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      }
+
+      let position =
+        modify.position
+        |> modification.encode("position", json.int)
+
+      let permission_overwrites =
+        modify.permission_overwrites
+        |> modification.encode("permission_overwrites", json.array(
+          _,
+          permission_overwrite.create_encode,
+        ))
+
+      [name, position, permission_overwrites]
+      |> list.flatten
+      |> json.object
+    }
+    ModifyAnnouncement(..) -> {
+      let name = case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      }
+
+      let type_ = case modify.convert_to_text {
+        True -> [#("type", json.int(0))]
+        False -> []
+      }
+
+      let position =
+        modify.position
+        |> modification.encode("position", json.int)
+
+      let topic =
+        modify.topic
+        |> modification.encode("topic", json.string)
+
+      let is_nsfw = case modify.is_nsfw {
+        Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
+        None -> []
+      }
+
+      let permission_overwrites =
+        modify.permission_overwrites
+        |> modification.encode("permission_overwrites", json.array(
+          _,
+          permission_overwrite.create_encode,
+        ))
+
+      let parent_id =
+        modify.parent_id
+        |> modification.encode("parent_id", json.string)
+
+      let default_auto_archive_duration =
+        modify.default_auto_archive_duration
+        |> modification.encode(
+          "default_auto_archive_duration",
+          time_duration.to_int_seconds_encode,
+        )
+
+      [
+        name,
+        type_,
+        position,
+        topic,
+        is_nsfw,
+        permission_overwrites,
+        parent_id,
+        default_auto_archive_duration,
+      ]
+      |> list.flatten
+      |> json.object
+    }
+    ModifyThread(..) -> {
+      let name = case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      }
+
+      let is_archived = case modify.is_archived {
+        Some(archived) -> [#("archived", json.bool(archived))]
+        None -> []
+      }
+
+      let auto_archive_duration = case modify.auto_archive_duration {
+        Some(duration) -> [
+          #(
+            "auto_archive_duration",
+            time_duration.to_int_seconds_encode(duration),
+          ),
+        ]
+        None -> []
+      }
+
+      let is_locked = case modify.is_locked {
+        Some(locked) -> [#("locked", json.bool(locked))]
+        None -> []
+      }
+
+      let is_invitable = case modify.is_invitable {
+        Some(invitable) -> [#("invitable", json.bool(invitable))]
+        None -> []
+      }
+
+      let rate_limit_per_user =
+        modify.rate_limit_per_user
+        |> modification.encode(
+          "rate_limit_per_user",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let flags = case modify.flags {
+        Some(flags) -> [#("flags", flags.encode(flags, thread.bits_flags()))]
+        None -> []
+      }
+
+      let applied_tags_ids = case modify.applied_tags_ids {
+        Some(tags) -> [#("applied_tags", json.array(tags, json.string))]
+        None -> []
+      }
+
+      [
+        name,
+        is_archived,
+        auto_archive_duration,
+        is_locked,
+        is_invitable,
+        rate_limit_per_user,
+        flags,
+        applied_tags_ids,
+      ]
+      |> list.flatten
+      |> json.object
+    }
+    ModifyStage(..) -> {
+      let name = case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      }
+
+      let position =
+        modify.position
+        |> modification.encode("position", json.int)
+
+      let is_nsfw = case modify.is_nsfw {
+        Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
+        None -> []
+      }
+
+      let rate_limit_per_user =
+        modify.rate_limit_per_user
+        |> modification.encode(
+          "rate_limit_per_user",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let bitrate =
+        modify.bitrate
+        |> modification.encode("bitrate", json.int)
+
+      let user_limit =
+        modify.user_limit
+        |> modification.encode("user_limit", json.int)
+
+      let permission_overwrites =
+        modify.permission_overwrites
+        |> modification.encode("permission_overwrites", json.array(
+          _,
+          permission_overwrite.create_encode,
+        ))
+
+      let parent_id =
+        modify.parent_id
+        |> modification.encode("parent_id", json.string)
+
+      let rtc_region_id =
+        modify.rtc_region_id
+        |> modification.encode("rtc_region", json.string)
+
+      let video_quality_mode =
+        modify.video_quality_mode
+        |> modification.encode("video_quality_mode", video_quality_mode_to_json)
+
+      [
+        name,
+        position,
+        is_nsfw,
+        rate_limit_per_user,
+        bitrate,
+        user_limit,
+        permission_overwrites,
+        parent_id,
+        rtc_region_id,
+        video_quality_mode,
+      ]
+      |> list.flatten
+      |> json.object
+    }
+    ModifyForum(..) -> {
+      let name = case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      }
+
+      let position =
+        modify.position
+        |> modification.encode("position", json.int)
+
+      let topic =
+        modify.topic
+        |> modification.encode("topic", json.string)
+
+      let is_nsfw = case modify.is_nsfw {
+        Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
+        None -> []
+      }
+
+      let rate_limit_per_user =
+        modify.rate_limit_per_user
+        |> modification.encode(
+          "rate_limit_per_user",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let permission_overwrites =
+        modify.permission_overwrites
+        |> modification.encode("permission_overwrites", json.array(
+          _,
+          permission_overwrite.create_encode,
+        ))
+
+      let parent_id =
+        modify.parent_id
+        |> modification.encode("parent_id", json.string)
+
+      let default_auto_archive_duration =
+        modify.default_auto_archive_duration
+        |> modification.encode(
+          "default_auto_archive_duration",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let flags = case modify.flags {
+        Some(flags) -> [#("flags", flags.encode(flags, forum.bits_flags()))]
+        None -> []
+      }
+
+      let available_tags = case modify.available_tags {
+        Some(tags) -> [#("available_tags", json.array(tags, forum.tag_to_json))]
+        None -> []
+      }
+
+      let default_reaction_emoji =
+        modify.default_reaction_emoji
+        |> modification.encode(
+          "default_reaction_emoji",
+          forum.default_reaction_encode,
+        )
+
+      let default_thread_rate_limit_per_user = case
+        modify.default_thread_rate_limit_per_user
+      {
+        Some(limit) -> [
+          #(
+            "default_thread_rate_limit_per_user",
+            time_duration.to_int_seconds_encode(limit),
+          ),
+        ]
+        None -> []
+      }
+
+      let default_sort_order =
+        modify.default_sort_order
+        |> modification.encode(
+          "default_sort_order",
+          forum.sort_order_type_encode,
+        )
+
+      let default_layout = case modify.default_layout {
+        Some(layout) -> [
+          #("default_forum_layout", forum.layout_type_encode(layout)),
+        ]
+        None -> []
+      }
+
+      [
+        name,
+        position,
+        topic,
+        is_nsfw,
+        rate_limit_per_user,
+        permission_overwrites,
+        parent_id,
+        default_auto_archive_duration,
+        flags,
+        available_tags,
+        default_reaction_emoji,
+        default_thread_rate_limit_per_user,
+        default_sort_order,
+        default_layout,
+      ]
+      |> list.flatten
+      |> json.object
+    }
+    ModifyMedia(..) -> {
+      let name = case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      }
+
+      let position =
+        modify.position
+        |> modification.encode("position", json.int)
+
+      let topic =
+        modify.topic
+        |> modification.encode("topic", json.string)
+
+      let is_nsfw = case modify.is_nsfw {
+        Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
+        None -> []
+      }
+
+      let rate_limit_per_user =
+        modify.rate_limit_per_user
+        |> modification.encode(
+          "rate_limit_per_user",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let permission_overwrites =
+        modify.permission_overwrites
+        |> modification.encode("permission_overwrites", json.array(
+          _,
+          permission_overwrite.create_encode,
+        ))
+
+      let default_auto_archive_duration =
+        modify.default_auto_archive_duration
+        |> modification.encode(
+          "default_auto_archive_duration",
+          time_duration.to_int_seconds_encode,
+        )
+
+      let flags = case modify.flags {
+        Some(flags) -> [#("flags", flags.encode(flags, media.bits_flags()))]
+        None -> []
+      }
+
+      let available_tags = case modify.available_tags {
+        Some(tags) -> [#("available_tags", json.array(tags, forum.tag_to_json))]
+        None -> []
+      }
+
+      let default_reaction_emoji =
+        modify.default_reaction_emoji
+        |> modification.encode(
+          "default_reaction_emoji",
+          forum.default_reaction_encode,
+        )
+
+      let default_thread_rate_limit_per_user = case
+        modify.default_thread_rate_limit_per_user
+      {
+        Some(limit) -> [
+          #(
+            "default_thread_rate_limit_per_user",
+            time_duration.to_int_seconds_encode(limit),
+          ),
+        ]
+        None -> []
+      }
+
+      let default_sort_order =
+        modify.default_sort_order
+        |> modification.encode(
+          "default_sort_order",
+          forum.sort_order_type_encode,
+        )
+
+      [
+        name,
+        position,
+        topic,
+        is_nsfw,
+        rate_limit_per_user,
+        permission_overwrites,
+        default_auto_archive_duration,
+        flags,
+        available_tags,
+        default_reaction_emoji,
+        default_thread_rate_limit_per_user,
+        default_sort_order,
+      ]
+      |> list.flatten
+      |> json.object
+    }
+  }
+}
+
+@internal
+pub fn video_quality_mode_to_json(video_quality_mode: VideoQualityMode) -> Json {
+  case video_quality_mode {
+    AutomaticVideoQuality -> 1
+    HDVideoQuality -> 2
   }
   |> json.int
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(
-  client: Client,
-  id channel_id: String,
-) -> Result(Channel, error.FlybycordError) {
+pub fn get(client: Client, id channel_id: String) -> Result(Channel, Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/channels/" <> channel_id)
@@ -160,14 +1393,14 @@ pub fn get(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn delete(
   client: Client,
   id channel_id: String,
   reason reason: Option(String),
-) -> Result(Channel, error.FlybycordError) {
+) -> Result(Channel, Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Delete, "/channels/" <> channel_id)
@@ -177,7 +1410,7 @@ pub fn delete(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn announcement_follow(
@@ -185,7 +1418,7 @@ pub fn announcement_follow(
   from channel_id: String,
   to webhook_channel_id: String,
   reason reason: Option(String),
-) -> Result(FollowedChannel, error.FlybycordError) {
+) -> Result(FollowedChannel, Error) {
   let json =
     json.object([#("webhook_channel_id", json.string(webhook_channel_id))])
 
@@ -199,13 +1432,13 @@ pub fn announcement_follow(
 
   response.body
   |> json.parse(using: followed_channel_decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn trigger_typing_indicator(
   client: Client,
   in channel_id: String,
-) -> Result(Nil, error.FlybycordError) {
+) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/typing")
@@ -213,4 +1446,412 @@ pub fn trigger_typing_indicator(
   )
 
   Ok(Nil)
+}
+
+pub fn modify(
+  client: Client,
+  id channel_id: String,
+  with modify: Modify,
+  because reason: Option(String),
+) -> Result(Channel, Error) {
+  let json = modify |> modify_to_json
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/channels/" <> channel_id)
+    |> rest.with_reason(reason)
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn new_modify_text() -> Modify {
+  ModifyText(None, False, Skip, Skip, None, Skip, Skip, Skip, Skip, None)
+}
+
+pub fn new_modify_voice() -> Modify {
+  ModifyVoice(None, Skip, None, Skip, Skip, Skip, Skip, Skip, Skip, Skip)
+}
+
+pub fn new_modify_category() -> Modify {
+  ModifyCategory(None, Skip, Skip)
+}
+
+pub fn new_modify_announcement() -> Modify {
+  ModifyAnnouncement(None, False, Skip, Skip, None, Skip, Skip, Skip)
+}
+
+pub fn new_modify_thread() -> Modify {
+  ModifyThread(None, None, None, None, None, Skip, None, None)
+}
+
+pub fn new_modify_stage() -> Modify {
+  ModifyStage(None, Skip, None, Skip, Skip, Skip, Skip, Skip, Skip, Skip)
+}
+
+pub fn new_modify_forum() -> Modify {
+  ModifyForum(
+    None,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    Skip,
+    Skip,
+    Skip,
+    None,
+    None,
+    Skip,
+    None,
+    Skip,
+    None,
+  )
+}
+
+pub fn new_modify_media() -> Modify {
+  ModifyMedia(
+    None,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    Skip,
+    Skip,
+    Skip,
+    None,
+    None,
+    Skip,
+    None,
+    Skip,
+  )
+}
+
+pub fn modify_name(modify: Modify, new name: String) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, name: Some(name))
+    ModifyVoice(..) -> ModifyVoice(..modify, name: Some(name))
+    ModifyCategory(..) -> ModifyCategory(..modify, name: Some(name))
+    ModifyAnnouncement(..) -> ModifyAnnouncement(..modify, name: Some(name))
+    ModifyThread(..) -> ModifyThread(..modify, name: Some(name))
+    ModifyStage(..) -> ModifyStage(..modify, name: Some(name))
+    ModifyForum(..) -> ModifyForum(..modify, name: Some(name))
+    ModifyMedia(..) -> ModifyMedia(..modify, name: Some(name))
+  }
+}
+
+pub fn convert_text_to_announcement(modify: Modify) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, convert_to_announcement: True)
+    _ -> modify
+  }
+}
+
+pub fn convert_announcement_to_text(modify: Modify) -> Modify {
+  case modify {
+    ModifyAnnouncement(..) ->
+      ModifyAnnouncement(..modify, convert_to_text: True)
+    _ -> modify
+  }
+}
+
+pub fn modify_position(modify: Modify, position: Modification(Int)) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, position:)
+    ModifyVoice(..) -> ModifyVoice(..modify, position:)
+    ModifyCategory(..) -> ModifyCategory(..modify, position:)
+    ModifyAnnouncement(..) -> ModifyAnnouncement(..modify, position:)
+    ModifyStage(..) -> ModifyStage(..modify, position:)
+    ModifyForum(..) -> ModifyForum(..modify, position:)
+    ModifyMedia(..) -> ModifyMedia(..modify, position:)
+    _ -> modify
+  }
+}
+
+pub fn modify_topic(modify: Modify, topic: Modification(String)) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, topic:)
+    ModifyAnnouncement(..) -> ModifyAnnouncement(..modify, topic:)
+    ModifyForum(..) -> ModifyForum(..modify, topic:)
+    ModifyMedia(..) -> ModifyMedia(..modify, topic:)
+    _ -> modify
+  }
+}
+
+pub fn modify_nsfw_status(modify: Modify, is_nsfw: Bool) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, is_nsfw: Some(is_nsfw))
+    ModifyVoice(..) -> ModifyVoice(..modify, is_nsfw: Some(is_nsfw))
+    ModifyAnnouncement(..) ->
+      ModifyAnnouncement(..modify, is_nsfw: Some(is_nsfw))
+    ModifyStage(..) -> ModifyStage(..modify, is_nsfw: Some(is_nsfw))
+    ModifyForum(..) -> ModifyForum(..modify, is_nsfw: Some(is_nsfw))
+    ModifyMedia(..) -> ModifyMedia(..modify, is_nsfw: Some(is_nsfw))
+    _ -> modify
+  }
+}
+
+pub fn modify_rate_limit_per_user(
+  modify: Modify,
+  rate_limit_per_user: Modification(Duration),
+) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, rate_limit_per_user:)
+    ModifyVoice(..) -> ModifyVoice(..modify, rate_limit_per_user:)
+    ModifyStage(..) -> ModifyStage(..modify, rate_limit_per_user:)
+    ModifyForum(..) -> ModifyForum(..modify, rate_limit_per_user:)
+    ModifyMedia(..) -> ModifyMedia(..modify, rate_limit_per_user:)
+    ModifyThread(..) -> ModifyThread(..modify, rate_limit_per_user:)
+    _ -> modify
+  }
+}
+
+pub fn modify_bitrate(modify: Modify, bitrate: Modification(Int)) -> Modify {
+  case modify {
+    ModifyVoice(..) -> ModifyVoice(..modify, bitrate:)
+    ModifyStage(..) -> ModifyStage(..modify, bitrate:)
+    _ -> modify
+  }
+}
+
+pub fn modify_user_limit(
+  modify: Modify,
+  user_limit: Modification(Int),
+) -> Modify {
+  case modify {
+    ModifyVoice(..) -> ModifyVoice(..modify, user_limit:)
+    ModifyStage(..) -> ModifyStage(..modify, user_limit:)
+    _ -> modify
+  }
+}
+
+pub fn modify_permission_overwrites(
+  modify: Modify,
+  permission_overwrites: Modification(List(permission_overwrite.Create)),
+) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, permission_overwrites:)
+    ModifyVoice(..) -> ModifyVoice(..modify, permission_overwrites:)
+    ModifyCategory(..) -> ModifyCategory(..modify, permission_overwrites:)
+    ModifyAnnouncement(..) ->
+      ModifyAnnouncement(..modify, permission_overwrites:)
+    ModifyStage(..) -> ModifyStage(..modify, permission_overwrites:)
+    ModifyForum(..) -> ModifyForum(..modify, permission_overwrites:)
+    ModifyMedia(..) -> ModifyMedia(..modify, permission_overwrites:)
+    _ -> modify
+  }
+}
+
+pub fn modify_parent_id(
+  modify: Modify,
+  parent_id: Modification(String),
+) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, parent_id:)
+    ModifyVoice(..) -> ModifyVoice(..modify, parent_id:)
+    ModifyAnnouncement(..) -> ModifyAnnouncement(..modify, parent_id:)
+    ModifyStage(..) -> ModifyStage(..modify, parent_id:)
+    ModifyForum(..) -> ModifyForum(..modify, parent_id:)
+    ModifyMedia(..) -> ModifyMedia(..modify, parent_id:)
+    _ -> modify
+  }
+}
+
+pub fn modify_rtc_region_id(
+  modify: Modify,
+  rtc_region_id: Modification(String),
+) -> Modify {
+  case modify {
+    ModifyVoice(..) -> ModifyVoice(..modify, rtc_region_id:)
+    ModifyStage(..) -> ModifyStage(..modify, rtc_region_id:)
+    _ -> modify
+  }
+}
+
+pub fn modify_video_quality_mode(
+  modify: Modify,
+  video_quality_mode: Modification(VideoQualityMode),
+) -> Modify {
+  case modify {
+    ModifyVoice(..) -> ModifyVoice(..modify, video_quality_mode:)
+    ModifyStage(..) -> ModifyStage(..modify, video_quality_mode:)
+    _ -> modify
+  }
+}
+
+pub fn modify_default_auto_archive_duration(
+  modify: Modify,
+  default_auto_archive_duration: Modification(Duration),
+) -> Modify {
+  case modify {
+    ModifyText(..) -> ModifyText(..modify, default_auto_archive_duration:)
+    ModifyAnnouncement(..) ->
+      ModifyAnnouncement(..modify, default_auto_archive_duration:)
+    ModifyForum(..) -> ModifyForum(..modify, default_auto_archive_duration:)
+    ModifyMedia(..) -> ModifyMedia(..modify, default_auto_archive_duration:)
+    _ -> modify
+  }
+}
+
+pub fn modify_forum_flags(modify: Modify, new flags: List(forum.Flag)) -> Modify {
+  case modify {
+    ModifyForum(..) -> ModifyForum(..modify, flags: Some(flags))
+    _ -> modify
+  }
+}
+
+pub fn modify_media_flags(modify: Modify, new flags: List(media.Flag)) -> Modify {
+  case modify {
+    ModifyMedia(..) -> ModifyMedia(..modify, flags: Some(flags))
+    _ -> modify
+  }
+}
+
+pub fn modify_available_tags(
+  modify: Modify,
+  new available_tags: List(forum.Tag),
+) -> Modify {
+  case modify {
+    ModifyForum(..) ->
+      ModifyForum(..modify, available_tags: Some(available_tags))
+    ModifyMedia(..) ->
+      ModifyMedia(..modify, available_tags: Some(available_tags))
+    _ -> modify
+  }
+}
+
+pub fn modify_default_reaction_emoji(
+  modify: Modify,
+  default_reaction_emoji: Modification(forum.DefaultReaction),
+) -> Modify {
+  case modify {
+    ModifyForum(..) -> ModifyForum(..modify, default_reaction_emoji:)
+    ModifyMedia(..) -> ModifyMedia(..modify, default_reaction_emoji:)
+    _ -> modify
+  }
+}
+
+pub fn modify_default_thread_rate_limit_per_user(
+  modify: Modify,
+  new default_thread_rate_limit_per_user: Duration,
+) -> Modify {
+  case modify {
+    ModifyText(..) ->
+      ModifyText(
+        ..modify,
+        default_thread_rate_limit_per_user: Some(
+          default_thread_rate_limit_per_user,
+        ),
+      )
+    ModifyForum(..) ->
+      ModifyForum(
+        ..modify,
+        default_thread_rate_limit_per_user: Some(
+          default_thread_rate_limit_per_user,
+        ),
+      )
+    ModifyMedia(..) ->
+      ModifyMedia(
+        ..modify,
+        default_thread_rate_limit_per_user: Some(
+          default_thread_rate_limit_per_user,
+        ),
+      )
+    _ -> modify
+  }
+}
+
+pub fn modify_default_sort_order(
+  modify: Modify,
+  default_sort_order: Modification(forum.SortOrder),
+) -> Modify {
+  case modify {
+    ModifyForum(..) -> ModifyForum(..modify, default_sort_order:)
+    ModifyMedia(..) -> ModifyMedia(..modify, default_sort_order:)
+    _ -> modify
+  }
+}
+
+pub fn modify_forum_default_layout(
+  modify: Modify,
+  new default_layout: forum.Layout,
+) -> Modify {
+  case modify {
+    ModifyForum(..) ->
+      ModifyForum(..modify, default_layout: Some(default_layout))
+    _ -> modify
+  }
+}
+
+pub fn archive_thread(modify: Modify) -> Modify {
+  case modify {
+    ModifyThread(..) -> ModifyThread(..modify, is_archived: Some(True))
+    _ -> modify
+  }
+}
+
+pub fn unarchive_thread(modify: Modify) -> Modify {
+  case modify {
+    ModifyThread(..) -> ModifyThread(..modify, is_archived: Some(False))
+    _ -> modify
+  }
+}
+
+pub fn modify_auto_archive_duration(
+  modify: Modify,
+  new auto_archive_duration: Duration,
+) -> Modify {
+  case modify {
+    ModifyThread(..) ->
+      ModifyThread(..modify, auto_archive_duration: Some(auto_archive_duration))
+    _ -> modify
+  }
+}
+
+pub fn lock_thread(modify: Modify) -> Modify {
+  case modify {
+    ModifyThread(..) -> ModifyThread(..modify, is_locked: Some(True))
+    _ -> modify
+  }
+}
+
+pub fn unlock_thread(modify: Modify) -> Modify {
+  case modify {
+    ModifyThread(..) -> ModifyThread(..modify, is_locked: Some(False))
+    _ -> modify
+  }
+}
+
+pub fn modify_thread_invitable_status(
+  modify: Modify,
+  is_invitable: Bool,
+) -> Modify {
+  case modify {
+    ModifyThread(..) -> ModifyThread(..modify, is_invitable: Some(is_invitable))
+    _ -> modify
+  }
+}
+
+pub fn modify_thread_flags(
+  modify: Modify,
+  new flags: List(thread.Flag),
+) -> Modify {
+  case modify {
+    ModifyThread(..) -> ModifyThread(..modify, flags: Some(flags))
+    _ -> modify
+  }
+}
+
+pub fn modify_thread_applied_tags_ids(
+  modify: Modify,
+  new applied_tags_ids: List(String),
+) -> Modify {
+  case modify {
+    ModifyThread(..) ->
+      ModifyThread(..modify, applied_tags_ids: Some(applied_tags_ids))
+    _ -> modify
+  }
 }

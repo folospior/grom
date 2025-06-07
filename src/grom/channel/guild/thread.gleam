@@ -369,8 +369,8 @@ pub fn modify(
   client: Client,
   id channel_id: String,
   with modify: Modify,
-  reason reason: Option(String),
-) {
+  because reason: Option(String),
+) -> Result(Thread, error.Error) {
   let json = modify |> modify_encode
 
   use response <- result.try(
@@ -383,7 +383,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn new_modify() -> Modify {
@@ -448,8 +448,8 @@ pub fn start_from_message(
   in channel_id: String,
   from message_id: String,
   with start_from_message: StartFromMessage,
-  reason reason: Option(String),
-) -> Result(Thread, error.FlybycordError) {
+  because reason: Option(String),
+) -> Result(Thread, error.Error) {
   let json = start_from_message |> start_from_message_encode
 
   use response <- result.try(
@@ -465,7 +465,7 @@ pub fn start_from_message(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn new_start_from_message(name: String) -> StartFromMessage {
@@ -495,7 +495,7 @@ pub fn start_without_message(
   in channel_id: String,
   with start_without_message: StartWithoutMessage,
   reason reason: Option(String),
-) -> Result(Thread, error.FlybycordError) {
+) -> Result(Thread, error.Error) {
   let json = start_without_message |> start_without_message_encode
 
   use response <- result.try(
@@ -508,7 +508,7 @@ pub fn start_without_message(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn new_start_without_message(name: String) -> StartWithoutMessage {

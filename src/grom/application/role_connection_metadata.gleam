@@ -134,7 +134,7 @@ fn type_encode(type_: Type) -> Json {
 pub fn get(
   client: Client,
   application_id: String,
-) -> Result(List(RoleConnectionMetadata), error.FlybycordError) {
+) -> Result(List(RoleConnectionMetadata), error.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -146,14 +146,14 @@ pub fn get(
 
   response.body
   |> json.parse(using: decode.list(decoder()))
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn modify(
   client: Client,
   application_id: String,
   new metadata: List(RoleConnectionMetadata),
-) -> Result(List(RoleConnectionMetadata), error.FlybycordError) {
+) -> Result(List(RoleConnectionMetadata), error.Error) {
   let json = json.array(metadata, encode)
 
   use response <- result.try(
@@ -168,5 +168,5 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decode.list(decoder()))
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }

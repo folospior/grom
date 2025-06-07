@@ -4,8 +4,8 @@ import gleam/json
 
 // TYPES -----------------------------------------------------------------------
 
-pub type FlybycordError {
+pub type Error {
   HttpError(httpc.HttpError)
-  DecodeError(json.DecodeError)
+  CouldNotDecode(json.DecodeError)
   StatusCodeUnsuccessful(Response(String))
 }

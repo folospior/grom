@@ -182,7 +182,7 @@ pub fn get(
   client: Client,
   in guild_id: String,
   id rule_id: String,
-) -> Result(Rule, error.FlybycordError) {
+) -> Result(Rule, error.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -194,7 +194,7 @@ pub fn get(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn create(
@@ -202,7 +202,7 @@ pub fn create(
   in guild_id: String,
   with create: Create,
   reason reason: Option(String),
-) -> Result(Rule, error.FlybycordError) {
+) -> Result(Rule, error.Error) {
   let json = create |> create_encode
 
   use response <- result.try(
@@ -218,7 +218,7 @@ pub fn create(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn new_create(
@@ -286,7 +286,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn new_modify() -> Modify {
@@ -335,7 +335,7 @@ pub fn delete(
   in guild_id: String,
   id rule_id: String,
   reason reason: Option(String),
-) -> Result(Nil, error.FlybycordError) {
+) -> Result(Nil, error.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
