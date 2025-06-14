@@ -5,7 +5,7 @@ import gleam/json.{type Json}
 import gleam/option.{type Option}
 import gleam/result
 import grom/client.{type Client}
-import grom/error
+import grom/error.{type Error}
 import grom/internal/rest
 import grom/permission.{type Permission}
 
@@ -29,8 +29,8 @@ pub type Create {
 }
 
 pub type Type {
-  Role
-  Member
+  ForRole
+  ForMember
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -48,28 +48,28 @@ pub fn decoder() -> decode.Decoder(PermissionOverwrite) {
 pub fn type_decoder() -> decode.Decoder(Type) {
   use variant <- decode.then(decode.int)
   case variant {
-    0 -> decode.success(Role)
-    1 -> decode.success(Member)
-    _ -> decode.failure(Role, "Type")
+    0 -> decode.success(ForRole)
+    1 -> decode.success(ForMember)
+    _ -> decode.failure(ForRole, "Type")
   }
 }
 
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn create_encode(create: Create) -> Json {
+pub fn create_to_json(create: Create) -> Json {
   json.object([
-    #("type", type_encode(create.type_)),
+    #("type", type_to_json(create.type_)),
     #("allow", json.nullable(create.allow, permission.encode)),
     #("deny", json.nullable(create.deny, permission.encode)),
   ])
 }
 
 @internal
-pub fn type_encode(type_: Type) -> Json {
+pub fn type_to_json(type_: Type) -> Json {
   case type_ {
-    Role -> 0
-    Member -> 1
+    ForRole -> 0
+    ForMember -> 1
   }
   |> json.int
 }
@@ -81,9 +81,9 @@ pub fn edit(
   for channel_id: String,
   id overwrite_id: String,
   new overwrite: Create,
-  reason reason: Option(String),
-) -> Result(Nil, error.Error) {
-  let json = overwrite |> create_encode
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  let json = overwrite |> create_to_json
 
   use _response <- result.try(
     client
@@ -103,8 +103,8 @@ pub fn delete(
   client: Client,
   for channel_id: String,
   id overwrite_id: String,
-  reason reason: Option(String),
-) -> Result(Nil, error.Error) {
+  because reason: Option(String),
+) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(

@@ -1396,58 +1396,6 @@ pub fn get(client: Client, id channel_id: String) -> Result(Channel, Error) {
   |> result.map_error(error.CouldNotDecode)
 }
 
-pub fn delete(
-  client: Client,
-  id channel_id: String,
-  reason reason: Option(String),
-) -> Result(Channel, Error) {
-  use response <- result.try(
-    client
-    |> rest.new_request(http.Delete, "/channels/" <> channel_id)
-    |> rest.with_reason(reason)
-    |> rest.execute,
-  )
-
-  response.body
-  |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
-}
-
-pub fn announcement_follow(
-  client: Client,
-  from channel_id: String,
-  to webhook_channel_id: String,
-  reason reason: Option(String),
-) -> Result(FollowedChannel, Error) {
-  let json =
-    json.object([#("webhook_channel_id", json.string(webhook_channel_id))])
-
-  use response <- result.try(
-    client
-    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/followers")
-    |> rest.with_reason(reason)
-    |> request.set_body(json |> json.to_string)
-    |> rest.execute,
-  )
-
-  response.body
-  |> json.parse(using: followed_channel_decoder())
-  |> result.map_error(error.CouldNotDecode)
-}
-
-pub fn trigger_typing_indicator(
-  client: Client,
-  in channel_id: String,
-) -> Result(Nil, Error) {
-  use _response <- result.try(
-    client
-    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/typing")
-    |> rest.execute,
-  )
-
-  Ok(Nil)
-}
-
 pub fn modify(
   client: Client,
   id channel_id: String,
@@ -1854,4 +1802,56 @@ pub fn modify_thread_applied_tags_ids(
       ModifyThread(..modify, applied_tags_ids: Some(applied_tags_ids))
     _ -> modify
   }
+}
+
+pub fn delete(
+  client: Client,
+  id channel_id: String,
+  because reason: Option(String),
+) -> Result(Channel, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Delete, "/channels/" <> channel_id)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn announcement_follow(
+  client: Client,
+  from channel_id: String,
+  to webhook_channel_id: String,
+  because reason: Option(String),
+) -> Result(FollowedChannel, Error) {
+  let json =
+    json.object([#("webhook_channel_id", json.string(webhook_channel_id))])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/followers")
+    |> rest.with_reason(reason)
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: followed_channel_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn trigger_typing_indicator(
+  client: Client,
+  in channel_id: String,
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/typing")
+    |> rest.execute,
+  )
+
+  Ok(Nil)
 }
