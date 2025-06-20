@@ -11,33 +11,6 @@ import grom/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
 
-pub type Resolved {
-  Resolved(
-    users: Option(Dict(String, User)),
-    members: Option(Dict(String, Member)),
-    roles: Option(Dict(String, Role)),
-    channels: Option(Dict(String, PartialChannel)),
-    attachments: Option(Dict(String, Attachment)),
-  )
-}
-
-pub type PartialChannel {
-  PartialChannel(
-    id: String,
-    name: String,
-    type_: channel.Type,
-    permissions: List(Permission),
-  )
-  PartialThread(
-    id: String,
-    name: String,
-    type_: channel.Type,
-    permissions: List(Permission),
-    metadata: thread.Metadata,
-    parent_id: String,
-  )
-}
-
 // DECODERS --------------------------------------------------------------------
 
 @internal

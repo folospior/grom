@@ -1,18 +1,26 @@
 import gleam/dynamic/decode
 import gleam/option.{type Option, None}
-import grom/channel
 
 pub type ChannelSelect {
   ChannelSelect(
     id: Option(Int),
     custom_id: String,
-    channel_types: Option(List(channel.Type)),
+    channel_types: Option(List(ChannelType)),
     placeholder: Option(String),
     default_values: Option(List(DefaultValue)),
     min_values: Int,
     max_values: Int,
     is_disabled: Bool,
   )
+}
+
+pub type ChannelType {
+  Text
+  DM
+  Category
+  Announcement
+  Forum
+  Media
 }
 
 pub type DefaultValue {
@@ -26,7 +34,7 @@ pub fn decoder() -> decode.Decoder(ChannelSelect) {
   use channel_types <- decode.optional_field(
     "channel_types",
     None,
-    decode.optional(decode.list(channel.type_decoder())),
+    decode.optional(decode.list(channel_type_decoder())),
   )
   use placeholder <- decode.optional_field(
     "placeholder",
@@ -58,4 +66,18 @@ pub fn decoder() -> decode.Decoder(ChannelSelect) {
 pub fn default_value_decoder() -> decode.Decoder(DefaultValue) {
   use id <- decode.field("id", decode.string)
   decode.success(DefaultValue(id:))
+}
+
+@internal
+pub fn channel_type_decoder() -> decode.Decoder(ChannelType) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(Text)
+    1 -> decode.success(DM)
+    4 -> decode.success(Category)
+    5 -> decode.success(Announcement)
+    15 -> decode.success(Forum)
+    16 -> decode.success(Media)
+    _ -> decode.failure(Text, "ChannelType")
+  }
 }

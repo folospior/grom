@@ -9,7 +9,7 @@ import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom/channel/guild/forum
 import grom/channel/guild/media
-import grom/channel/guild/thread
+import grom/channel/guild/thread.{type Thread}
 import grom/channel/permission_overwrite.{type PermissionOverwrite}
 import grom/client.{type Client}
 import grom/error.{type Error}
@@ -83,24 +83,7 @@ pub type Channel {
     current_user_permissions: Option(List(Permission)),
     default_auto_archive_duration: Duration,
   )
-  Thread(
-    id: String,
-    type_: thread.Type,
-    guild_id: Option(String),
-    name: String,
-    last_message_id: Option(String),
-    rate_limit_per_user: Duration,
-    parent_id: String,
-    last_pin_timestamp: Option(Timestamp),
-    message_count: Int,
-    member_count: Int,
-    metadata: thread.Metadata,
-    current_member: Option(thread.Member),
-    current_user_permissions: Option(List(Permission)),
-    flags: List(thread.Flag),
-    total_message_sent: Int,
-    applied_tags_ids: Option(List(String)),
-  )
+  Thread(Thread)
   Stage(
     id: String,
     guild_id: String,
@@ -262,32 +245,6 @@ pub type VideoQualityMode {
   HDVideoQuality
 }
 
-pub type Mention {
-  TextMention(channel_id: String, guild_id: String, channel_name: String)
-  VoiceMention(channel_id: String, guild_id: String, channel_name: String)
-  CategoryMention(channel_id: String, guild_id: String, channel_name: String)
-  AnnouncementMention(
-    channel_id: String,
-    guild_id: String,
-    channel_name: String,
-  )
-  AnnouncementThreadMention(
-    channel_id: String,
-    guild_id: String,
-    channel_name: String,
-  )
-  PublicThreadMention(
-    channel_id: String,
-    guild_id: String,
-    channel_name: String,
-  )
-  PrivateThreadMention(
-    channel_id: String,
-    guild_id: String,
-    channel_name: String,
-  )
-}
-
 // DECODERS --------------------------------------------------------------------
 
 @internal
@@ -299,7 +256,10 @@ pub fn decoder() -> decode.Decoder(Channel) {
     2 -> voice_decoder()
     4 -> category_decoder()
     5 -> announcement_decoder()
-    10 | 11 | 12 -> thread_decoder()
+    10 | 11 | 12 -> {
+      use thread <- decode.then(thread.decoder())
+      decode.success(Thread(thread))
+    }
     13 -> stage_decoder()
     15 -> forum_decoder()
     16 -> media_decoder()
@@ -535,69 +495,6 @@ pub fn announcement_decoder() -> decode.Decoder(Channel) {
 }
 
 @internal
-pub fn thread_decoder() -> decode.Decoder(Channel) {
-  use id <- decode.field("id", decode.string)
-  use type_ <- decode.field("type", thread.type_decoder())
-  use guild_id <- decode.optional_field(
-    "guild_id",
-    None,
-    decode.optional(decode.string),
-  )
-  use name <- decode.field("name", decode.string)
-  use last_message_id <- decode.field(
-    "last_message_id",
-    decode.optional(decode.string),
-  )
-  use rate_limit_per_user <- decode.field(
-    "rate_limit_per_user",
-    time_duration.from_minutes_decoder(),
-  )
-  use parent_id <- decode.field("parent_id", decode.string)
-  use last_pin_timestamp <- decode.field(
-    "last_pin_timestamp",
-    decode.optional(time_rfc3339.decoder()),
-  )
-  use message_count <- decode.field("message_count", decode.int)
-  use member_count <- decode.field("member_count", decode.int)
-  use metadata <- decode.field("metadata", thread.metadata_decoder())
-  use current_member <- decode.optional_field(
-    "current_member",
-    None,
-    decode.optional(thread.member_decoder()),
-  )
-  use current_user_permissions <- decode.optional_field(
-    "permissions",
-    None,
-    decode.optional(permission.decoder()),
-  )
-  use flags <- decode.field("flags", flags.decoder(thread.bits_flags()))
-  use total_message_sent <- decode.field("total_message_sent", decode.int)
-  use applied_tags_ids <- decode.optional_field(
-    "applied_tags_ids",
-    None,
-    decode.optional(decode.list(decode.string)),
-  )
-  decode.success(Thread(
-    id:,
-    type_:,
-    guild_id:,
-    name:,
-    last_message_id:,
-    rate_limit_per_user:,
-    parent_id:,
-    last_pin_timestamp:,
-    message_count:,
-    member_count:,
-    metadata:,
-    current_member:,
-    current_user_permissions:,
-    flags:,
-    total_message_sent:,
-    applied_tags_ids:,
-  ))
-}
-
-@internal
 pub fn stage_decoder() -> decode.Decoder(Channel) {
   use id <- decode.field("id", decode.string)
   use guild_id <- decode.field("guild_id", decode.string)
@@ -820,11 +717,6 @@ pub fn followed_channel_decoder() -> decode.Decoder(FollowedChannel) {
   decode.success(FollowedChannel(channel_id:, webhook_id:))
 }
 
-@internal
-pub fn mention_decoder() -> decode.Decoder(Mention) {
-  todo
-}
-
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -865,7 +757,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.permission_overwrites
         |> modification.encode("permission_overwrites", json.array(
           _,
-          permission_overwrite.create_encode,
+          permission_overwrite.create_to_json,
         ))
 
       let parent_id =
@@ -940,7 +832,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.permission_overwrites
         |> modification.encode("permission_overwrites", json.array(
           _,
-          permission_overwrite.create_encode,
+          permission_overwrite.create_to_json,
         ))
 
       let parent_id =
@@ -984,7 +876,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.permission_overwrites
         |> modification.encode("permission_overwrites", json.array(
           _,
-          permission_overwrite.create_encode,
+          permission_overwrite.create_to_json,
         ))
 
       [name, position, permission_overwrites]
@@ -1019,7 +911,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.permission_overwrites
         |> modification.encode("permission_overwrites", json.array(
           _,
-          permission_overwrite.create_encode,
+          permission_overwrite.create_to_json,
         ))
 
       let parent_id =
@@ -1141,7 +1033,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.permission_overwrites
         |> modification.encode("permission_overwrites", json.array(
           _,
-          permission_overwrite.create_encode,
+          permission_overwrite.create_to_json,
         ))
 
       let parent_id =
@@ -1201,7 +1093,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.permission_overwrites
         |> modification.encode("permission_overwrites", json.array(
           _,
-          permission_overwrite.create_encode,
+          permission_overwrite.create_to_json,
         ))
 
       let parent_id =
@@ -1307,7 +1199,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.permission_overwrites
         |> modification.encode("permission_overwrites", json.array(
           _,
-          permission_overwrite.create_encode,
+          permission_overwrite.create_to_json,
         ))
 
       let default_auto_archive_duration =

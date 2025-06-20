@@ -3,6 +3,11 @@ import gleam/int
 import gleam/json.{type Json}
 import gleam/option.{type Option, None, Some}
 import gleam/time/duration.{type Duration}
+import grom/message
+import grom/message/allowed_mentions.{type AllowedMentions}
+import grom/message/attachment
+import grom/message/component.{type Component}
+import grom/message/embed.{type Embed}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -24,17 +29,17 @@ pub opaque type StartThread {
   )
 }
 
-// pub opaque type StartThreadMessage {
-//   StartThreadMessage(
-//     content: Option(String),
-//     embeds: Option(List(Embed)),
-//     allowed_mentions: Option(AllowedMentions),
-//     components: Option(List(Component)),
-//     sticker_ids: Option(List(String)),
-//     attachments: Option(List(attachment.Create)),
-//     flags: Option(List(message.Flag)),
-//   )
-// }
+pub opaque type StartThreadMessage {
+  StartThreadMessage(
+    content: Option(String),
+    embeds: Option(List(Embed)),
+    allowed_mentions: Option(AllowedMentions),
+    components: Option(List(Component)),
+    sticker_ids: Option(List(String)),
+    attachments: Option(List(attachment.Create)),
+    flags: Option(List(message.Flag)),
+  )
+}
 
 pub type Flag {
   RequiresTag

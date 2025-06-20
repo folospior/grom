@@ -1,3 +1,4 @@
+import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/int
@@ -6,9 +7,12 @@ import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 import grom/application.{type Application}
-import grom/channel.{type Channel}
+import grom/application/current_application
+import grom/channel/guild/thread.{type Thread}
 import grom/client.{type Client}
-import grom/error
+import grom/error.{type Error}
+import grom/guild/member.{type Member}
+import grom/guild/role.{type Role}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
@@ -21,7 +25,7 @@ import grom/message/interaction_metadata.{type InteractionMetadata}
 import grom/message/message_reference.{type MessageReference}
 import grom/message/poll.{type Poll}
 import grom/message/reaction.{type Reaction}
-import grom/message/resolved.{type Resolved}
+import grom/permission.{type Permission}
 import grom/sticker
 import grom/user.{type User}
 
@@ -40,7 +44,7 @@ pub type Message {
     mentions_users: List(User),
     // TODO: Fix this being List(Role), not List(String)
     mentions_roles: List(String),
-    mentions_channels: Option(List(channel.Mention)),
+    mentions_channels: Option(List(ChannelMention)),
     attachments: List(Attachment),
     embeds: List(Embed),
     reactions: Option(List(Reaction)),
@@ -56,7 +60,7 @@ pub type Message {
     snapshots: Option(List(Snapshot)),
     refrenced_message: Option(Message),
     interaction_metadata: Option(InteractionMetadata),
-    thread: Option(Channel),
+    thread: Option(Thread),
     components: Option(List(Component)),
     sticker_items: Option(List(sticker.Item)),
     position: Option(Int),
@@ -153,6 +157,130 @@ pub type Snapshot {
   )
 }
 
+pub type Resolved {
+  Resolved(
+    users: Option(Dict(String, User)),
+    members: Option(Dict(String, Member)),
+    roles: Option(Dict(String, Role)),
+    channels: Option(Dict(String, ResolvedChannel)),
+    messages: Option(Dict(String, Message)),
+    attachments: Option(Dict(String, Attachment)),
+  )
+}
+
+pub type ResolvedChannel {
+  ResolvedTextChannel(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+  )
+  ResolvedVoiceChannel(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+  )
+  ResolvedCategoryChannel(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+  )
+  ResolvedAnnouncementChannel(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+  )
+  ResolvedAnnouncementThread(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+    metadata: thread.Metadata,
+    parent_id: String,
+  )
+  ResolvedPublicThread(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+    metadata: thread.Metadata,
+    parent_id: String,
+  )
+  ResolvedPrivateThread(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+    metadata: thread.Metadata,
+    parent_id: String,
+  )
+  ResolvedStageChannel(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+  )
+  ResolvedForumChannel(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+  )
+  ResolvedMediaChannel(
+    id: String,
+    name: String,
+    current_user_permissions: List(Permission),
+  )
+}
+
+pub type ChannelMention {
+  TextChannelMention(
+    // don't mind me, i'm just here for formatting ;)
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  VoiceChannelMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  CategoryChannelMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  AnnouncementChannelMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  AnnouncementThreadMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  PublicThreadMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  PrivateThreadMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  StageChannelMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  ForumChannelMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+  MediaChannelMention(
+    channel_id: String,
+    guild_id: String,
+    channel_name: String,
+  )
+}
+
 // FLAGS -----------------------------------------------------------------------
 
 @internal
@@ -197,7 +325,7 @@ pub fn decoder() -> decode.Decoder(Message) {
   use mentions_channels <- decode.optional_field(
     "mention_channels",
     None,
-    decode.optional(decode.list(channel.mention_decoder())),
+    decode.optional(decode.list(channel_mention_decoder())),
   )
   use attachments <- decode.field(
     "attachments",
@@ -264,7 +392,7 @@ pub fn decoder() -> decode.Decoder(Message) {
   use thread <- decode.optional_field(
     "thread",
     None,
-    decode.optional(channel.decoder()),
+    decode.optional(thread.decoder()),
   )
   use components <- decode.optional_field(
     "components",
@@ -289,7 +417,7 @@ pub fn decoder() -> decode.Decoder(Message) {
   use resolved <- decode.optional_field(
     "resolved",
     None,
-    decode.optional(resolved.decoder()),
+    decode.optional(resolved_decoder()),
   )
   use poll <- decode.optional_field(
     "poll",
@@ -469,12 +597,167 @@ pub fn role_subscription_data_decoder() -> decode.Decoder(RoleSubscriptionData) 
   ))
 }
 
+@internal
+pub fn channel_mention_decoder() -> decode.Decoder(ChannelMention) {
+  use type_ <- decode.field("type", decode.int)
+  use channel_id <- decode.field("id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use channel_name <- decode.field("name", decode.string)
+
+  case type_ {
+    0 ->
+      decode.success(TextChannelMention(channel_id:, guild_id:, channel_name:))
+    2 ->
+      decode.success(VoiceChannelMention(channel_id:, guild_id:, channel_name:))
+    4 ->
+      decode.success(CategoryChannelMention(
+        channel_id:,
+        guild_id:,
+        channel_name:,
+      ))
+    5 ->
+      decode.success(AnnouncementChannelMention(
+        channel_id:,
+        guild_id:,
+        channel_name:,
+      ))
+    10 ->
+      decode.success(AnnouncementThreadMention(
+        channel_id:,
+        guild_id:,
+        channel_name:,
+      ))
+    11 ->
+      decode.success(PublicThreadMention(channel_id:, guild_id:, channel_name:))
+    12 ->
+      decode.success(PrivateThreadMention(channel_id:, guild_id:, channel_name:))
+    13 ->
+      decode.success(StageChannelMention(channel_id:, guild_id:, channel_name:))
+    15 ->
+      decode.success(ForumChannelMention(channel_id:, guild_id:, channel_name:))
+    16 ->
+      decode.success(MediaChannelMention(channel_id:, guild_id:, channel_name:))
+    _ -> decode.failure(TextChannelMention("", "", ""), "ChannelMention")
+  }
+}
+
+@internal
+pub fn resolved_channel_decoder() -> decode.Decoder(ResolvedChannel) {
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use type_ <- decode.field("type", decode.int)
+  use current_user_permissions <- decode.field(
+    "permissions",
+    permission.decoder(),
+  )
+
+  case type_ {
+    0 ->
+      decode.success(ResolvedTextChannel(id:, name:, current_user_permissions:))
+    2 ->
+      decode.success(ResolvedVoiceChannel(id:, name:, current_user_permissions:))
+    4 ->
+      decode.success(ResolvedCategoryChannel(
+        id:,
+        name:,
+        current_user_permissions:,
+      ))
+    5 ->
+      decode.success(ResolvedAnnouncementChannel(
+        id:,
+        name:,
+        current_user_permissions:,
+      ))
+    10 | 11 | 12 -> {
+      use metadata <- decode.field("thread_metadata", thread.metadata_decoder())
+      use parent_id <- decode.field("parent_id", decode.string)
+      case type_ {
+        10 ->
+          decode.success(ResolvedAnnouncementThread(
+            id:,
+            name:,
+            current_user_permissions:,
+            metadata:,
+            parent_id:,
+          ))
+        11 ->
+          decode.success(ResolvedPublicThread(
+            id:,
+            name:,
+            current_user_permissions:,
+            metadata:,
+            parent_id:,
+          ))
+        12 ->
+          decode.success(ResolvedPrivateThread(
+            id:,
+            name:,
+            current_user_permissions:,
+            metadata:,
+            parent_id:,
+          ))
+        _ -> decode.failure(ResolvedTextChannel("", "", []), "ResolvedChannel")
+      }
+    }
+    13 ->
+      decode.success(ResolvedStageChannel(id:, name:, current_user_permissions:))
+    15 ->
+      decode.success(ResolvedForumChannel(id:, name:, current_user_permissions:))
+    16 ->
+      decode.success(ResolvedMediaChannel(id:, name:, current_user_permissions:))
+    _ -> decode.failure(ResolvedTextChannel("", "", []), "ResolvedChannel")
+  }
+}
+
+@internal
+pub fn resolved_decoder() -> decode.Decoder(Resolved) {
+  use users <- decode.optional_field(
+    "users",
+    None,
+    decode.optional(decode.dict(decode.string, user.decoder())),
+  )
+  use members <- decode.optional_field(
+    "members",
+    None,
+    decode.optional(decode.dict(decode.string, member.decoder())),
+  )
+  use roles <- decode.optional_field(
+    "roles",
+    None,
+    decode.optional(decode.dict(decode.string, role.decoder())),
+  )
+  use channels <- decode.optional_field(
+    "channels",
+    None,
+    decode.optional(decode.dict(decode.string, resolved_channel_decoder())),
+  )
+  use messages <- decode.optional_field(
+    "messages",
+    None,
+    decode.optional(decode.dict(decode.string, decoder())),
+  )
+  use attachments <- decode.optional_field(
+    "attachments",
+    None,
+    decode.optional(decode.dict(decode.string, attachment.decoder())),
+  )
+
+  decode.success(Resolved(
+    users:,
+    members:,
+    roles:,
+    channels:,
+    messages:,
+    attachments:,
+  ))
+}
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get_pinned(
   client: Client,
   in channel_id: String,
-) -> Result(List(Message), error.FlybycordError) {
+) -> Result(List(Message), Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/pins")
@@ -483,7 +766,7 @@ pub fn get_pinned(
 
   response.body
   |> json.parse(using: decode.list(decoder()))
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn pin(
@@ -491,7 +774,7 @@ pub fn pin(
   in channel_id: String,
   id message_id: String,
   reason reason: Option(String),
-) -> Result(Nil, error.FlybycordError) {
+) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -510,7 +793,7 @@ pub fn unpin(
   from channel_id: String,
   id message_id: String,
   reason reason: Option(String),
-) -> Result(Nil, error.FlybycordError) {
+) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
