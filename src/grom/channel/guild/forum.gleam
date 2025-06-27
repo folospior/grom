@@ -1,8 +1,12 @@
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json.{type Json}
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/time/duration.{type Duration}
+import grom/client
+import grom/file.{type File}
+import grom/internal/time_duration
 import grom/message
 import grom/message/allowed_mentions.{type AllowedMentions}
 import grom/message/attachment
@@ -24,8 +28,11 @@ pub type Tag {
 pub opaque type StartThread {
   StartThread(
     name: String,
-    auto_archive_duration: Duration,
+    auto_archive_duration: Option(Duration),
     rate_limit_per_user: Option(Duration),
+    message: StartThreadMessage,
+    applied_tags: Option(List(String)),
+    files: Option(List(File)),
   )
 }
 
@@ -154,3 +161,53 @@ pub fn tag_to_json(tag: Tag) -> Json {
   [id, name, is_moderated, emoji_id, emoji_name]
   |> json.object
 }
+
+@internal
+pub fn start_thread_to_json(start_thread: StartThread) -> Json {
+  let name = [#("name", json.string(start_thread.name))]
+
+  let auto_archive_duration = case start_thread.auto_archive_duration {
+    Some(duration) -> [
+      #("auto_archive_duration", time_duration.to_int_seconds_encode(duration)),
+    ]
+    None -> []
+  }
+
+  let rate_limit_per_user = case start_thread.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  [name, auto_archive_duration, rate_limit_per_user]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn start_thread_message_to_json(message: StartThreadMessage) -> Json {
+  let content = case message.content {
+    Some(content) -> [#("content", json.string(content))]
+    None -> []
+  }
+
+  let embeds = case message.embeds {
+    Some(embeds) -> [#("embeds", json.array(embeds, embed.to_json))]
+    None -> []
+  }
+
+  let allowed_mentions = case message.allowed_mentions {
+    Some(allowed_mentions) -> [
+      #("allowed_mentions", allowed_mentions.to_json(allowed_mentions)),
+    ]
+    None -> []
+  }
+
+  todo as "Components and the rest"
+
+  [content, embeds, allowed_mentions]
+  |> list.flatten
+  |> json.object
+}
+// PUBLIC API FUNCTIONS --------------------------------------------------------

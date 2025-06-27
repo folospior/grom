@@ -7,7 +7,6 @@ import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 import grom/application.{type Application}
-import grom/application/current_application
 import grom/channel/guild/thread.{type Thread}
 import grom/client.{type Client}
 import grom/error.{type Error}

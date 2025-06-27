@@ -1,5 +1,7 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import grom/message/component/button.{type Button}
 import grom/message/component/channel_select.{type ChannelSelect}
 import grom/message/component/mentionable_select.{type MentionableSelect}
@@ -68,8 +70,32 @@ pub fn component_decoder() -> decode.Decoder(Component) {
     }
     _ ->
       decode.failure(
-        Button(button.Regular(None, button.Primary, None, None, "", False)),
+        Button(button.Regular(None, False, button.Primary, None, None, "")),
         "Component",
       )
+  }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(action_row: ActionRow) -> Json {
+  let type_ = [#("type", json.int(1))]
+
+  let id = case action_row.id {
+    Some(id) -> [#("id", json.int(id))]
+    None -> []
+  }
+
+  todo as "components"
+
+  [type_, id]
+  |> list.flatten
+  |> json.object
+}
+
+pub fn component_to_json(component: Component) -> Json {
+  case component {
+    _ -> todo as "come back when the rest of components is done"
   }
 }

@@ -1,5 +1,7 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -16,9 +18,8 @@ pub type MentionableSelect {
 }
 
 pub type DefaultValue {
-  User(id: String)
-  Role(id: String)
-  Channel(id: String)
+  UserValue(id: String)
+  RoleValue(id: String)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -56,9 +57,67 @@ pub fn default_value_decoder() -> decode.Decoder(DefaultValue) {
   use id <- decode.field("id", decode.string)
 
   case type_ {
-    "user" -> decode.success(User(id:))
-    "role" -> decode.success(Role(id:))
-    "channel" -> decode.success(Channel(id:))
-    _ -> decode.failure(User(""), "DefaultValue")
+    "user" -> decode.success(UserValue(id:))
+    "role" -> decode.success(RoleValue(id:))
+    _ -> decode.failure(UserValue(""), "DefaultValue")
   }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(mentionable_select: MentionableSelect) -> Json {
+  let type_ = [#("type", json.int(7))]
+
+  let id = case mentionable_select.id {
+    Some(id) -> [#("id", json.int(id))]
+    None -> []
+  }
+
+  let custom_id = [#("custom_id", json.string(mentionable_select.custom_id))]
+
+  let placeholder = case mentionable_select.placeholder {
+    Some(placeholder) -> [#("placeholder", json.string(placeholder))]
+    None -> []
+  }
+
+  let default_values = case mentionable_select.default_values {
+    Some(values) -> [
+      #("default_values", json.array(values, default_value_to_json)),
+    ]
+    None -> []
+  }
+
+  let min_values = [#("min_values", json.int(mentionable_select.min_values))]
+
+  let max_values = [#("max_values", json.int(mentionable_select.max_values))]
+
+  let is_disabled = [#("disabled", json.bool(mentionable_select.is_disabled))]
+
+  [
+    type_,
+    id,
+    custom_id,
+    placeholder,
+    default_values,
+    min_values,
+    max_values,
+    is_disabled,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn default_value_to_json(default_value: DefaultValue) -> Json {
+  json.object([
+    #("id", json.string(default_value.id)),
+    #(
+      "type",
+      json.string(case default_value {
+        UserValue(..) -> "user"
+        RoleValue(..) -> "role"
+      }),
+    ),
+  ])
 }

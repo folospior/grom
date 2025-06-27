@@ -1,4 +1,6 @@
 import gleam/dynamic/decode
+import gleam/json.{type Json}
+import gleam/time/duration
 import gleam/time/timestamp.{type Timestamp}
 
 // DECODERS --------------------------------------------------------------------
@@ -14,4 +16,13 @@ pub fn decoder() -> decode.Decoder(Timestamp) {
       Error(_) -> decode.failure(timestamp.from_unix_seconds(0), "Timestamp")
     }
   }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(timestamp: Timestamp) -> Json {
+  timestamp
+  |> timestamp.to_rfc3339(duration.seconds(0))
+  |> json.string
 }

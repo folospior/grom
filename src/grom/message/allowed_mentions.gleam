@@ -63,9 +63,9 @@ pub fn type_decoder() -> decode.Decoder(Type) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn encode(allowed_mentions: AllowedMentions) -> Json {
+pub fn to_json(allowed_mentions: AllowedMentions) -> Json {
   let types = case allowed_mentions.types {
-    Some(types) -> [#("parse", json.array(types, type_encode))]
+    Some(types) -> [#("parse", json.array(types, type_to_json))]
     None -> []
   }
 
@@ -90,7 +90,7 @@ pub fn encode(allowed_mentions: AllowedMentions) -> Json {
 }
 
 @internal
-pub fn type_encode(type_: Type) -> Json {
+pub fn type_to_json(type_: Type) -> Json {
   case type_ {
     Users -> "users"
     Roles -> "roles"

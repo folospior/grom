@@ -8,7 +8,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import grom/client.{type Client}
-import grom/error
+import grom/error.{type Error}
 import grom/guild/member.{type Member}
 import grom/image
 import grom/internal/rest
@@ -58,7 +58,7 @@ pub fn modify_encode(modify: Modify) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(client: Client) -> Result(User, error.FlybycordError) {
+pub fn get(client: Client) -> Result(User, Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/users/@me")
@@ -67,13 +67,10 @@ pub fn get(client: Client) -> Result(User, error.FlybycordError) {
 
   response.body
   |> json.parse(using: user.decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
-pub fn modify(
-  client: Client,
-  with data: Modify,
-) -> Result(User, error.FlybycordError) {
+pub fn modify(client: Client, with data: Modify) -> Result(User, Error) {
   let json = data |> modify_encode
   use response <- result.try(
     client
@@ -84,7 +81,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: user.decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
 pub fn new_modify() -> Modify {
@@ -106,7 +103,7 @@ pub fn modify_banner(modify: Modify, banner: image.Data) -> Modify {
 pub fn get_guilds(
   client: Client,
   with query: List(GetGuildsQuery),
-) -> Result(User, error.FlybycordError) {
+) -> Result(User, Error) {
   let query =
     list.map(query, fn(parameter) {
       case parameter {
@@ -131,13 +128,10 @@ pub fn get_guilds(
 
   response.body
   |> json.parse(using: user.decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }
 
-pub fn get_as_member(
-  client: Client,
-  guild_id: String,
-) -> Result(Member, error.FlybycordError) {
+pub fn get_as_member(client: Client, guild_id: String) -> Result(Member, Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/users/@me/guilds/" <> guild_id <> "/member")
@@ -146,5 +140,5 @@ pub fn get_as_member(
 
   response.body
   |> json.parse(using: member.decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }

@@ -5,7 +5,7 @@
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/option.{type Option, None}
-import grom/channel
+import grom/guild
 import grom/interaction/application_command/choice.{type Choice}
 
 // TYPES -----------------------------------------------------------------------
@@ -66,7 +66,7 @@ pub type CommandOption {
     name_localizations: Option(Dict(String, String)),
     description: String,
     description_localizations: Option(Dict(String, String)),
-    channel_types: List(channel.Type),
+    channel_types: List(ChannelType),
     is_required: Bool,
   )
   Role(
@@ -101,6 +101,17 @@ pub type CommandOption {
     description_localizations: Option(Dict(String, String)),
     is_required: Bool,
   )
+}
+
+pub type ChannelType {
+  TextChannel
+  DmChannel
+  VoiceChannel
+  CategoryChannel
+  AnnouncementChannel
+  StageChannel
+  ForumChannel
+  MediaChannel
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -337,7 +348,7 @@ fn channel_decoder() -> decode.Decoder(CommandOption) {
   )
   use channel_types <- decode.field(
     "channel_types",
-    decode.list(channel.type_decoder()),
+    decode.list(channel_type_decoder()),
   )
   use is_required <- decode.field("required", decode.bool)
 
@@ -424,4 +435,21 @@ fn attachment_decoder() -> decode.Decoder(CommandOption) {
     description_localizations:,
     is_required:,
   ))
+}
+
+@internal
+pub fn channel_type_decoder() -> decode.Decoder(ChannelType) {
+  use type_ <- decode.then(decode.int)
+
+  case type_ {
+    0 -> decode.success(TextChannel)
+    1 -> decode.success(DmChannel)
+    2 -> decode.success(VoiceChannel)
+    4 -> decode.success(CategoryChannel)
+    5 -> decode.success(AnnouncementChannel)
+    13 -> decode.success(StageChannel)
+    15 -> decode.success(ForumChannel)
+    16 -> decode.success(MediaChannel)
+    _ -> decode.failure(TextChannel, "ChannelType")
+  }
 }

@@ -1,5 +1,7 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import grom/message/component/button.{type Button}
 import grom/message/component/text_display.{type TextDisplay}
 import grom/message/component/unfurled_media_item.{type UnfurledMediaItem}
@@ -71,8 +73,65 @@ pub fn accessory_decoder() {
     }
     _ ->
       decode.failure(
-        Button(button.Regular(None, button.Primary, None, None, "", False)),
+        Button(button.Regular(None, False, button.Primary, None, None, "")),
         "Accessory",
       )
+  }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(section: Section) -> Json {
+  let type_ = [#("type", json.int(9))]
+
+  let id = case section.id {
+    Some(id) -> [#("id", json.int(id))]
+    None -> []
+  }
+
+  let components = [
+    #("components", json.array(section.components, component_to_json)),
+  ]
+
+  let accessory = [#("accessory", accessory_to_json(section.accessory))]
+
+  [type_, id, components, accessory]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn component_to_json(component: Component) -> Json {
+  case component {
+    TextDisplay(text_display) -> text_display.to_json(text_display)
+  }
+}
+
+@internal
+pub fn accessory_to_json(accessory: Accessory) -> Json {
+  case accessory {
+    Button(button) -> button.to_json(button)
+    Thumbnail(..) -> {
+      let type_ = [#("type", json.int(11))]
+
+      let id = case accessory.id {
+        Some(id) -> [#("id", json.int(id))]
+        None -> []
+      }
+
+      let media = todo as "unfurled media item to json"
+
+      let description = case accessory.description {
+        Some(description) -> [#("description", json.string(description))]
+        None -> []
+      }
+
+      let is_spoiler = [#("spoiler", json.bool(accessory.is_spoiler))]
+
+      [type_, id, media, description, is_spoiler]
+      |> list.flatten
+      |> json.object
+    }
   }
 }

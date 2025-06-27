@@ -1,5 +1,7 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -53,4 +55,57 @@ pub fn decoder() -> decode.Decoder(UserSelect) {
 pub fn default_value_decoder() -> decode.Decoder(DefaultValue) {
   use id <- decode.field("id", decode.string)
   decode.success(DefaultValue(id:))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(user_select: UserSelect) -> Json {
+  let type_ = [#("type", json.int(5))]
+
+  let id = case user_select.id {
+    Some(id) -> [#("id", json.int(id))]
+    None -> []
+  }
+
+  let custom_id = [#("custom_id", json.string(user_select.custom_id))]
+
+  let placeholder = case user_select.placeholder {
+    Some(placeholder) -> [#("placeholder", json.string(placeholder))]
+    None -> []
+  }
+
+  let default_values = case user_select.default_values {
+    Some(values) -> [
+      #("default_values", json.array(values, default_value_to_json)),
+    ]
+    None -> []
+  }
+
+  let min_values = [#("min_values", json.int(user_select.min_values))]
+
+  let max_values = [#("max_values", json.int(user_select.max_values))]
+
+  let is_disabled = [#("disabled", json.bool(user_select.is_disabled))]
+
+  [
+    type_,
+    id,
+    custom_id,
+    placeholder,
+    default_values,
+    min_values,
+    max_values,
+    is_disabled,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn default_value_to_json(default_value: DefaultValue) {
+  json.object([
+    #("id", json.string(default_value.id)),
+    #("type", json.string("user")),
+  ])
 }

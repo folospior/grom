@@ -7,7 +7,7 @@ import gleam/list
 import gleam/result
 import grom/channel.{type Channel}
 import grom/client.{type Client}
-import grom/error
+import grom/error.{type Error}
 import grom/guild/audit_log/entry.{type Entry}
 import grom/guild/auto_moderation/rule.{type Rule}
 import grom/guild/scheduled_event.{type ScheduledEvent}
@@ -118,7 +118,7 @@ pub fn get(
   client: Client,
   for guild_id: String,
   with query: List(GetQuery),
-) -> Result(AuditLog, error.FlybycordError) {
+) -> Result(AuditLog, Error) {
   let query =
     query
     |> list.map(fn(parameter) {
@@ -145,5 +145,5 @@ pub fn get(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.DecodeError)
+  |> result.map_error(error.CouldNotDecode)
 }

@@ -1,6 +1,10 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
+import gleam/time/duration
 import gleam/time/timestamp.{type Timestamp}
+import grom/guild
 import grom/internal/time_rfc3339
 
 // TYPES -----------------------------------------------------------------------
@@ -253,4 +257,226 @@ pub fn field_decoder() -> decode.Decoder(Field) {
     decode.optional(decode.bool),
   )
   decode.success(Field(name:, value:, is_inline:))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+pub fn to_json(embed: Embed) -> Json {
+  let title = case embed.title {
+    Some(title) -> [#("title", json.string(title))]
+    None -> []
+  }
+
+  let type_ = case embed.type_ {
+    Some(type_) -> [#("type", type_to_json(type_))]
+    None -> []
+  }
+
+  let description = case embed.description {
+    Some(description) -> [#("description", json.string(description))]
+    None -> []
+  }
+
+  let url = case embed.url {
+    Some(url) -> [#("url", json.string(url))]
+    None -> []
+  }
+
+  let timestamp = case embed.timestamp {
+    Some(timestamp) -> [#("timestamp", time_rfc3339.to_json(timestamp))]
+    None -> []
+  }
+
+  let color = case embed.color {
+    Some(color) -> [#("color", json.int(color))]
+    None -> []
+  }
+
+  let footer = case embed.footer {
+    Some(footer) -> [#("footer", footer_to_json(footer))]
+    None -> []
+  }
+
+  let image = case embed.image {
+    Some(image) -> [#("image", image_to_json(image))]
+    None -> []
+  }
+
+  let video = case embed.video {
+    Some(video) -> [#("video", video_to_json(video))]
+    None -> []
+  }
+
+  let provider = case embed.provider {
+    Some(provider) -> [#("provider", provider_to_json(provider))]
+    None -> []
+  }
+
+  let author = case embed.author {
+    Some(author) -> [#("author", author_to_json(author))]
+    None -> []
+  }
+
+  let fields = case embed.fields {
+    Some(fields) -> [#("fields", json.array(fields, field_to_json))]
+    None -> []
+  }
+
+  [
+    title,
+    type_,
+    description,
+    url,
+    timestamp,
+    color,
+    footer,
+    image,
+    video,
+    provider,
+    author,
+    fields,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn type_to_json(type_: Type) -> Json {
+  case type_ {
+    Rich -> "rich"
+    ImageEmbed -> "image"
+    VideoEmbed -> "video"
+    Gifv -> "gifv"
+    Article -> "article"
+    Link -> "link"
+    PollResult -> "poll_result"
+  }
+  |> json.string
+}
+
+@internal
+pub fn footer_to_json(footer: Footer) -> Json {
+  let text = [#("text", json.string(footer.text))]
+
+  let icon_url = case footer.icon_url {
+    Some(url) -> [#("icon_url", json.string(url))]
+    None -> []
+  }
+
+  let proxy_icon_url = case footer.proxy_icon_url {
+    Some(url) -> [#("proxy_icon_url", json.string(url))]
+    None -> []
+  }
+
+  [text, icon_url, proxy_icon_url]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn image_to_json(image: Image) -> Json {
+  let url = [#("url", json.string(image.url))]
+
+  let proxy_url = case image.proxy_url {
+    Some(url) -> [#("proxy_url", json.string(url))]
+    None -> []
+  }
+
+  let height = case image.height {
+    Some(height) -> [#("height", json.int(height))]
+    None -> []
+  }
+
+  let width = case image.width {
+    Some(width) -> [#("width", json.int(width))]
+    None -> []
+  }
+
+  [url, proxy_url, height, width]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn video_to_json(video: Video) -> Json {
+  let url = case video.url {
+    Some(url) -> [#("url", json.string(url))]
+    None -> []
+  }
+
+  let proxy_url = case video.proxy_url {
+    Some(url) -> [#("proxy_url", json.string(url))]
+    None -> []
+  }
+
+  let height = case video.height {
+    Some(height) -> [#("height", json.int(height))]
+    None -> []
+  }
+
+  let width = case video.width {
+    Some(width) -> [#("width", json.int(width))]
+    None -> []
+  }
+
+  [url, proxy_url, height, width]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn provider_to_json(provider: Provider) -> Json {
+  let name = case provider.name {
+    Some(name) -> [#("name", json.string(name))]
+    None -> []
+  }
+
+  let url = case provider.url {
+    Some(url) -> [#("url", json.string(url))]
+    None -> []
+  }
+
+  [name, url]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn author_to_json(author: Author) -> Json {
+  let name = [#("name", json.string(author.name))]
+
+  let url = case author.url {
+    Some(url) -> [#("url", json.string(url))]
+    None -> []
+  }
+
+  let icon_url = case author.icon_url {
+    Some(url) -> [#("icon_url", json.string(url))]
+    None -> []
+  }
+
+  let proxy_icon_url = case author.proxy_icon_url {
+    Some(url) -> [#("proxy_icon_url", json.string(url))]
+    None -> []
+  }
+
+  [name, url, icon_url, proxy_icon_url]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn field_to_json(field: Field) -> Json {
+  let name = [#("name", json.string(field.name))]
+
+  let value = [#("value", json.string(field.value))]
+
+  let is_inline = case field.is_inline {
+    Some(inline) -> [#("inline", json.bool(inline))]
+    None -> []
+  }
+
+  [name, value, is_inline]
+  |> list.flatten
+  |> json.object
 }

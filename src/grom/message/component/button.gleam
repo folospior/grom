@@ -1,26 +1,27 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
-import grom/emoji.{type Emoji}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 
 // TYPES -----------------------------------------------------------------------
 
 pub type Button {
   Regular(
     id: Option(Int),
+    is_disabled: Bool,
     style: Style,
     label: Option(String),
     emoji: Option(Emoji),
     custom_id: String,
-    is_disabled: Bool,
   )
   Link(
     id: Option(Int),
+    is_disabled: Bool,
     label: Option(String),
     emoji: Option(Emoji),
     url: String,
-    is_disabled: Bool,
   )
-  Premium(id: Option(Int), sku_id: String, is_disabled: Bool)
+  Premium(id: Option(Int), is_disabled: Bool, sku_id: String)
 }
 
 pub type Style {
@@ -28,6 +29,10 @@ pub type Style {
   Secondary
   Success
   Danger
+}
+
+pub type Emoji {
+  Emoji(id: Option(String), name: String, is_animated: Bool)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -39,7 +44,7 @@ pub fn decoder() -> decode.Decoder(Button) {
     1 | 2 | 3 | 4 -> regular_decoder()
     5 -> link_decoder()
     6 -> premium_decoder()
-    _ -> decode.failure(Regular(None, Primary, None, None, "", False), "Button")
+    _ -> decode.failure(Regular(None, False, Primary, None, None, ""), "Button")
   }
 }
 
@@ -54,7 +59,7 @@ fn regular_decoder() -> decode.Decoder(Button) {
   use emoji <- decode.optional_field(
     "emoji",
     None,
-    decode.optional(emoji.decoder()),
+    decode.optional(emoji_decoder()),
   )
   use custom_id <- decode.field("custom_id", decode.string)
   use is_disabled <- decode.optional_field("disabled", False, decode.bool)
@@ -72,7 +77,7 @@ fn link_decoder() -> decode.Decoder(Button) {
   use emoji <- decode.optional_field(
     "emoji",
     None,
-    decode.optional(emoji.decoder()),
+    decode.optional(emoji_decoder()),
   )
   use url <- decode.field("url", decode.string)
   use is_disabled <- decode.optional_field("disabled", False, decode.bool)
@@ -98,4 +103,97 @@ pub fn style_decoder() -> decode.Decoder(Style) {
     4 -> decode.success(Danger)
     _ -> decode.failure(Primary, "Style")
   }
+}
+
+@internal
+pub fn emoji_decoder() -> decode.Decoder(Emoji) {
+  use id <- decode.field("id", decode.optional(decode.string))
+  use name <- decode.field("name", decode.string)
+  use is_animated <- decode.optional_field("animated", False, decode.bool)
+
+  decode.success(Emoji(id:, name:, is_animated:))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(button: Button) -> Json {
+  let type_ = [#("type", json.int(2))]
+
+  let id = case button.id {
+    Some(id) -> [#("id", json.int(id))]
+    None -> []
+  }
+
+  let style = case button {
+    Regular(style:, ..) -> [#("style", style_to_json(style))]
+    Link(..) -> [#("style", json.int(5))]
+    Premium(..) -> [#("style", json.int(6))]
+  }
+
+  let label = case button {
+    Regular(label:, ..) | Link(label:, ..) ->
+      case label {
+        Some(label) -> [#("label", json.string(label))]
+        None -> []
+      }
+    _ -> []
+  }
+
+  let emoji = case button {
+    Regular(emoji:, ..) | Link(emoji:, ..) ->
+      case emoji {
+        Some(emoji) -> [#("emoji", emoji_to_json(emoji))]
+        None -> []
+      }
+    _ -> []
+  }
+
+  let custom_id = case button {
+    Regular(custom_id:, ..) -> [#("custom_id", json.string(custom_id))]
+    _ -> []
+  }
+
+  let sku_id = case button {
+    Premium(sku_id:, ..) -> [#("sku_id", json.string(sku_id))]
+    _ -> []
+  }
+
+  let url = case button {
+    Link(url:, ..) -> [#("url", json.string(url))]
+    _ -> []
+  }
+
+  let is_disabled = [#("disabled", json.bool(button.is_disabled))]
+
+  [type_, id, style, label, emoji, custom_id, sku_id, url, is_disabled]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn style_to_json(style: Style) -> Json {
+  case style {
+    Primary -> 1
+    Secondary -> 2
+    Success -> 3
+    Danger -> 4
+  }
+  |> json.int
+}
+
+@internal
+pub fn emoji_to_json(emoji: Emoji) -> Json {
+  let id = case emoji.id {
+    Some(id) -> [#("id", json.string(id))]
+    None -> []
+  }
+
+  let name = [#("name", json.string(emoji.name))]
+
+  let is_animated = [#("animated", json.bool(emoji.is_animated))]
+
+  [id, name, is_animated]
+  |> list.flatten
+  |> json.object
 }
