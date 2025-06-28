@@ -1,5 +1,7 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import grom/message/component/action_row.{type ActionRow}
 import grom/message/component/file.{type File}
 import grom/message/component/media_gallery.{type MediaGallery}
@@ -75,5 +77,44 @@ pub fn component_decoder() -> decode.Decoder(Component) {
         TextDisplay(text_display.TextDisplay(None, "")),
         "Component",
       )
+  }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(container: Container) -> Json {
+  let type_ = [#("type", json.int(17))]
+
+  let id = case container.id {
+    Some(id) -> [#("id", json.int(id))]
+    None -> []
+  }
+
+  let components = [
+    #("components", json.array(container.components, component_to_json)),
+  ]
+
+  let accent_color = case container.accent_color {
+    Some(color) -> [#("accent_color", json.int(color))]
+    None -> []
+  }
+
+  let is_spoiler = [#("spoiler", json.bool(container.is_spoiler))]
+
+  [type_, id, components, accent_color, is_spoiler]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn component_to_json(component: Component) -> Json {
+  case component {
+    ActionRow(action_row) -> action_row.to_json(action_row)
+    TextDisplay(text_display) -> text_display.to_json(text_display)
+    Section(section) -> section.to_json(section)
+    MediaGallery(media_gallery) -> media_gallery.to_json(media_gallery)
+    Separator(separator) -> separator.to_json(separator)
+    File(file) -> file.to_json(file)
   }
 }

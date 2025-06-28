@@ -1,5 +1,7 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -35,4 +37,33 @@ pub fn spacing_decoder() -> decode.Decoder(Spacing) {
     2 -> decode.success(LargePadding)
     _ -> decode.failure(SmallPadding, "Spacing")
   }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(separator: Separator) -> Json {
+  let type_ = [#("type", json.int(14))]
+
+  let id = case separator.id {
+    Some(id) -> [#("id", json.int(id))]
+    None -> []
+  }
+
+  let show_divider = [#("divider", json.bool(separator.show_divider))]
+
+  let spacing = [#("spacing", spacing_to_json(separator.spacing))]
+
+  [type_, id, show_divider, spacing]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn spacing_to_json(spacing: Spacing) -> Json {
+  case spacing {
+    SmallPadding -> 1
+    LargePadding -> 2
+  }
+  |> json.int
 }

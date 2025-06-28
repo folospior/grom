@@ -1,5 +1,8 @@
 import gleam/dynamic/decode
+import gleam/json.{type Json}
 import gleam/option.{type Option, None}
+
+// TYPES -----------------------------------------------------------------------
 
 pub type UnfurledMediaItem {
   UnfurledMediaItem(
@@ -10,6 +13,8 @@ pub type UnfurledMediaItem {
     content_type: Option(String),
   )
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn decoder() -> decode.Decoder(UnfurledMediaItem) {
@@ -37,4 +42,17 @@ pub fn decoder() -> decode.Decoder(UnfurledMediaItem) {
     width:,
     content_type:,
   ))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(unfurled_media_item: UnfurledMediaItem) -> Json {
+  json.object([#("url", json.string(unfurled_media_item.url))])
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(url: String) -> UnfurledMediaItem {
+  UnfurledMediaItem(url, None, None, None, None)
 }

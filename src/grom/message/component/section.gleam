@@ -120,7 +120,7 @@ pub fn accessory_to_json(accessory: Accessory) -> Json {
         None -> []
       }
 
-      let media = todo as "unfurled media item to json"
+      let media = [#("media", unfurled_media_item.to_json(accessory.media))]
 
       let description = case accessory.description {
         Some(description) -> [#("description", json.string(description))]

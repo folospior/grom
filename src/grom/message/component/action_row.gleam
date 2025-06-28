@@ -87,15 +87,25 @@ pub fn to_json(action_row: ActionRow) -> Json {
     None -> []
   }
 
-  todo as "components"
+  let components = [
+    #("components", json.array(action_row.components, component_to_json)),
+  ]
 
-  [type_, id]
+  [type_, id, components]
   |> list.flatten
   |> json.object
 }
 
+@internal
 pub fn component_to_json(component: Component) -> Json {
   case component {
-    _ -> todo as "come back when the rest of components is done"
+    Button(button) -> button.to_json(button)
+    TextInput(text_input) -> text_input.to_json(text_input)
+    StringSelect(string_select) -> string_select.to_json(string_select)
+    UserSelect(user_select) -> user_select.to_json(user_select)
+    RoleSelect(role_select) -> role_select.to_json(role_select)
+    MentionableSelect(mentionable_select) ->
+      mentionable_select.to_json(mentionable_select)
+    ChannelSelect(channel_select) -> channel_select.to_json(channel_select)
   }
 }
