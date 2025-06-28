@@ -2,9 +2,7 @@ import gleam/dynamic/decode
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/time/duration
 import gleam/time/timestamp.{type Timestamp}
-import grom/guild
 import grom/internal/time_rfc3339
 
 // TYPES -----------------------------------------------------------------------

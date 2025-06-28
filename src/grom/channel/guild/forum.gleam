@@ -14,7 +14,6 @@ import grom/file.{type File}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
-import grom/message
 import grom/message/allowed_mentions.{type AllowedMentions}
 import grom/message/attachment
 import grom/message/component.{type Component}
@@ -51,8 +50,13 @@ pub opaque type StartThreadMessage {
     components: Option(List(Component)),
     sticker_ids: Option(List(String)),
     attachments: Option(List(attachment.Create)),
-    flags: Option(List(message.Flag)),
+    flags: Option(List(StartThreadMessageFlag)),
   )
+}
+
+pub type StartThreadMessageFlag {
+  SuppressEmbeds
+  SuppressNotifications
 }
 
 pub type Flag {
@@ -79,6 +83,14 @@ pub type Layout {
 @internal
 pub fn bits_flags() -> List(#(Int, Flag)) {
   [#(int.bitwise_shift_left(1, 4), RequiresTag)]
+}
+
+@internal
+pub fn bits_start_thread_message_flags() -> List(#(Int, StartThreadMessageFlag)) {
+  [
+    #(int.bitwise_shift_left(1, 2), SuppressEmbeds),
+    #(int.bitwise_shift_left(1, 12), SuppressNotifications),
+  ]
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -244,7 +256,7 @@ pub fn start_thread_message_to_json(message: StartThreadMessage) -> Json {
       #(
         "flags",
         flags
-          |> flags.to_int(message.bits_flags())
+          |> flags.to_int(bits_start_thread_message_flags())
           |> json.int,
       ),
     ]
@@ -298,4 +310,98 @@ pub fn start_thread(
   response.body
   |> json.parse(using: thread.decoder())
   |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn new_start_thread(
+  name: String,
+  message: StartThreadMessage,
+) -> StartThread {
+  StartThread(name, None, None, message, None, None)
+}
+
+pub fn start_thread_with_auto_archive_duration(
+  start_thread: StartThread,
+  auto_archive_duration: Duration,
+) -> StartThread {
+  StartThread(
+    ..start_thread,
+    auto_archive_duration: Some(auto_archive_duration),
+  )
+}
+
+pub fn start_thread_with_rate_limit_per_user(
+  start_thread: StartThread,
+  rate_limit_per_user: Duration,
+) -> StartThread {
+  StartThread(..start_thread, rate_limit_per_user: Some(rate_limit_per_user))
+}
+
+pub fn start_thread_with_applied_tags(
+  start_thread: StartThread,
+  ids applied_tags_ids: List(String),
+) -> StartThread {
+  StartThread(..start_thread, applied_tags_ids: Some(applied_tags_ids))
+}
+
+pub fn start_thread_with_files(
+  start_thread: StartThread,
+  files: List(File),
+) -> StartThread {
+  StartThread(..start_thread, files: Some(files))
+}
+
+pub fn new_start_thread_message() -> StartThreadMessage {
+  StartThreadMessage(None, None, None, None, None, None, None)
+}
+
+pub fn start_thread_message_with_content(
+  start_thread_message: StartThreadMessage,
+  content: String,
+) -> StartThreadMessage {
+  StartThreadMessage(..start_thread_message, content: Some(content))
+}
+
+pub fn start_thread_message_with_embeds(
+  start_thread_message: StartThreadMessage,
+  embeds: List(Embed),
+) -> StartThreadMessage {
+  StartThreadMessage(..start_thread_message, embeds: Some(embeds))
+}
+
+pub fn start_thread_message_with_allowed_mentions(
+  start_thread_message: StartThreadMessage,
+  allowed_mentions: AllowedMentions,
+) -> StartThreadMessage {
+  StartThreadMessage(
+    ..start_thread_message,
+    allowed_mentions: Some(allowed_mentions),
+  )
+}
+
+pub fn start_thread_message_with_components(
+  start_thread_message: StartThreadMessage,
+  components: List(Component),
+) -> StartThreadMessage {
+  StartThreadMessage(..start_thread_message, components: Some(components))
+}
+
+pub fn start_thread_message_with_stickers(
+  start_thread_message: StartThreadMessage,
+  ids sticker_ids: List(String),
+) -> StartThreadMessage {
+  StartThreadMessage(..start_thread_message, sticker_ids: Some(sticker_ids))
+}
+
+pub fn start_thread_message_with_attachments(
+  start_thread_message: StartThreadMessage,
+  attachments: List(attachment.Create),
+) -> StartThreadMessage {
+  StartThreadMessage(..start_thread_message, attachments: Some(attachments))
+}
+
+pub fn start_thread_message_with_flags(
+  start_thread_message: StartThreadMessage,
+  flags: List(StartThreadMessageFlag),
+) -> StartThreadMessage {
+  StartThreadMessage(..start_thread_message, flags: Some(flags))
 }

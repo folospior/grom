@@ -5,7 +5,6 @@
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/option.{type Option, None}
-import grom/guild
 import grom/interaction/application_command/choice.{type Choice}
 
 // TYPES -----------------------------------------------------------------------
