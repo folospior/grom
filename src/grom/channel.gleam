@@ -1,6 +1,7 @@
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
+import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -244,6 +245,14 @@ pub type FollowedChannel {
 pub type VideoQualityMode {
   AutomaticVideoQuality
   HDVideoQuality
+}
+
+pub type ReceivedThreads {
+  ReceivedThreads(
+    threads: List(Thread),
+    members: List(thread.Member),
+    has_more: Bool,
+  )
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -716,6 +725,15 @@ pub fn followed_channel_decoder() -> decode.Decoder(FollowedChannel) {
   use channel_id <- decode.field("channel_id", decode.string)
   use webhook_id <- decode.field("webhook_id", decode.string)
   decode.success(FollowedChannel(channel_id:, webhook_id:))
+}
+
+@internal
+pub fn received_threads_decoder() -> decode.Decoder(ReceivedThreads) {
+  use threads <- decode.field("threads", decode.list(thread.decoder()))
+  use members <- decode.field("members", decode.list(thread.member_decoder()))
+  use has_more <- decode.field("has_more", decode.bool)
+
+  decode.success(ReceivedThreads(threads:, members:, has_more:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1761,5 +1779,110 @@ pub fn get_pinned_messages(
 
   response.body
   |> json.parse(using: decode.list(message.decoder()))
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_public_archived_threads(
+  client: Client,
+  in channel_id: String,
+  earlier_than before: Option(Timestamp),
+  maximum limit: Option(Int),
+) -> Result(ReceivedThreads, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/channels/" <> channel_id <> "/threads/archived/public",
+    )
+    |> request.set_query(
+      [
+        case before {
+          Some(timestamp) -> [
+            #("before", timestamp.to_rfc3339(timestamp, duration.seconds(0))),
+          ]
+          None -> []
+        },
+        case limit {
+          Some(limit) -> [#("limit", int.to_string(limit))]
+          None -> []
+        },
+      ]
+      |> list.flatten,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: received_threads_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_private_archived_threads(
+  client: Client,
+  in channel_id: String,
+  earlier_than before: Option(Timestamp),
+  maximum limit: Option(Int),
+) -> Result(ReceivedThreads, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/channels/" <> channel_id <> "/threads/archived/private",
+    )
+    |> request.set_query(
+      [
+        case before {
+          Some(timestamp) -> [
+            #("before", timestamp.to_rfc3339(timestamp, duration.seconds(0))),
+          ]
+          None -> []
+        },
+        case limit {
+          Some(limit) -> [#("limit", int.to_string(limit))]
+          None -> []
+        },
+      ]
+      |> list.flatten,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: received_threads_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_joined_private_archived_threads(
+  client: Client,
+  in channel_id: String,
+  earlier_than before: Option(Timestamp),
+  maximum limit: Option(Int),
+) -> Result(ReceivedThreads, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/channels/" <> channel_id <> "/users/@me/threads/archived/private",
+    )
+    |> request.set_query(
+      [
+        case before {
+          Some(timestamp) -> [
+            #("before", timestamp.to_rfc3339(timestamp, duration.seconds(0))),
+          ]
+          None -> []
+        },
+        case limit {
+          Some(limit) -> [#("limit", int.to_string(limit))]
+          None -> []
+        },
+      ]
+      |> list.flatten,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: received_threads_decoder())
   |> result.map_error(error.CouldNotDecode)
 }

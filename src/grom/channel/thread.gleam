@@ -1,3 +1,4 @@
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
@@ -9,7 +10,7 @@ import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom/client.{type Client}
-import grom/error
+import grom/error.{type Error}
 import grom/guild/member.{type Member as GuildMember}
 import grom/internal/flags
 import grom/internal/rest
@@ -88,7 +89,7 @@ pub type Member {
     thread_id: Option(String),
     user_id: Option(String),
     join_timestamp: Timestamp,
-    guild_member: GuildMember,
+    guild_member: Option(GuildMember),
   )
 }
 
@@ -216,7 +217,11 @@ pub fn member_decoder() -> decode.Decoder(Member) {
     decode.optional(decode.string),
   )
   use join_timestamp <- decode.field("join_timestamp", time_rfc3339.decoder())
-  use guild_member <- decode.field("member", member.decoder())
+  use guild_member <- decode.optional_field(
+    "member",
+    None,
+    decode.optional(member.decoder()),
+  )
   decode.success(Member(thread_id:, user_id:, join_timestamp:, guild_member:))
 }
 
@@ -370,7 +375,7 @@ pub fn modify(
   id channel_id: String,
   with modify: Modify,
   because reason: Option(String),
-) -> Result(Thread, error.Error) {
+) -> Result(Thread, Error) {
   let json = modify |> modify_encode
 
   use response <- result.try(
@@ -449,7 +454,7 @@ pub fn start_from_message(
   from message_id: String,
   with start_from_message: StartFromMessage,
   because reason: Option(String),
-) -> Result(Thread, error.Error) {
+) -> Result(Thread, Error) {
   let json = start_from_message |> start_from_message_encode
 
   use response <- result.try(
@@ -495,7 +500,7 @@ pub fn start_without_message(
   in channel_id: String,
   with start_without_message: StartWithoutMessage,
   reason reason: Option(String),
-) -> Result(Thread, error.Error) {
+) -> Result(Thread, Error) {
   let json = start_without_message |> start_without_message_encode
 
   use response <- result.try(
@@ -550,4 +555,120 @@ pub fn start_without_message_with_rate_limit_per_user(
   limit: Duration,
 ) -> StartWithoutMessage {
   StartWithoutMessage(..start_without_message, rate_limit_per_user: Some(limit))
+}
+
+pub fn join(client: Client, id thread_id: String) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Put,
+      "/channels/" <> thread_id <> "/thread-members/@me",
+    )
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn add_member(
+  client: Client,
+  to thread_id: String,
+  id user_id: String,
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Put,
+      "/channels/" <> thread_id <> "/thread-members/" <> user_id,
+    )
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn leave(client: Client, id thread_id: String) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/channels/" <> thread_id <> "/thread-members/@me",
+    )
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn remove_member(
+  client: Client,
+  from thread_id: String,
+  id user_id: String,
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/channels/" <> thread_id <> "/thread-members/" <> user_id,
+    )
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn get_member(
+  client: Client,
+  from thread_id: String,
+  id user_id: String,
+  with_guild_member with_guild_member: Bool,
+) -> Result(Member, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/channels/" <> thread_id <> "/thread-members/" <> user_id,
+    )
+    |> request.set_query([#("with_member", bool.to_string(with_guild_member))])
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: member_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_members(
+  client: Client,
+  from thread_id: String,
+  with_guild_member with_guild_member: Bool,
+  older_than_id after: Option(String),
+  maximum limit: Option(Int),
+) -> Result(List(Member), Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/channels/" <> thread_id <> "/thread-members",
+    )
+    |> request.set_query(
+      [
+        [#("with_member", bool.to_string(with_guild_member))],
+        case after {
+          Some(id) -> [#("after", id)]
+          None -> []
+        },
+        case limit {
+          Some(limit) -> [#("limit", int.to_string(limit))]
+          None -> []
+        },
+      ]
+      |> list.flatten,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(member_decoder()))
+  |> result.map_error(error.CouldNotDecode)
 }
