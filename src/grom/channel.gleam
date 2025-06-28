@@ -7,10 +7,10 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
-import grom/channel/guild/forum
-import grom/channel/guild/media
-import grom/channel/guild/thread.{type Thread}
+import grom/channel/forum
+import grom/channel/media
 import grom/channel/permission_overwrite.{type PermissionOverwrite}
+import grom/channel/thread.{type Thread}
 import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/internal/flags

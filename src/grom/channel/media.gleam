@@ -1,8 +1,8 @@
 import gleam/int
 import gleam/option.{type Option}
 import gleam/time/duration.{type Duration}
-import grom/channel/guild/forum
-import grom/channel/guild/thread.{type Thread}
+import grom/channel/forum
+import grom/channel/thread.{type Thread}
 import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/file.{type File}

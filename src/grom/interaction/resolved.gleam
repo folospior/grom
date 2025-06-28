@@ -1,5 +1,5 @@
 import gleam/option.{type Option}
-import grom/channel/guild/thread
+import grom/channel/thread
 import grom/guild/member.{type Member}
 import grom/guild/role.{type Role}
 import grom/message.{type Message}

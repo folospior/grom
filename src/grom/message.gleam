@@ -2,12 +2,11 @@ import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/int
-import gleam/json
 import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 import grom/application.{type Application}
-import grom/channel/guild/thread.{type Thread}
+import grom/channel/thread.{type Thread}
 import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/guild/member.{type Member}
