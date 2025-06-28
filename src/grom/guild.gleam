@@ -1,19 +1,23 @@
 import gleam/dynamic/decode
 import gleam/http
+import gleam/http/request
 import gleam/int
 import gleam/json
-import gleam/option.{type Option, None}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 import grom/client.{type Client}
 import grom/emoji.{type Emoji}
-import grom/error
+import grom/error.{type Error}
 import grom/guild/auto_moderation/rule.{type Rule}
 import grom/guild/role.{type Role}
 import grom/guild/welcome_screen.{type WelcomeScreen}
+import grom/image
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
+import grom/modification.{type Modification}
 import grom/sticker.{type Sticker}
 
 // TYPES ----------------------------------------------------------------------
@@ -509,7 +513,7 @@ pub fn incidents_data_decoder() -> decode.Decoder(IncidentsData) {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn leave(client: Client, guild_id: String) -> Result(Nil, error.Error) {
+pub fn leave(client: Client, id guild_id: String) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(http.Delete, "/users/@me/guilds/" <> guild_id)
@@ -521,8 +525,8 @@ pub fn leave(client: Client, guild_id: String) -> Result(Nil, error.Error) {
 
 pub fn get_auto_moderation_rules(
   client: Client,
-  guild_id: String,
-) -> Result(List(Rule), error.Error) {
+  for guild_id: String,
+) -> Result(List(Rule), Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -535,4 +539,120 @@ pub fn get_auto_moderation_rules(
   response.body
   |> json.parse(using: decode.list(rule.decoder()))
   |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_emojis(
+  client: Client,
+  for guild_id: String,
+) -> Result(List(Emoji), Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/emojis")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(emoji.decoder()))
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_emoji(
+  client: Client,
+  in guild_id: String,
+  id emoji_id: String,
+) -> Result(Emoji, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/guilds/" <> guild_id <> "/emojis/" <> emoji_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: emoji.decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn create_emoji(
+  client: Client,
+  in guild_id: String,
+  named name: String,
+  bytes image: image.Data,
+  allowed_roles roles: List(String),
+  because reason: Option(String),
+) -> Result(Emoji, Error) {
+  let json =
+    json.object([
+      #("name", json.string(name)),
+      #("image", json.string(image)),
+      #("roles", json.array(roles, json.string)),
+    ])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/guilds/" <> guild_id <> "/emojis")
+    |> request.set_body(json |> json.to_string)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: emoji.decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn modify_emoji(
+  client: Client,
+  in guild_id: String,
+  id emoji_id: String,
+  rename name: Option(String),
+  allowed_roles roles: Modification(List(String)),
+  because reason: Option(String),
+) -> Result(Emoji, Error) {
+  let json =
+    [
+      case name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      },
+      modification.encode(roles, "roles", json.array(_, json.string)),
+    ]
+    |> list.flatten
+    |> json.object
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Patch,
+      "/guilds/" <> guild_id <> "/emojis/" <> emoji_id,
+    )
+    |> request.set_body(json |> json.to_string)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: emoji.decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn delete_emoji(
+  client: Client,
+  from guild_id: String,
+  id emoji_id: String,
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/guilds/" <> guild_id <> "/emojis/" <> emoji_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
 }
