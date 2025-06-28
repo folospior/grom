@@ -1,11 +1,19 @@
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/int
 import gleam/json.{type Json}
 import gleam/option.{type Option, None}
+import gleam/result
 import grom/application/team.{type Team}
+import grom/client.{type Client}
+import grom/emoji.{type Emoji}
+import grom/error.{type Error}
 import grom/guild.{type Guild}
+import grom/image
 import grom/internal/flags
+import grom/internal/rest
 import grom/permission.{type Permission}
 import grom/user.{type User}
 import grom/webhook_event
@@ -344,4 +352,107 @@ pub fn event_webhook_status_encode(
     Enabled -> json.int(2)
     DisabledByDiscord -> json.int(3)
   }
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get_emojis(
+  client: Client,
+  for application_id: String,
+) -> Result(List(Emoji), Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/applications/" <> application_id <> "/emojis",
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.at(["items"], decode.list(emoji.decoder())))
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_emoji(
+  client: Client,
+  for application_id: String,
+  id emoji_id: String,
+) -> Result(Emoji, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/applications/" <> application_id <> "/emojis/" <> emoji_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: emoji.decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn create_emoji(
+  client: Client,
+  for application_id: String,
+  named name: String,
+  bytes image: image.Data,
+) -> Result(Emoji, Error) {
+  let json =
+    json.object([#("name", json.string(name)), #("image", json.string(image))])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Post,
+      "/applications/" <> application_id <> "/emojis",
+    )
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: emoji.decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn rename_emoji(
+  client: Client,
+  for application_id: String,
+  id emoji_id: String,
+  to name: String,
+) -> Result(Emoji, Error) {
+  let json = json.object([#("name", json.string(name))])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Patch,
+      "/applications/" <> application_id <> "/emojis/" <> emoji_id,
+    )
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: emoji.decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn delete_emoji(
+  client: Client,
+  from application_id: String,
+  id emoji_id: String,
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/applications/" <> application_id <> "/emojis/" <> emoji_id,
+    )
+    |> rest.execute,
+  )
+
+  Ok(Nil)
 }
