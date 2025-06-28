@@ -8,4 +8,5 @@ pub type Error {
   HttpError(httpc.HttpError)
   CouldNotDecode(json.DecodeError)
   StatusCodeUnsuccessful(Response(String))
+  BodyNotValidUtf8(BitArray)
 }

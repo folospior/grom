@@ -1,11 +1,18 @@
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/time/duration.{type Duration}
-import grom/client
+import grom/channel/guild/thread.{type Thread}
+import grom/client.{type Client}
+import grom/error.{type Error}
 import grom/file.{type File}
+import grom/internal/flags
+import grom/internal/rest
 import grom/internal/time_duration
 import grom/message
 import grom/message/allowed_mentions.{type AllowedMentions}
@@ -31,7 +38,7 @@ pub opaque type StartThread {
     auto_archive_duration: Option(Duration),
     rate_limit_per_user: Option(Duration),
     message: StartThreadMessage,
-    applied_tags: Option(List(String)),
+    applied_tags_ids: Option(List(String)),
     files: Option(List(File)),
   )
 }
@@ -180,7 +187,16 @@ pub fn start_thread_to_json(start_thread: StartThread) -> Json {
     None -> []
   }
 
-  [name, auto_archive_duration, rate_limit_per_user]
+  let message = [
+    #("message", start_thread_message_to_json(start_thread.message)),
+  ]
+
+  let applied_tags_ids = case start_thread.applied_tags_ids {
+    Some(ids) -> [#("applied_tags", json.array(ids, json.string))]
+    None -> []
+  }
+
+  [name, auto_archive_duration, rate_limit_per_user, message, applied_tags_ids]
   |> list.flatten
   |> json.object
 }
@@ -204,10 +220,82 @@ pub fn start_thread_message_to_json(message: StartThreadMessage) -> Json {
     None -> []
   }
 
-  todo as "Components and the rest"
+  let components = case message.components {
+    Some(components) -> [
+      #("components", json.array(components, component.to_json)),
+    ]
+    None -> []
+  }
 
-  [content, embeds, allowed_mentions]
+  let sticker_ids = case message.sticker_ids {
+    Some(ids) -> [#("sticker_ids", json.array(ids, json.string))]
+    None -> []
+  }
+
+  let attachments = case message.attachments {
+    Some(attachments) -> [
+      #("attachments", json.array(attachments, attachment.create_to_json)),
+    ]
+    None -> []
+  }
+
+  let flags = case message.flags {
+    Some(flags) -> [
+      #(
+        "flags",
+        flags
+          |> flags.to_int(message.bits_flags())
+          |> json.int,
+      ),
+    ]
+    None -> []
+  }
+
+  [
+    content,
+    embeds,
+    allowed_mentions,
+    components,
+    sticker_ids,
+    attachments,
+    flags,
+  ]
   |> list.flatten
   |> json.object
 }
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn start_thread(
+  client: Client,
+  in channel_id: String,
+  with start_thread: StartThread,
+  because reason: Option(String),
+) -> Result(Thread, Error) {
+  use response <- result.try(case start_thread.files {
+    Some(files) -> {
+      client
+      |> rest.new_multipart_request(
+        http.Post,
+        "/channels/" <> channel_id <> "/threads",
+        start_thread_to_json(start_thread),
+        files,
+      )
+      |> rest.with_reason(reason)
+      |> rest.execute_multipart
+    }
+    None -> {
+      let json = start_thread |> start_thread_to_json
+
+      client
+      |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/threads")
+      |> request.set_body(json |> json.to_string)
+      |> rest.with_reason(reason)
+      |> rest.execute
+    }
+  })
+
+  response.body
+  |> json.parse(using: thread.decoder())
+  |> result.map_error(error.CouldNotDecode)
+}

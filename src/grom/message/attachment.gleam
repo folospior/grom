@@ -1,6 +1,8 @@
 import gleam/dynamic/decode
 import gleam/int
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/time/duration.{type Duration}
 import grom/internal/base64
 import grom/internal/flags
@@ -102,4 +104,20 @@ pub fn decoder() -> decode.Decoder(Attachment) {
     waveform:,
     flags:,
   ))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn create_to_json(create: Create) -> Json {
+  let filename = [#("filename", json.string(create.filename))]
+
+  let description = case create.description {
+    Some(description) -> [#("description", json.string(description))]
+    None -> []
+  }
+
+  [filename, description]
+  |> list.flatten
+  |> json.object
 }

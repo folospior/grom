@@ -1,6 +1,7 @@
+import gleam/bit_array
 import gleam/http
 import gleam/http/request.{type Request}
-import gleam/http/response.{type Response}
+import gleam/http/response.{type Response, Response}
 import gleam/httpc
 import gleam/int
 import gleam/json.{type Json}
@@ -8,7 +9,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import grom/client.{type Client}
-import grom/error
+import grom/error.{type Error}
 import grom/file.{type File}
 import multipart_form
 import multipart_form/field
@@ -22,14 +23,34 @@ const discord_api_path = "api/v10"
 // INTERNAL FUNCTIONS ----------------------------------------------------------
 
 @internal
-pub fn execute(
-  request: Request(String),
-) -> Result(Response(String), error.Error) {
+pub fn execute(request: Request(String)) -> Result(Response(String), Error) {
   use response <- result.try(
     request
     |> httpc.send
     |> result.map_error(error.HttpError),
   )
+
+  response
+  |> ensure_status_code_success
+}
+
+@internal
+pub fn execute_multipart(
+  request: Request(BitArray),
+) -> Result(Response(String), Error) {
+  use response <- result.try(
+    request
+    |> httpc.send_bits
+    |> result.map_error(error.HttpError),
+  )
+
+  use body <- result.try(
+    response.body
+    |> bit_array.to_string
+    |> result.replace_error(error.BodyNotValidUtf8(response.body)),
+  )
+
+  let response = Response(..response, body:)
 
   response
   |> ensure_status_code_success
@@ -61,7 +82,7 @@ pub fn new_multipart_request(
   path: String,
   payload_json: Json,
   files: List(File),
-) {
+) -> Request(BitArray) {
   let #(_, file_parts) =
     files
     |> list.map_fold(0, fn(acc, file) {
@@ -103,7 +124,7 @@ pub fn with_reason(request: Request(a), reason: Option(String)) -> Request(a) {
 
 fn ensure_status_code_success(
   response: Response(String),
-) -> Result(Response(String), error.Error) {
+) -> Result(Response(String), Error) {
   case response.status {
     status if status >= 200 && status < 300 -> Ok(response)
     _ -> Error(error.StatusCodeUnsuccessful(response))
