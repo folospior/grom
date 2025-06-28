@@ -753,21 +753,6 @@ pub fn resolved_decoder() -> decode.Decoder(Resolved) {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get_pinned(
-  client: Client,
-  in channel_id: String,
-) -> Result(List(Message), Error) {
-  use response <- result.try(
-    client
-    |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/pins")
-    |> rest.execute,
-  )
-
-  response.body
-  |> json.parse(using: decode.list(decoder()))
-  |> result.map_error(error.CouldNotDecode)
-}
-
 pub fn pin(
   client: Client,
   in channel_id: String,

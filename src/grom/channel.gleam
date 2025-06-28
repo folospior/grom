@@ -17,6 +17,7 @@ import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
+import grom/message.{type Message}
 import grom/modification.{type Modification, Skip}
 import grom/permission.{type Permission}
 import grom/user.{type User}
@@ -1746,4 +1747,19 @@ pub fn trigger_typing_indicator(
   )
 
   Ok(Nil)
+}
+
+pub fn get_pinned_messages(
+  client: Client,
+  in channel_id: String,
+) -> Result(List(Message), Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/pins")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(message.decoder()))
+  |> result.map_error(error.CouldNotDecode)
 }
