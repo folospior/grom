@@ -4,8 +4,15 @@
 //// See [SKU](sku.html).
 
 import gleam/dynamic/decode
+import gleam/http
+import gleam/json
 import gleam/option.{type Option, None}
+import gleam/result
 import gleam/time/timestamp.{type Timestamp}
+import grom/client.{type Client}
+import grom/error.{type Error}
+import grom/interaction/context_type
+import grom/internal/rest
 import grom/internal/time_rfc3339
 
 // TYPES -----------------------------------------------------------------------
@@ -97,4 +104,46 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     8 -> decode.success(ApplicationSubscription)
     _ -> decode.failure(Purchase, "Type")
   }
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get(
+  client: Client,
+  for application_id: String,
+  id entitlement_id: String,
+) -> Result(Entitlement, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Post,
+      "/applications/" <> application_id <> "/entitlements/" <> entitlement_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn consume(
+  client: Client,
+  for application_id: String,
+  id entitlement_id: String,
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Post,
+      "/applications/"
+        <> application_id
+        <> "/entitlements/"
+        <> entitlement_id
+        <> "/consume",
+    )
+    |> rest.execute,
+  )
+
+  Ok(Nil)
 }
