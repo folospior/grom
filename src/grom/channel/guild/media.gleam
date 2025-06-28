@@ -1,5 +1,5 @@
 import gleam/int
-import gleam/option.{type Option, None}
+import gleam/option.{type Option}
 import gleam/time/duration.{type Duration}
 import grom/channel/guild/forum
 import grom/channel/guild/thread.{type Thread}
