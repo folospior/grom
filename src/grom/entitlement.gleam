@@ -1,17 +1,17 @@
-//// An `Entitlement` is something a user is entitled to have. Crazy, right?
+//// An `Entitlement` is something a user is _entitled_ to have. Crazy, right?
 ////
 //// An example of an entitlement is the license key for the premium version of your bot.
 //// See [SKU](sku.html).
 
 import gleam/dynamic/decode
 import gleam/http
-import gleam/json
+import gleam/http/request
+import gleam/json.{type Json}
 import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 import grom/client.{type Client}
 import grom/error.{type Error}
-import grom/interaction/context_type
 import grom/internal/rest
 import grom/internal/time_rfc3339
 
@@ -42,6 +42,11 @@ pub type Type {
   UserGift
   PremiumPurchase
   ApplicationSubscription
+}
+
+pub type OwnerType {
+  GuildOwner
+  UserOwner
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -106,6 +111,17 @@ pub fn type_decoder() -> decode.Decoder(Type) {
   }
 }
 
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn owner_type_to_json(owner_type: OwnerType) -> Json {
+  case owner_type {
+    GuildOwner -> 1
+    UserOwner -> 2
+  }
+  |> json.int
+}
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get(
@@ -141,6 +157,52 @@ pub fn consume(
         <> "/entitlements/"
         <> entitlement_id
         <> "/consume",
+    )
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn create_test(
+  client: Client,
+  for application_id: String,
+  sku sku_id: String,
+  to owner_id: String,
+  owner_is owner_type: OwnerType,
+) -> Result(Entitlement, Error) {
+  let json =
+    json.object([
+      #("sku_id", json.string(sku_id)),
+      #("owner_id", json.string(owner_id)),
+      #("owner_type", owner_type_to_json(owner_type)),
+    ])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Post,
+      "/applications/" <> application_id <> "/entitlements",
+    )
+    |> request.set_body(json |> json.to_string)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn delete_test(
+  client: Client,
+  for application_id: String,
+  id entitlement_id: String,
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/applications/" <> application_id <> "/entitlements/" <> entitlement_id,
     )
     |> rest.execute,
   )
