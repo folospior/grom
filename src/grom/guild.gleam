@@ -586,7 +586,7 @@ pub fn create_emoji(
   let json =
     json.object([
       #("name", json.string(name)),
-      #("image", json.string(image)),
+      #("image", json.string(image |> image.to_base64)),
       #("roles", json.array(roles, json.string)),
     ])
 

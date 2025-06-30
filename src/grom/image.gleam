@@ -1,9 +1,11 @@
 import gleam/bit_array
+import gleam/json.{type Json}
 
 // TYPES -----------------------------------------------------------------------
 
-pub type Data =
-  String
+pub opaque type Data {
+  Data(String)
+}
 
 pub type ContentType {
   Jpeg
@@ -24,5 +26,18 @@ pub fn from_bit_array(
   }
   let base64 = bit_array.base64_encode(data, False)
 
-  "data:" <> mime <> ";base64," <> base64
+  Data("data:" <> mime <> ";base64," <> base64)
+}
+
+@internal
+pub fn to_base64(image: Data) -> String {
+  let Data(base64) = image
+  base64
+}
+
+@internal
+pub fn to_json(image: Data) -> Json {
+  image
+  |> to_base64
+  |> json.string
 }

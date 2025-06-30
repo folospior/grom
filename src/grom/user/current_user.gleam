@@ -42,12 +42,12 @@ pub fn modify_encode(modify: Modify) -> Json {
   }
 
   let avatar = case avatar {
-    Some(image) -> [#("avatar", json.string(image))]
+    Some(image) -> [#("avatar", image.to_json(image))]
     None -> []
   }
 
   let banner = case banner {
-    Some(image) -> [#("banner", json.string(image))]
+    Some(image) -> [#("banner", image.to_json(image))]
     None -> []
   }
 

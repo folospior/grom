@@ -418,7 +418,10 @@ pub fn create_emoji(
   bytes image: image.Data,
 ) -> Result(Emoji, Error) {
   let json =
-    json.object([#("name", json.string(name)), #("image", json.string(image))])
+    json.object([
+      #("name", json.string(name)),
+      #("image", json.string(image |> image.to_base64)),
+    ])
 
   use response <- result.try(
     client
