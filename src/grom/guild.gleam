@@ -10,7 +10,7 @@ import gleam/time/timestamp.{type Timestamp}
 import grom/client.{type Client}
 import grom/emoji.{type Emoji}
 import grom/error.{type Error}
-import grom/guild/auto_moderation/rule.{type Rule}
+import grom/guild/auto_moderation
 import grom/guild/role.{type Role}
 import grom/guild/welcome_screen.{type WelcomeScreen}
 import grom/image
@@ -526,7 +526,7 @@ pub fn leave(client: Client, id guild_id: String) -> Result(Nil, Error) {
 pub fn get_auto_moderation_rules(
   client: Client,
   for guild_id: String,
-) -> Result(List(Rule), Error) {
+) -> Result(List(auto_moderation.Rule), Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -537,7 +537,7 @@ pub fn get_auto_moderation_rules(
   )
 
   response.body
-  |> json.parse(using: decode.list(rule.decoder()))
+  |> json.parse(using: decode.list(auto_moderation.rule_decoder()))
   |> result.map_error(error.CouldNotDecode)
 }
 

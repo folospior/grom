@@ -9,7 +9,7 @@ import grom/channel.{type Channel}
 import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/guild/audit_log/entry.{type Entry}
-import grom/guild/auto_moderation/rule.{type Rule}
+import grom/guild/auto_moderation
 import grom/guild/scheduled_event.{type ScheduledEvent}
 import grom/interaction/application_command.{type ApplicationCommand}
 import grom/internal/rest
@@ -22,7 +22,7 @@ pub type AuditLog {
   AuditLog(
     application_commands: List(ApplicationCommand),
     entries: List(Entry),
-    auto_moderation_rules: List(Rule),
+    auto_moderation_rules: List(auto_moderation.Rule),
     scheduled_events: List(ScheduledEvent),
     integrations: List(PartialIntegration),
     threads: List(Channel),
@@ -64,7 +64,7 @@ pub fn decoder() -> decode.Decoder(AuditLog) {
   use entries <- decode.field("entries", decode.list(entry.decoder()))
   use auto_moderation_rules <- decode.field(
     "auto_moderation_rules",
-    decode.list(rule.decoder()),
+    decode.list(auto_moderation.rule_decoder()),
   )
   use scheduled_events <- decode.field(
     "scheduled_events",

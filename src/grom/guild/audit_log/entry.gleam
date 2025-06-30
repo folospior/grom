@@ -3,7 +3,6 @@ import gleam/int
 import gleam/option.{type Option, None}
 import grom/channel/permission_overwrite
 import grom/guild/audit_log/change.{type Change}
-import grom/guild/auto_moderation/trigger
 import grom/guild/integration
 
 // TYPES -----------------------------------------------------------------------
@@ -113,11 +112,7 @@ pub type Info {
   MessageUnpinned(channel_id: String, message_id: String)
   StageInstanceEntry(channel_id: String)
   ApplicationCommandPermissionUpdated(application_id: String)
-  AutoModerationTriggered(
-    rule_name: String,
-    trigger_type: trigger.Type,
-    channel_id: String,
-  )
+  AutoModerationTriggered(rule_name: String, channel_id: String)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -246,16 +241,8 @@ pub fn info_decoder(type_: Type) -> decode.Decoder(Info) {
     | AutoModerationFlagToChannel
     | AutoModerationUserCommunicationDisabled -> {
       use rule_name <- decode.field("auto_moderation_rule_name", decode.string)
-      use trigger_type <- decode.field(
-        "auto_moderation_rule_trigger_type",
-        trigger.type_string_decoder(),
-      )
       use channel_id <- decode.field("channel_id", decode.string)
-      decode.success(AutoModerationTriggered(
-        rule_name:,
-        trigger_type:,
-        channel_id:,
-      ))
+      decode.success(AutoModerationTriggered(rule_name:, channel_id:))
     }
     MemberMove -> {
       use channel_id <- decode.field("channel_id", decode.string)
