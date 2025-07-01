@@ -5,6 +5,7 @@ import gleam/int
 import gleam/json
 import gleam/list
 import gleam/result
+import gleam/set.{type Set}
 import grom/channel.{type Channel}
 import grom/client.{type Client}
 import grom/error.{type Error}
@@ -117,11 +118,11 @@ pub fn partial_user_decoder() -> decode.Decoder(PartialUser) {
 pub fn get(
   client: Client,
   for guild_id: String,
-  with query: List(GetQuery),
+  with query: Set(GetQuery),
 ) -> Result(AuditLog, Error) {
   let query =
     query
-    |> list.map(fn(parameter) {
+    |> set.map(fn(parameter) {
       case parameter {
         UserId(id) -> #("user_id", id)
         EntryType(type_) -> #(
@@ -139,7 +140,7 @@ pub fn get(
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/audit-logs")
-    |> request.set_query(query)
+    |> request.set_query(query |> set.to_list)
     |> rest.execute,
   )
 

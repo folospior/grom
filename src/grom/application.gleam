@@ -94,17 +94,15 @@ pub type InstallationContextConfig {
   InstallationContextConfig(oauth2_install_params: Option(InstallParams))
 }
 
-pub opaque type GetEntitlements {
-  GetEntitlements(
-    user_id: Option(String),
-    sku_ids: Option(Set(String)),
-    before_id: Option(String),
-    after_id: Option(String),
-    limit: Option(Int),
-    guild_id: Option(String),
-    exclude_ended: Bool,
-    exclude_deleted: Bool,
-  )
+pub type GetEntitlementsQuery {
+  UserId(String)
+  SkuIds(Set(String))
+  BeforeId(String)
+  AfterId(String)
+  Limit(Int)
+  GuildId(String)
+  ExcludeEnded(Bool)
+  ExcludeDeleted(Bool)
 }
 
 // FLAGS -----------------------------------------------------------------------
@@ -481,45 +479,36 @@ pub fn delete_emoji(
 pub fn get_entitlements(
   client: Client,
   for application_id: String,
-  with get_entitlements: GetEntitlements,
+  with query: Set(GetEntitlementsQuery),
 ) -> Result(List(Entitlement), Error) {
   let query =
-    [
-      case get_entitlements.user_id {
-        Some(id) -> [#("user_id", id)]
-        None -> []
-      },
-      case get_entitlements.sku_ids {
-        Some(ids) -> [
-          #(
-            "sku_ids",
-            ids
-              |> set.to_list
-              |> string.join(with: ","),
-          ),
-        ]
-        None -> []
-      },
-      case get_entitlements.before_id {
-        Some(id) -> [#("before", id)]
-        None -> []
-      },
-      case get_entitlements.after_id {
-        Some(id) -> [#("after", id)]
-        None -> []
-      },
-      case get_entitlements.limit {
-        Some(limit) -> [#("limit", int.to_string(limit))]
-        None -> []
-      },
-      case get_entitlements.guild_id {
-        Some(id) -> [#("guild_id", id)]
-        None -> []
-      },
-      [#("exclude_ended", bool.to_string(get_entitlements.exclude_ended))],
-      [#("exclude_deleted", bool.to_string(get_entitlements.exclude_deleted))],
-    ]
-    |> list.flatten
+    set.map(query, fn(item) {
+      case item {
+        UserId(id) -> #("user_id", id)
+        SkuIds(ids) -> #(
+          "sku_ids",
+          ids
+            |> set.to_list
+            |> string.join(","),
+        )
+        BeforeId(id) -> #("before", id)
+        AfterId(id) -> #("after", id)
+        Limit(limit) -> #("limit", limit |> int.to_string)
+        GuildId(id) -> #("guild_id", id)
+        ExcludeEnded(exclude) -> #(
+          "exclude_ended",
+          exclude
+            |> bool.to_string
+            |> string.lowercase,
+        )
+        ExcludeDeleted(exclude) -> #(
+          "exclude_deleted",
+          exclude
+            |> bool.to_string
+            |> string.lowercase,
+        )
+      }
+    })
 
   use response <- result.try(
     client
@@ -527,69 +516,11 @@ pub fn get_entitlements(
       http.Get,
       "/applications/" <> application_id <> "/entitlements",
     )
-    |> request.set_query(query)
+    |> request.set_query(query |> set.to_list)
     |> rest.execute,
   )
 
   response.body
   |> json.parse(using: decode.list(entitlement.decoder()))
   |> result.map_error(error.CouldNotDecode)
-}
-
-pub fn new_get_entitlements() -> GetEntitlements {
-  GetEntitlements(None, None, None, None, None, None, False, True)
-}
-
-pub fn get_entitlements_with_user_id(
-  get_entitlements: GetEntitlements,
-  user_id: String,
-) -> GetEntitlements {
-  GetEntitlements(..get_entitlements, user_id: Some(user_id))
-}
-
-pub fn get_entitlements_with_sku_ids(
-  get_entitlements: GetEntitlements,
-  sku_ids: Set(String),
-) -> GetEntitlements {
-  GetEntitlements(..get_entitlements, sku_ids: Some(sku_ids))
-}
-
-pub fn get_entitlements_before(
-  get_entitlements: GetEntitlements,
-  id before_id: String,
-) -> GetEntitlements {
-  GetEntitlements(..get_entitlements, before_id: Some(before_id))
-}
-
-pub fn get_entitlements_after(
-  get_entitlements: GetEntitlements,
-  id after_id: String,
-) -> GetEntitlements {
-  GetEntitlements(..get_entitlements, after_id: Some(after_id))
-}
-
-pub fn get_entitlements_with_limit(
-  get_entitlements: GetEntitlements,
-  limit: Int,
-) -> GetEntitlements {
-  GetEntitlements(..get_entitlements, limit: Some(limit))
-}
-
-pub fn get_entitlements_with_guild_id(
-  get_entitlements: GetEntitlements,
-  guild_id: String,
-) -> GetEntitlements {
-  GetEntitlements(..get_entitlements, guild_id: Some(guild_id))
-}
-
-pub fn get_entitlements_excluding_ended(
-  get_entitlements: GetEntitlements,
-) -> GetEntitlements {
-  GetEntitlements(..get_entitlements, exclude_ended: True)
-}
-
-pub fn get_entitlements_including_deleted(
-  get_entitlements: GetEntitlements,
-) -> GetEntitlements {
-  GetEntitlements(..get_entitlements, exclude_deleted: False)
 }
