@@ -9,7 +9,7 @@ import gleam/result
 import gleam/string
 import grom/client.{type Client}
 import grom/error.{type Error}
-import grom/guild/member.{type Member}
+import grom/guild
 import grom/image
 import grom/internal/rest
 import grom/user.{type User}
@@ -131,7 +131,10 @@ pub fn get_guilds(
   |> result.map_error(error.CouldNotDecode)
 }
 
-pub fn get_as_member(client: Client, guild_id: String) -> Result(Member, Error) {
+pub fn get_as_member(
+  client: Client,
+  guild_id: String,
+) -> Result(guild.Member, Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/users/@me/guilds/" <> guild_id <> "/member")
@@ -139,6 +142,6 @@ pub fn get_as_member(client: Client, guild_id: String) -> Result(Member, Error) 
   )
 
   response.body
-  |> json.parse(using: member.decoder())
+  |> json.parse(using: guild.member_decoder())
   |> result.map_error(error.CouldNotDecode)
 }

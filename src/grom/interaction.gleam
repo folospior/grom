@@ -4,7 +4,6 @@ import grom/application
 import grom/channel.{type Channel}
 import grom/entitlement.{type Entitlement}
 import grom/guild.{type Guild}
-import grom/guild/member.{type Member}
 import grom/interaction/application_command
 import grom/interaction/context_type.{type ContextType}
 import grom/interaction/resolved.{type Resolved}
@@ -23,7 +22,7 @@ pub type Interaction {
     guild_id: Option(String),
     channel: Option(Channel),
     channel_id: Option(String),
-    member: Option(Member),
+    member: Option(guild.Member),
     user: Option(User),
     token: String,
     version: Int,
