@@ -762,7 +762,7 @@ pub fn pin(
     client
     |> rest.new_request(
       http.Put,
-      "/channels/" <> channel_id <> "/pins/" <> message_id,
+      "/channels/" <> channel_id <> "/messages/pins/" <> message_id,
     )
     |> rest.with_reason(reason)
     |> rest.execute,
@@ -781,7 +781,7 @@ pub fn unpin(
     client
     |> rest.new_request(
       http.Delete,
-      "/channels/" <> channel_id <> "/pins/" <> message_id,
+      "/channels/" <> channel_id <> "/messages/pins/" <> message_id,
     )
     |> rest.with_reason(reason)
     |> rest.execute,

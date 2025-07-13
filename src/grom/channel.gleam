@@ -1767,13 +1767,17 @@ pub fn trigger_typing_indicator(
   Ok(Nil)
 }
 
+// TODO: add pagination stuff!!
 pub fn get_pinned_messages(
   client: Client,
   in channel_id: String,
 ) -> Result(List(Message), Error) {
   use response <- result.try(
     client
-    |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/pins")
+    |> rest.new_request(
+      http.Get,
+      "/channels/" <> channel_id <> "/messages/pins",
+    )
     |> rest.execute,
   )
 

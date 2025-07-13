@@ -40,14 +40,16 @@ pub type Status {
 }
 
 pub type EntityType {
-  StageInstance
-  Voice
-  External
+  InStageInstance
+  InVoiceChannel
+  ExternallyHosted
 }
 
 pub type EntityMetadata {
   EntityMetadata(location: Option(String))
 }
+
+// TODO: Endpoints: Not that important + can't be arsed
 
 // DECODERS --------------------------------------------------------------------
 
@@ -134,10 +136,10 @@ pub fn status_decoder() -> decode.Decoder(Status) {
 pub fn entity_type_decoder() -> decode.Decoder(EntityType) {
   use variant <- decode.then(decode.int)
   case variant {
-    1 -> decode.success(StageInstance)
-    2 -> decode.success(Voice)
-    3 -> decode.success(External)
-    _ -> decode.failure(StageInstance, "EntityType")
+    1 -> decode.success(InStageInstance)
+    2 -> decode.success(InVoiceChannel)
+    3 -> decode.success(ExternallyHosted)
+    _ -> decode.failure(InStageInstance, "EntityType")
   }
 }
 
