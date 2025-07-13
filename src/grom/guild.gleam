@@ -1381,3 +1381,13 @@ pub fn delete_emoji(
 
   Ok(Nil)
 }
+
+pub fn delete(client: Client, id guild_id: String) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(http.Delete, "/guilds/" <> guild_id)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
