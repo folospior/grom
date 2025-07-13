@@ -3,7 +3,6 @@ import gleam/http
 import gleam/http/request
 import gleam/int
 import gleam/json
-import gleam/list
 import gleam/result
 import gleam/set.{type Set}
 import grom/channel.{type Channel}

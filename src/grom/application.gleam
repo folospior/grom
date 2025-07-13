@@ -5,8 +5,7 @@ import gleam/http
 import gleam/http/request
 import gleam/int
 import gleam/json.{type Json}
-import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{type Option, None}
 import gleam/result
 import gleam/set.{type Set}
 import gleam/string

@@ -17,7 +17,6 @@ import grom/image
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
-import grom/message/component/media_gallery
 import grom/modification.{type Modification, Skip}
 import grom/sticker.{type Sticker}
 import grom/user.{type User}
