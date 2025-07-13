@@ -1,8 +1,9 @@
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
 import gleam/int
-import gleam/json
+import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -16,7 +17,8 @@ import grom/image
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
-import grom/modification.{type Modification}
+import grom/message/component/media_gallery
+import grom/modification.{type Modification, Skip}
 import grom/sticker.{type Sticker}
 import grom/user.{type User}
 
@@ -34,6 +36,7 @@ pub type Guild {
     owner_id: String,
     current_user_permissions: Option(String),
     afk_channel_id: Option(String),
+    // TODO: Maybe make this a Duration
     afk_timeout: Int,
     is_widget_enabled: Option(Bool),
     widget_channel_id: Option(String),
@@ -133,6 +136,7 @@ pub type Feature {
   IsVerified
   CanSet384KbpsBitrate
   HasWelcomeScreenEnabled
+  CanHaveGuestInvites
   CanSetEnhancedRoleColors
 }
 
@@ -238,6 +242,33 @@ pub type WelcomeChannel {
     description: String,
     emoji_id: Option(String),
     emoji_name: Option(String),
+  )
+}
+
+pub opaque type Modify {
+  Modify(
+    name: Option(String),
+    verification_level: Option(VerificationLevel),
+    default_message_notification_setting: Option(
+      DefaultMessageNotificationSetting,
+    ),
+    explicit_content_filter_setting: Option(ExplicitContentFilterSetting),
+    afk_channel_id: Modification(String),
+    afk_timeout: Option(Int),
+    icon: Modification(image.Data),
+    owner_id: Option(String),
+    splash: Modification(image.Data),
+    discovery_splash: Modification(image.Data),
+    banner: Modification(image.Data),
+    system_channel_id: Modification(String),
+    system_channel_flags: Option(List(SystemChannelFlag)),
+    rules_channel_id: Modification(String),
+    public_updates_channel_id: Modification(String),
+    preferred_locale: Modification(String),
+    features: Option(List(Feature)),
+    description: Modification(String),
+    is_premium_progress_bar_enabled: Option(Bool),
+    safety_alerts_channel_id: Modification(String),
   )
 }
 
@@ -504,6 +535,7 @@ pub fn feature_decoder() -> decode.Decoder(Feature) {
     "VERIFIED" -> decode.success(IsVerified)
     "VIP_REGIONS" -> decode.success(CanSet384KbpsBitrate)
     "WELCOME_SCREEN_ENABLED" -> decode.success(HasWelcomeScreenEnabled)
+    "GUESTS_ENABLED" -> decode.success(CanHaveGuestInvites)
     "ENHANCED_ROLE_COLORS" -> decode.success(CanSetEnhancedRoleColors)
     _ -> decode.failure(HasAnimatedBanner, "Feature")
   }
@@ -786,7 +818,426 @@ pub fn template_decoder() -> decode.Decoder(Template) {
   ))
 }
 
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn modify_to_json(modify: Modify) -> Json {
+  let name = case modify.name {
+    Some(name) -> [#("name", json.string(name))]
+    None -> []
+  }
+
+  let verification_level = case modify.verification_level {
+    Some(level) -> [#("verification_level", verification_level_to_json(level))]
+    None -> []
+  }
+
+  let default_message_notification_setting = case
+    modify.default_message_notification_setting
+  {
+    Some(setting) -> [
+      #(
+        "default_message_notifications",
+        default_message_notification_setting_to_json(setting),
+      ),
+    ]
+    None -> []
+  }
+
+  let explicit_content_filter_setting = case
+    modify.explicit_content_filter_setting
+  {
+    Some(setting) -> [
+      #(
+        "explicit_content_filter",
+        explicit_content_filter_setting_to_json(setting),
+      ),
+    ]
+    None -> []
+  }
+
+  let afk_channel_id =
+    modify.afk_channel_id
+    |> modification.encode("afk_channel_id", json.string)
+
+  let afk_timeout = case modify.afk_timeout {
+    Some(timeout) -> [#("afk_timeout", json.int(timeout))]
+    None -> []
+  }
+
+  let icon =
+    modify.icon
+    |> modification.encode("icon", image.to_json)
+
+  let owner_id = case modify.owner_id {
+    Some(id) -> [#("owner_id", json.string(id))]
+    None -> []
+  }
+
+  let splash =
+    modify.splash
+    |> modification.encode("splash", image.to_json)
+
+  let discovery_splash =
+    modify.discovery_splash
+    |> modification.encode("discovery_splash", image.to_json)
+
+  let banner =
+    modify.banner
+    |> modification.encode("banner", image.to_json)
+
+  let system_channnel_id =
+    modify.system_channel_id
+    |> modification.encode("system_channel_id", json.string)
+
+  let system_channel_flags = case modify.system_channel_flags {
+    Some(flags) -> [
+      #(
+        "system_channel_flags",
+        flags.encode(flags, bits_system_channel_flags()),
+      ),
+    ]
+    None -> []
+  }
+
+  let rules_channel_id =
+    modify.rules_channel_id
+    |> modification.encode("rules_channel_id", json.string)
+
+  let public_updates_channel_id =
+    modify.public_updates_channel_id
+    |> modification.encode("public_updates_channel_id", json.string)
+
+  let preferred_locale =
+    modify.preferred_locale
+    |> modification.encode("preferred_locale", json.string)
+
+  let features = case modify.features {
+    Some(features) -> [#("features", json.array(features, feature_to_json))]
+    None -> []
+  }
+
+  let description =
+    modify.description
+    |> modification.encode("description", json.string)
+
+  let is_premium_progress_bar_enabled = case
+    modify.is_premium_progress_bar_enabled
+  {
+    Some(premium_progress_bar_enabled) -> [
+      #("premium_progress_bar_enabled", json.bool(premium_progress_bar_enabled)),
+    ]
+    None -> []
+  }
+
+  let safety_alerts_channel_id =
+    modify.safety_alerts_channel_id
+    |> modification.encode("safety_alerts_channel_id", json.string)
+
+  [
+    name,
+    verification_level,
+    default_message_notification_setting,
+    explicit_content_filter_setting,
+    afk_channel_id,
+    afk_timeout,
+    icon,
+    owner_id,
+    splash,
+    discovery_splash,
+    banner,
+    system_channnel_id,
+    system_channel_flags,
+    rules_channel_id,
+    public_updates_channel_id,
+    preferred_locale,
+    features,
+    description,
+    is_premium_progress_bar_enabled,
+    safety_alerts_channel_id,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn verification_level_to_json(verification_level: VerificationLevel) -> Json {
+  case verification_level {
+    NoVerification -> 0
+    LowVerification -> 1
+    MediumVerification -> 2
+    HighVerification -> 3
+    VeryHighVerification -> 4
+  }
+  |> json.int
+}
+
+@internal
+pub fn default_message_notification_setting_to_json(
+  setting: DefaultMessageNotificationSetting,
+) -> Json {
+  case setting {
+    NotifyForAllMessages -> 0
+    NotifyOnlyForMentions -> 1
+  }
+  |> json.int
+}
+
+@internal
+pub fn explicit_content_filter_setting_to_json(
+  setting: ExplicitContentFilterSetting,
+) -> Json {
+  case setting {
+    ExplicitContentFilterDisabled -> 0
+    ExplicitContentFilterForMembersWithoutRoles -> 1
+    ExplicitContentFilterForAllMembers -> 2
+  }
+  |> json.int
+}
+
+@internal
+pub fn feature_to_json(feature: Feature) -> Json {
+  case feature {
+    HasAnimatedBanner -> "ANIMATED_BANNER"
+    HasAnimatedIcon -> "ANIMATED_ICON"
+    UsesOldPermissionConfigurationBehavior ->
+      "APPLICATION_COMMAND_PERMISSIONS_V2"
+    UsesAutoModeration -> "AUTO_MODERATION"
+    HasBanner -> "BANNER"
+    IsCommunity -> "COMMUNITY"
+    EnabledMonetization -> "CREATOR_MONETIZABLE_PROVISIONAL"
+    HasRoleSubscriptionPromotionPage -> "CREATOR_STORE_PAGE"
+    IsDeveloperSupportServer -> "DEVELOPER_SUPPORT_SERVER"
+    IsDiscoverable -> "DISCOVERABLE"
+    IsFeaturable -> "FEATURABLE"
+    HasInvitesDisabled -> "INVITES_DISABLED"
+    CanSetInviteSplash -> "INVITE_SPLASH"
+    HasMemberVerificationGateEnabled -> "MEMBER_VERIFICATION_GATE_ENABLED"
+    HasMoreSoundboardSounds -> "MORE_SOUNDBOARD"
+    HasMoreStickers -> "MORE_STICKERS"
+    CanCreateAnnouncementChannels -> "NEWS"
+    IsPartnered -> "PARTNERED"
+    CanBePreviewed -> "PREVIEW_ENABLED"
+    HasRaidAlertsDisabled -> "RAID_ALERTS_DISABLED"
+    CanSetRoleIcons -> "ROLE_ICONS"
+    HasRoleSubscriptionsAvailableForPurchase ->
+      "ROLE_SUBSCRIPTIONS_AVAILABLE_FOR_PURCHASE"
+    HasRoleSubscriptionsEnabled -> "ROLE_SUBSCRIPTIONS_ENABLED"
+    CreatedSoundboardSounds -> "SOUNDBOARD"
+    HasTicketedEventsEnabled -> "TICKETED_EVENTS_ENABLED"
+    CanSetVanityUrl -> "VANITY_URL"
+    IsVerified -> "VERIFIED"
+    CanSet384KbpsBitrate -> "VIP_REGIONS"
+    HasWelcomeScreenEnabled -> "WELCOME_SCREEN_ENABLED"
+    CanHaveGuestInvites -> "GUESTS_ENABLED"
+    CanSetEnhancedRoleColors -> "ENHANCED_ROLE_COLORS"
+  }
+  |> json.string
+}
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
+
+/// `get_counts`: Whether to get the `approximate_member_count` and `approximate_presence_count`
+pub fn get(
+  client: Client,
+  id guild_id: String,
+  get_counts with_counts: Bool,
+) -> Result(Guild, Error) {
+  let query = [#("with_counts", bool.to_string(with_counts))]
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id)
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_preview(
+  client: Client,
+  for guild_id: String,
+) -> Result(Preview, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/preview")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: preview_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn modify(
+  client: Client,
+  id guild_id: String,
+  with modify: Modify,
+  because reason: Option(String),
+) -> Result(Guild, Error) {
+  let json = modify |> modify_to_json
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/guilds/" <> guild_id)
+    |> request.set_body(json |> json.to_string)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn new_modify() -> Modify {
+  Modify(
+    None,
+    None,
+    None,
+    None,
+    Skip,
+    None,
+    Skip,
+    None,
+    Skip,
+    Skip,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    None,
+    Skip,
+  )
+}
+
+pub fn modify_name(modify: Modify, new name: String) -> Modify {
+  Modify(..modify, name: Some(name))
+}
+
+pub fn modify_verification_level(
+  modify: Modify,
+  new verification_level: VerificationLevel,
+) -> Modify {
+  Modify(..modify, verification_level: Some(verification_level))
+}
+
+pub fn modify_default_message_notification_setting(
+  modify: Modify,
+  new setting: DefaultMessageNotificationSetting,
+) -> Modify {
+  Modify(..modify, default_message_notification_setting: Some(setting))
+}
+
+pub fn modify_explicit_content_filter_setting(
+  modify: Modify,
+  new setting: ExplicitContentFilterSetting,
+) -> Modify {
+  Modify(..modify, explicit_content_filter_setting: Some(setting))
+}
+
+pub fn modify_afk_channel_id(
+  modify: Modify,
+  afk_channel_id: Modification(String),
+) -> Modify {
+  Modify(..modify, afk_channel_id:)
+}
+
+pub fn modify_afk_timeout(modify: Modify, new afk_timeout: Int) -> Modify {
+  Modify(..modify, afk_timeout: Some(afk_timeout))
+}
+
+pub fn modify_icon(modify: Modify, icon: Modification(image.Data)) -> Modify {
+  Modify(..modify, icon:)
+}
+
+pub fn transfer_ownership(modify: Modify, to owner_id: String) -> Modify {
+  Modify(..modify, owner_id: Some(owner_id))
+}
+
+pub fn modify_splash(modify: Modify, splash: Modification(image.Data)) -> Modify {
+  Modify(..modify, splash:)
+}
+
+pub fn modify_discovery_splash(
+  modify: Modify,
+  discovery_splash: Modification(image.Data),
+) -> Modify {
+  Modify(..modify, discovery_splash:)
+}
+
+pub fn modify_banner(modify: Modify, banner: Modification(image.Data)) -> Modify {
+  Modify(..modify, banner:)
+}
+
+pub fn modify_system_channel_id(
+  modify: Modify,
+  system_channel_id: Modification(String),
+) -> Modify {
+  Modify(..modify, system_channel_id:)
+}
+
+pub fn modify_system_channel_flags(
+  modify: Modify,
+  new system_channel_flags: List(SystemChannelFlag),
+) -> Modify {
+  Modify(..modify, system_channel_flags: Some(system_channel_flags))
+}
+
+pub fn modify_rules_channel_id(
+  modify: Modify,
+  rules_channel_id: Modification(String),
+) -> Modify {
+  Modify(..modify, rules_channel_id:)
+}
+
+pub fn modify_public_updates_channel_id(
+  modify: Modify,
+  public_updates_channel_id: Modification(String),
+) -> Modify {
+  Modify(..modify, public_updates_channel_id:)
+}
+
+/// If `preferred_locale == modification.Delete` then `modified_guild.preferred_locale == "en-US"`
+pub fn modify_preferred_locale(
+  modify: Modify,
+  preferred_locale: Modification(String),
+) -> Modify {
+  Modify(..modify, preferred_locale:)
+}
+
+pub fn modify_features(modify: Modify, new features: List(Feature)) -> Modify {
+  Modify(..modify, features: Some(features))
+}
+
+pub fn modify_description(
+  modify: Modify,
+  description: Modification(String),
+) -> Modify {
+  Modify(..modify, description:)
+}
+
+pub fn enable_premium_progress_bar(modify: Modify) -> Modify {
+  Modify(..modify, is_premium_progress_bar_enabled: Some(True))
+}
+
+pub fn disable_premium_progress_bar(modify: Modify) -> Modify {
+  Modify(..modify, is_premium_progress_bar_enabled: Some(False))
+}
+
+pub fn modify_safety_alerts_channel_id(
+  modify: Modify,
+  safety_alerts_channel_id: Modification(String),
+) -> Modify {
+  Modify(..modify, safety_alerts_channel_id:)
+}
 
 pub fn leave(client: Client, id guild_id: String) -> Result(Nil, Error) {
   use _response <- result.try(
