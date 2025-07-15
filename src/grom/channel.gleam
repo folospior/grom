@@ -1879,8 +1879,6 @@ pub fn create_media_to_json(create_media: CreateMedia) -> Json {
     None -> []
   }
 
-  let is_nsfw = [#("nsfw", json.bool(create_media.is_nsfw))]
-
   let default_auto_archive_duration = case
     create_media.default_auto_archive_duration
   {
@@ -1913,11 +1911,6 @@ pub fn create_media_to_json(create_media: CreateMedia) -> Json {
     None -> []
   }
 
-  let default_forum_layout = case create_media.default_forum_layout {
-    Some(layout) -> [#("default_forum_layout", forum.layout_to_json(layout))]
-    None -> []
-  }
-
   let default_thread_rate_limit_per_user = case
     create_media.default_thread_rate_limit_per_user
   {
@@ -1937,12 +1930,10 @@ pub fn create_media_to_json(create_media: CreateMedia) -> Json {
     topic,
     rate_limit_per_user,
     parent_id,
-    is_nsfw,
     default_auto_archive_duration,
     default_reaction_emoji,
     available_tags,
     default_sort_order,
-    default_forum_layout,
     default_thread_rate_limit_per_user,
   ]
   |> list.flatten
