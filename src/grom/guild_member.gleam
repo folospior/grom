@@ -1,15 +1,18 @@
 import gleam/dynamic/decode
 import gleam/http
+import gleam/http/request
 import gleam/int
-import gleam/json
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 import grom/client.{type Client}
-import grom/error
+import grom/error.{type Error}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
+import grom/modification.{type Modification}
 import grom/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
@@ -43,6 +46,18 @@ pub type Flag {
   CompletedHomeActions
   QuarantinedBecauseOfUsername
   AcknowledgedDmSettingsUpsell
+}
+
+pub type Modify {
+  Modify(
+    nick: Modification(String),
+    role_ids: Modification(List(String)),
+    is_mute: Option(Bool),
+    is_deaf: Option(Bool),
+    voice_channel_id: Modification(String),
+    communication_disabled_until: Modification(Timestamp),
+    flags: Modification(List(Flag)),
+  )
 }
 
 // FLAGS -----------------------------------------------------------------------
@@ -142,13 +157,60 @@ pub fn decoder() -> decode.Decoder(GuildMember) {
   ))
 }
 
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn modify_to_json(modify: Modify) -> Json {
+  let nick =
+    modify.nick
+    |> modification.encode("nick", json.string)
+
+  let role_ids =
+    modify.role_ids
+    |> modification.encode("roles", json.array(_, json.string))
+
+  let is_mute = case modify.is_mute {
+    Some(mute) -> [#("mute", json.bool(mute))]
+    None -> []
+  }
+
+  let is_deaf = case modify.is_deaf {
+    Some(deaf) -> [#("deaf", json.bool(deaf))]
+    None -> []
+  }
+
+  let voice_channel_id =
+    modify.voice_channel_id
+    |> modification.encode("channel_id", json.string)
+
+  let communication_disabled_until =
+    modify.communication_disabled_until
+    |> modification.encode("communication_disabled_until", time_rfc3339.to_json)
+
+  let flags =
+    modify.flags
+    |> modification.encode("flags", flags.encode(_, bits_member_flags()))
+
+  [
+    nick,
+    role_ids,
+    is_mute,
+    is_deaf,
+    voice_channel_id,
+    communication_disabled_until,
+    flags,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get(
   client: Client,
   for guild_id: String,
   id user_id: String,
-) -> Result(GuildMember, error.Error) {
+) -> Result(GuildMember, Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -161,4 +223,125 @@ pub fn get(
   response.body
   |> json.parse(using: decoder())
   |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn modify(
+  client: Client,
+  in guild_id: String,
+  id user_id: String,
+  with modify: Modify,
+  because reason: Option(String),
+) -> Result(GuildMember, Error) {
+  let json =
+    modify
+    |> modify_to_json
+    |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Patch,
+      "/guilds/" <> guild_id <> "/members/" <> user_id,
+    )
+    |> request.set_body(json)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn set_current_nick(
+  client: Client,
+  in guild_id: String,
+  to nick: Modification(String),
+  because reason: Option(String),
+) -> Result(GuildMember, Error) {
+  let json =
+    nick
+    |> modification.encode("nick", json.string)
+    |> json.object
+    |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/guilds/" <> guild_id <> "/members/@me")
+    |> request.set_body(json)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn add_role(
+  client: Client,
+  in guild_id: String,
+  to user_id: String,
+  id role_id: String,
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Put,
+      "/guilds/" <> guild_id <> "/members/" <> user_id <> "/roles/" <> role_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn remove_role(
+  client: Client,
+  in guild_id: String,
+  from user_id: String,
+  id role_id: String,
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/guilds/" <> guild_id <> "/members/" <> user_id <> "/roles/" <> role_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn remove(
+  client: Client,
+  from guild_id: String,
+  id user_id: String,
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/guilds/" <> guild_id <> "/members/" <> user_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn kick(
+  client: Client,
+  from guild_id: String,
+  id user_id: String,
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  remove(client, from: guild_id, id: user_id, because: reason)
 }
