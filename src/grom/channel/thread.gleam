@@ -11,7 +11,7 @@ import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom/client.{type Client}
 import grom/error.{type Error}
-import grom/guild
+import grom/guild_member.{type GuildMember}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
@@ -89,7 +89,7 @@ pub type Member {
     thread_id: Option(String),
     user_id: Option(String),
     join_timestamp: Timestamp,
-    guild_member: Option(guild.Member),
+    guild_member: Option(GuildMember),
   )
 }
 
@@ -220,7 +220,7 @@ pub fn member_decoder() -> decode.Decoder(Member) {
   use guild_member <- decode.optional_field(
     "member",
     None,
-    decode.optional(guild.member_decoder()),
+    decode.optional(guild_member.decoder()),
   )
   decode.success(Member(thread_id:, user_id:, join_timestamp:, guild_member:))
 }

@@ -371,6 +371,7 @@ pub type VideoQualityMode {
 pub type ReceivedThreads {
   ReceivedThreads(
     threads: List(Thread),
+    // TODO: Rename to current_members or something
     members: List(thread.Member),
     has_more: Bool,
   )

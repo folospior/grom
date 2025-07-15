@@ -2,12 +2,14 @@ import gleam/bool
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
+import gleam/http/response
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
+import grom/channel/thread.{type Thread}
 import grom/client.{type Client}
 import grom/emoji.{type Emoji}
 import grom/error.{type Error}
@@ -162,37 +164,6 @@ pub type NsfwLevel {
   NsfwAgeRestricted
 }
 
-pub type Member {
-  Member(
-    user: Option(User),
-    nick: Option(String),
-    avatar_hash: Option(String),
-    banner_hash: Option(String),
-    roles: List(String),
-    joined_at: Timestamp,
-    premium_since: Option(Timestamp),
-    is_deaf: Option(Bool),
-    is_mute: Option(Bool),
-    flags: List(MemberFlag),
-    is_pending: Option(Bool),
-    permissions: Option(String),
-    communication_disabled_until: Option(Timestamp),
-    avatar_decoration_data: Option(user.AvatarDecorationData),
-  )
-}
-
-pub type MemberFlag {
-  MemberDidRejoin
-  MemberCompletedOnboarding
-  MemberBypassesVerification
-  MemberStartedOnboarding
-  MemberIsGuest
-  MemberStartedHomeActions
-  MemberCompletedHomeActions
-  MemberQuarantinedBecauseOfUsername
-  MemberAcknowledgedDmSettingsUpsell
-}
-
 pub type Preview {
   Preview(
     id: String,
@@ -271,6 +242,10 @@ pub opaque type Modify {
   )
 }
 
+pub type ReceivedThreads {
+  ReceivedThreads(threads: List(Thread), current_members: List(thread.Member))
+}
+
 // FLAGS ------------------------------------------------------------------
 
 @internal
@@ -288,21 +263,6 @@ pub fn bits_system_channel_flags() -> List(#(Int, SystemChannelFlag)) {
       int.bitwise_shift_left(1, 5),
       SuppressRoleSubscriptionPurchaseNotificationReplies,
     ),
-  ]
-}
-
-@internal
-pub fn bits_member_flags() {
-  [
-    #(int.bitwise_shift_left(1, 0), MemberDidRejoin),
-    #(int.bitwise_shift_left(1, 1), MemberCompletedOnboarding),
-    #(int.bitwise_shift_left(1, 2), MemberBypassesVerification),
-    #(int.bitwise_shift_left(1, 3), MemberStartedOnboarding),
-    #(int.bitwise_shift_left(1, 4), MemberIsGuest),
-    #(int.bitwise_shift_left(1, 5), MemberStartedHomeActions),
-    #(int.bitwise_shift_left(1, 6), MemberCompletedHomeActions),
-    #(int.bitwise_shift_left(1, 7), MemberQuarantinedBecauseOfUsername),
-    #(int.bitwise_shift_left(1, 9), MemberAcknowledgedDmSettingsUpsell),
   ]
 }
 
@@ -677,84 +637,6 @@ pub fn ban_decoder() -> decode.Decoder(Ban) {
 }
 
 @internal
-pub fn member_decoder() -> decode.Decoder(Member) {
-  use user <- decode.optional_field(
-    "user",
-    None,
-    decode.optional(user.decoder()),
-  )
-  use nick <- decode.optional_field(
-    "nick",
-    None,
-    decode.optional(decode.string),
-  )
-  use avatar_hash <- decode.optional_field(
-    "avatar",
-    None,
-    decode.optional(decode.string),
-  )
-  use banner_hash <- decode.optional_field(
-    "banner",
-    None,
-    decode.optional(decode.string),
-  )
-  use roles <- decode.field("roles", decode.list(decode.string))
-  use joined_at <- decode.field("joined_at", time_rfc3339.decoder())
-  use premium_since <- decode.optional_field(
-    "premium_since",
-    None,
-    decode.optional(time_rfc3339.decoder()),
-  )
-  use is_deaf <- decode.optional_field(
-    "deaf",
-    None,
-    decode.optional(decode.bool),
-  )
-  use is_mute <- decode.optional_field(
-    "mute",
-    None,
-    decode.optional(decode.bool),
-  )
-  use flags <- decode.field("flags", flags.decoder(bits_member_flags()))
-  use is_pending <- decode.optional_field(
-    "pending",
-    None,
-    decode.optional(decode.bool),
-  )
-  use permissions <- decode.optional_field(
-    "permissions",
-    None,
-    decode.optional(decode.string),
-  )
-  use communication_disabled_until <- decode.optional_field(
-    "communication_disabled_until",
-    None,
-    decode.optional(time_rfc3339.decoder()),
-  )
-  use avatar_decoration_data <- decode.optional_field(
-    "avatar_decoration_data",
-    None,
-    decode.optional(user.avatar_decoration_data_decoder()),
-  )
-  decode.success(Member(
-    user:,
-    nick:,
-    avatar_hash:,
-    banner_hash:,
-    roles:,
-    joined_at:,
-    premium_since:,
-    is_deaf:,
-    is_mute:,
-    flags:,
-    is_pending:,
-    permissions:,
-    communication_disabled_until:,
-    avatar_decoration_data:,
-  ))
-}
-
-@internal
 pub fn preview_decoder() -> decode.Decoder(Preview) {
   use id <- decode.field("id", decode.string)
   use name <- decode.field("name", decode.string)
@@ -815,6 +697,16 @@ pub fn template_decoder() -> decode.Decoder(Template) {
     source_guild_id:,
     is_dirty:,
   ))
+}
+
+@internal
+pub fn received_threads_decoder() -> decode.Decoder(ReceivedThreads) {
+  use threads <- decode.field("threads", decode.list(thread.decoder()))
+  use current_members <- decode.field(
+    "members",
+    decode.list(thread.member_decoder()),
+  )
+  decode.success(ReceivedThreads(threads:, current_members:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1390,4 +1282,19 @@ pub fn delete(client: Client, id guild_id: String) -> Result(Nil, Error) {
   )
 
   Ok(Nil)
+}
+
+pub fn get_active_threads(
+  client: Client,
+  in guild_id: String,
+) -> Result(ReceivedThreads, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/threads/active")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: received_threads_decoder())
+  |> result.map_error(error.CouldNotDecode)
 }
