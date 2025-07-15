@@ -2621,3 +2621,93 @@ pub fn create(
   |> json.parse(using: decoder())
   |> result.map_error(error.CouldNotDecode)
 }
+
+pub fn new_create_text(named name: String, in guild_id: String) -> CreateText {
+  CreateText(guild_id, name, None, None, None, None, None, False, None, None)
+}
+
+pub fn new_create_dm(to recipient_id: String) -> CreateDm {
+  CreateDm(recipient_id:)
+}
+
+pub fn new_create_voice(named name: String, in guild_id: String) -> CreateVoice {
+  CreateVoice(
+    guild_id,
+    name,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    False,
+    None,
+    None,
+  )
+}
+
+pub fn new_create_category(
+  named name: String,
+  in guild_id: String,
+) -> CreateCategory {
+  CreateCategory(guild_id, name, None, None)
+}
+
+pub fn new_create_announcement(
+  named name: String,
+  in guild_id: String,
+) -> CreateAnnouncement {
+  CreateAnnouncement(guild_id, name, None, None, None, None, False, None, None)
+}
+
+pub fn new_create_stage(named name: String, in guild_id: String) -> CreateStage {
+  CreateStage(
+    guild_id,
+    name,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    False,
+    None,
+    None,
+  )
+}
+
+pub fn new_create_forum(named name: String, in guild_id: String) -> CreateForum {
+  CreateForum(
+    guild_id,
+    name,
+    None,
+    None,
+    None,
+    None,
+    None,
+    False,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+  )
+}
+
+pub fn new_create_media(named name: String, in guild_id: String) -> CreateMedia {
+  CreateMedia(
+    guild_id,
+    name,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+  )
+}
