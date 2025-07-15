@@ -1,8 +1,14 @@
 import gleam/dynamic/decode
+import gleam/http
 import gleam/int
+import gleam/json
 import gleam/option.{type Option, None}
+import gleam/result
 import gleam/time/timestamp.{type Timestamp}
+import grom/client.{type Client}
+import grom/error
 import grom/internal/flags
+import grom/internal/rest
 import grom/internal/time_rfc3339
 import grom/user.{type User}
 
@@ -134,4 +140,25 @@ pub fn decoder() -> decode.Decoder(GuildMember) {
     communication_disabled_until:,
     avatar_decoration_data:,
   ))
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get(
+  client: Client,
+  for guild_id: String,
+  id user_id: String,
+) -> Result(GuildMember, error.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/guilds/" <> guild_id <> "/members/" <> user_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
 }
