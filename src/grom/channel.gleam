@@ -238,6 +238,127 @@ pub opaque type Modify {
   )
 }
 
+pub type Create {
+  CreateTextChannel(CreateText)
+  CreateDmChannel(CreateDm)
+  CreateVoiceChannel(CreateVoice)
+  CreateCategoryChannel(CreateCategory)
+  CreateAnnouncementChannel(CreateAnnouncement)
+  CreateStageChannel(CreateStage)
+  CreateForumChannel(CreateForum)
+  CreateMediaChannel(CreateMedia)
+}
+
+pub type CreateText {
+  CreateText(
+    guild_id: String,
+    name: String,
+    position: Option(Int),
+    permission_overwrites: Option(List(permission_overwrite.Create)),
+    topic: Option(String),
+    rate_limit_per_user: Option(Duration),
+    parent_id: Option(String),
+    is_nsfw: Bool,
+    default_auto_archive_duration: Option(Duration),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+}
+
+pub type CreateDm {
+  CreateDm(recipient_id: String)
+}
+
+pub type CreateVoice {
+  CreateVoice(
+    guild_id: String,
+    name: String,
+    position: Option(Int),
+    permission_overwrites: Option(List(permission_overwrite.Create)),
+    bitrate: Option(Int),
+    user_limit: Option(Int),
+    rate_limit_per_user: Option(Duration),
+    parent_id: Option(String),
+    is_nsfw: Bool,
+    rtc_region: Option(String),
+    video_quality_mode: Option(VideoQualityMode),
+  )
+}
+
+pub type CreateCategory {
+  CreateCategory(
+    guild_id: String,
+    name: String,
+    position: Option(Int),
+    permission_overwrites: Option(List(permission_overwrite.Create)),
+  )
+}
+
+pub type CreateAnnouncement {
+  CreateAnnouncement(
+    guild_id: String,
+    name: String,
+    position: Option(Int),
+    permission_overwrites: Option(List(permission_overwrite.Create)),
+    topic: Option(String),
+    parent_id: Option(String),
+    is_nsfw: Bool,
+    default_auto_archive_duration: Option(Duration),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+}
+
+pub type CreateStage {
+  CreateStage(
+    guild_id: String,
+    name: String,
+    position: Option(Int),
+    permission_overwrites: Option(List(permission_overwrite.Create)),
+    bitrate: Option(Int),
+    user_limit: Option(Int),
+    rate_limit_per_user: Option(Duration),
+    parent_id: Option(String),
+    is_nsfw: Bool,
+    rtc_region: Option(String),
+    video_quality_mode: Option(VideoQualityMode),
+  )
+}
+
+pub type CreateForum {
+  CreateForum(
+    guild_id: String,
+    name: String,
+    position: Option(Int),
+    permission_overwrites: Option(List(permission_overwrite.Create)),
+    topic: Option(String),
+    rate_limit_per_user: Option(Duration),
+    parent_id: Option(String),
+    is_nsfw: Bool,
+    default_auto_archive_duration: Option(Duration),
+    default_reaction_emoji: Option(forum.DefaultReaction),
+    available_tags: Option(List(forum.Tag)),
+    default_sort_order: Option(forum.SortOrder),
+    default_forum_layout: Option(forum.Layout),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+}
+
+pub type CreateMedia {
+  CreateMedia(
+    guild_id: String,
+    name: String,
+    position: Option(Int),
+    permission_overwrites: Option(List(permission_overwrite.Create)),
+    topic: Option(String),
+    rate_limit_per_user: Option(Duration),
+    parent_id: Option(String),
+    default_auto_archive_duration: Option(Duration),
+    default_reaction_emoji: Option(forum.DefaultReaction),
+    available_tags: Option(List(forum.Tag)),
+    default_sort_order: Option(forum.SortOrder),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+}
+
 pub type FollowedChannel {
   FollowedChannel(channel_id: String, webhook_id: String)
 }
@@ -787,6 +908,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.default_auto_archive_duration
         |> modification.encode(
           "default_auto_archive_duration",
+          // FIXME: THIS IS SUPPOSED TO BE MINUTES!!!
           time_duration.to_int_seconds_encode,
         )
 
@@ -1162,13 +1284,6 @@ pub fn modify_to_json(modify: Modify) -> Json {
           forum.sort_order_type_encode,
         )
 
-      let default_layout = case modify.default_layout {
-        Some(layout) -> [
-          #("default_forum_layout", forum.layout_type_encode(layout)),
-        ]
-        None -> []
-      }
-
       [
         name,
         position,
@@ -1183,7 +1298,6 @@ pub fn modify_to_json(modify: Modify) -> Json {
         default_reaction_emoji,
         default_thread_rate_limit_per_user,
         default_sort_order,
-        default_layout,
       ]
       |> list.flatten
       |> json.object
@@ -1291,6 +1405,548 @@ pub fn video_quality_mode_to_json(video_quality_mode: VideoQualityMode) -> Json 
     HDVideoQuality -> 2
   }
   |> json.int
+}
+
+@internal
+pub fn create_to_json(create: Create) -> Json {
+  case create {
+    CreateTextChannel(inner) -> create_text_to_json(inner)
+    CreateDmChannel(inner) -> create_dm_to_json(inner)
+    CreateVoiceChannel(inner) -> create_voice_to_json(inner)
+    CreateCategoryChannel(inner) -> create_category_to_json(inner)
+    CreateAnnouncementChannel(inner) -> create_announcement_to_json(inner)
+    CreateStageChannel(inner) -> create_stage_to_json(inner)
+    CreateForumChannel(inner) -> create_forum_to_json(inner)
+    CreateMediaChannel(inner) -> create_media_to_json(inner)
+  }
+}
+
+@internal
+pub fn create_text_to_json(create_text: CreateText) -> Json {
+  let name = [#("name", json.string(create_text.name))]
+
+  let position = case create_text.position {
+    Some(position) -> [#("position", json.int(position))]
+    None -> []
+  }
+
+  let permission_overwrites = case create_text.permission_overwrites {
+    Some(overwrites) -> [
+      #(
+        "permission_overwrites",
+        json.array(overwrites, permission_overwrite.create_to_json),
+      ),
+    ]
+    None -> []
+  }
+
+  let topic = case create_text.topic {
+    Some(topic) -> [#("topic", json.string(topic))]
+    None -> []
+  }
+
+  let rate_limit_per_user = case create_text.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  let parent_id = case create_text.parent_id {
+    Some(id) -> [#("parent_id", json.string(id))]
+    None -> []
+  }
+
+  let is_nsfw = [#("nsfw", json.bool(create_text.is_nsfw))]
+
+  let default_auto_archive_duration = case
+    create_text.default_auto_archive_duration
+  {
+    Some(duration) -> [
+      #(
+        "default_auto_archive_duration",
+        json.int(time_duration.to_int_seconds(duration) / 60),
+      ),
+    ]
+    None -> []
+  }
+
+  let default_thread_rate_limit_per_user = case
+    create_text.default_thread_rate_limit_per_user
+  {
+    Some(limit) -> [
+      #(
+        "default_thread_rate_limit_per_user",
+        time_duration.to_int_seconds_encode(limit),
+      ),
+    ]
+    None -> []
+  }
+
+  [
+    name,
+    position,
+    permission_overwrites,
+    topic,
+    rate_limit_per_user,
+    parent_id,
+    is_nsfw,
+    default_auto_archive_duration,
+    default_thread_rate_limit_per_user,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn create_dm_to_json(create_dm: CreateDm) -> Json {
+  json.object([#("recipient_id", json.string(create_dm.recipient_id))])
+}
+
+@internal
+pub fn create_voice_to_json(create_voice: CreateVoice) -> Json {
+  let name = [#("name", json.string(create_voice.name))]
+
+  let position = case create_voice.position {
+    Some(position) -> [#("position", json.int(position))]
+    None -> []
+  }
+
+  let permission_overwrites = case create_voice.permission_overwrites {
+    Some(overwrites) -> [
+      #(
+        "permission_overwrites",
+        json.array(overwrites, permission_overwrite.create_to_json),
+      ),
+    ]
+    None -> []
+  }
+
+  let bitrate = case create_voice.bitrate {
+    Some(bitrate) -> [#("bitrate", json.int(bitrate))]
+    None -> []
+  }
+
+  let user_limit = case create_voice.user_limit {
+    Some(limit) -> [#("user_limit", json.int(limit))]
+    None -> []
+  }
+
+  let rate_limit_per_user = case create_voice.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  let parent_id = case create_voice.parent_id {
+    Some(id) -> [#("parent_id", json.string(id))]
+    None -> []
+  }
+
+  let is_nsfw = [#("nsfw", json.bool(create_voice.is_nsfw))]
+
+  let rtc_region = case create_voice.rtc_region {
+    Some(region) -> [#("rtc_region", json.string(region))]
+    None -> []
+  }
+
+  let video_quality_mode = case create_voice.video_quality_mode {
+    Some(mode) -> [#("video_quality_mode", video_quality_mode_to_json(mode))]
+    None -> []
+  }
+
+  [
+    name,
+    position,
+    permission_overwrites,
+    bitrate,
+    user_limit,
+    rate_limit_per_user,
+    parent_id,
+    is_nsfw,
+    rtc_region,
+    video_quality_mode,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn create_category_to_json(create_category: CreateCategory) -> Json {
+  let name = [#("name", json.string(create_category.name))]
+
+  let position = case create_category.position {
+    Some(position) -> [#("position", json.int(position))]
+    None -> []
+  }
+
+  let permission_overwrites = case create_category.permission_overwrites {
+    Some(overwrites) -> [
+      #(
+        "permission_overwrites",
+        json.array(overwrites, permission_overwrite.create_to_json),
+      ),
+    ]
+    None -> []
+  }
+
+  [name, position, permission_overwrites]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn create_announcement_to_json(
+  create_announcement: CreateAnnouncement,
+) -> Json {
+  let name = [#("name", json.string(create_announcement.name))]
+
+  let position = case create_announcement.position {
+    Some(position) -> [#("position", json.int(position))]
+    None -> []
+  }
+
+  let permission_overwrites = case create_announcement.permission_overwrites {
+    Some(overwrites) -> [
+      #(
+        "permission_overwrites",
+        json.array(overwrites, permission_overwrite.create_to_json),
+      ),
+    ]
+    None -> []
+  }
+
+  let topic = case create_announcement.topic {
+    Some(topic) -> [#("topic", json.string(topic))]
+    None -> []
+  }
+
+  let parent_id = case create_announcement.parent_id {
+    Some(id) -> [#("parent_id", json.string(id))]
+    None -> []
+  }
+
+  let is_nsfw = [#("nsfw", json.bool(create_announcement.is_nsfw))]
+
+  let default_auto_archive_duration = case
+    create_announcement.default_auto_archive_duration
+  {
+    Some(duration) -> [
+      #(
+        "default_auto_archive_duration",
+        time_duration.to_int_seconds(duration) / 60
+          |> json.int,
+      ),
+    ]
+    None -> []
+  }
+
+  let default_thread_rate_limit_per_user = case
+    create_announcement.default_thread_rate_limit_per_user
+  {
+    Some(limit) -> [
+      #(
+        "default_thread_rate_limit_per_user",
+        time_duration.to_int_seconds_encode(limit),
+      ),
+    ]
+    None -> []
+  }
+
+  [
+    name,
+    position,
+    permission_overwrites,
+    topic,
+    parent_id,
+    is_nsfw,
+    default_auto_archive_duration,
+    default_thread_rate_limit_per_user,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn create_stage_to_json(create_stage: CreateStage) -> Json {
+  let name = [#("name", json.string(create_stage.name))]
+
+  let position = case create_stage.position {
+    Some(position) -> [#("position", json.int(position))]
+    None -> []
+  }
+
+  let permission_overwrites = case create_stage.permission_overwrites {
+    Some(overwrites) -> [
+      #(
+        "permission_overwrites",
+        json.array(overwrites, permission_overwrite.create_to_json),
+      ),
+    ]
+    None -> []
+  }
+
+  let bitrate = case create_stage.bitrate {
+    Some(bitrate) -> [#("bitrate", json.int(bitrate))]
+    None -> []
+  }
+
+  let user_limit = case create_stage.user_limit {
+    Some(limit) -> [#("user_limit", json.int(limit))]
+    None -> []
+  }
+
+  let rate_limit_per_user = case create_stage.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  let parent_id = case create_stage.parent_id {
+    Some(id) -> [#("parent_id", json.string(id))]
+    None -> []
+  }
+
+  let is_nsfw = [#("nsfw", json.bool(create_stage.is_nsfw))]
+
+  let rtc_region = case create_stage.rtc_region {
+    Some(region) -> [#("rtc_region", json.string(region))]
+    None -> []
+  }
+
+  let video_quality_mode = case create_stage.video_quality_mode {
+    Some(mode) -> [#("video_quality_mode", video_quality_mode_to_json(mode))]
+    None -> []
+  }
+
+  [
+    name,
+    position,
+    permission_overwrites,
+    bitrate,
+    user_limit,
+    rate_limit_per_user,
+    parent_id,
+    is_nsfw,
+    rtc_region,
+    video_quality_mode,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn create_forum_to_json(create_forum: CreateForum) -> Json {
+  let name = [#("name", json.string(create_forum.name))]
+
+  let position = case create_forum.position {
+    Some(position) -> [#("position", json.int(position))]
+    None -> []
+  }
+
+  let permission_overwrites = case create_forum.permission_overwrites {
+    Some(overwrites) -> [
+      #(
+        "permission_overwrites",
+        json.array(overwrites, permission_overwrite.create_to_json),
+      ),
+    ]
+    None -> []
+  }
+
+  let topic = case create_forum.topic {
+    Some(topic) -> [#("topic", json.string(topic))]
+    None -> []
+  }
+
+  let rate_limit_per_user = case create_forum.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  let parent_id = case create_forum.parent_id {
+    Some(id) -> [#("parent_id", json.string(id))]
+    None -> []
+  }
+
+  let is_nsfw = [#("nsfw", json.bool(create_forum.is_nsfw))]
+
+  let default_auto_archive_duration = case
+    create_forum.default_auto_archive_duration
+  {
+    Some(duration) -> [
+      #(
+        "default_auto_archive_duration",
+        time_duration.to_int_seconds(duration) / 60
+          |> json.int,
+      ),
+    ]
+    None -> []
+  }
+
+  let default_reaction_emoji = case create_forum.default_reaction_emoji {
+    Some(emoji) -> [
+      #("default_reaction_emoji", forum.default_reaction_encode(emoji)),
+    ]
+    None -> []
+  }
+
+  let available_tags = case create_forum.available_tags {
+    Some(tags) -> [#("available_tags", json.array(tags, forum.tag_to_json))]
+    None -> []
+  }
+
+  let default_sort_order = case create_forum.default_sort_order {
+    Some(order) -> [
+      #("default_sort_order", forum.sort_order_type_encode(order)),
+    ]
+    None -> []
+  }
+
+  let default_forum_layout = case create_forum.default_forum_layout {
+    Some(layout) -> [#("default_forum_layout", forum.layout_to_json(layout))]
+    None -> []
+  }
+
+  let default_thread_rate_limit_per_user = case
+    create_forum.default_thread_rate_limit_per_user
+  {
+    Some(limit) -> [
+      #(
+        "default_thread_rate_limit_per_user",
+        time_duration.to_int_seconds_encode(limit),
+      ),
+    ]
+    None -> []
+  }
+
+  [
+    name,
+    position,
+    permission_overwrites,
+    topic,
+    rate_limit_per_user,
+    parent_id,
+    is_nsfw,
+    default_auto_archive_duration,
+    default_reaction_emoji,
+    available_tags,
+    default_sort_order,
+    default_forum_layout,
+    default_thread_rate_limit_per_user,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn create_media_to_json(create_media: CreateMedia) -> Json {
+  let name = [#("name", json.string(create_media.name))]
+
+  let position = case create_media.position {
+    Some(position) -> [#("position", json.int(position))]
+    None -> []
+  }
+
+  let permission_overwrites = case create_media.permission_overwrites {
+    Some(overwrites) -> [
+      #(
+        "permission_overwrites",
+        json.array(overwrites, permission_overwrite.create_to_json),
+      ),
+    ]
+    None -> []
+  }
+
+  let topic = case create_media.topic {
+    Some(topic) -> [#("topic", json.string(topic))]
+    None -> []
+  }
+
+  let rate_limit_per_user = case create_media.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  let parent_id = case create_media.parent_id {
+    Some(id) -> [#("parent_id", json.string(id))]
+    None -> []
+  }
+
+  let is_nsfw = [#("nsfw", json.bool(create_media.is_nsfw))]
+
+  let default_auto_archive_duration = case
+    create_media.default_auto_archive_duration
+  {
+    Some(duration) -> [
+      #(
+        "default_auto_archive_duration",
+        time_duration.to_int_seconds(duration) / 60
+          |> json.int,
+      ),
+    ]
+    None -> []
+  }
+
+  let default_reaction_emoji = case create_media.default_reaction_emoji {
+    Some(emoji) -> [
+      #("default_reaction_emoji", forum.default_reaction_encode(emoji)),
+    ]
+    None -> []
+  }
+
+  let available_tags = case create_media.available_tags {
+    Some(tags) -> [#("available_tags", json.array(tags, forum.tag_to_json))]
+    None -> []
+  }
+
+  let default_sort_order = case create_media.default_sort_order {
+    Some(order) -> [
+      #("default_sort_order", forum.sort_order_type_encode(order)),
+    ]
+    None -> []
+  }
+
+  let default_forum_layout = case create_media.default_forum_layout {
+    Some(layout) -> [#("default_forum_layout", forum.layout_to_json(layout))]
+    None -> []
+  }
+
+  let default_thread_rate_limit_per_user = case
+    create_media.default_thread_rate_limit_per_user
+  {
+    Some(limit) -> [
+      #(
+        "default_thread_rate_limit_per_user",
+        time_duration.to_int_seconds_encode(limit),
+      ),
+    ]
+    None -> []
+  }
+
+  [
+    name,
+    position,
+    permission_overwrites,
+    topic,
+    rate_limit_per_user,
+    parent_id,
+    is_nsfw,
+    default_auto_archive_duration,
+    default_reaction_emoji,
+    available_tags,
+    default_sort_order,
+    default_forum_layout,
+    default_thread_rate_limit_per_user,
+  ]
+  |> list.flatten
+  |> json.object
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
@@ -1402,6 +2058,7 @@ pub fn modify_name(modify: Modify, new name: String) -> Modify {
   }
 }
 
+/// Only applies to `Text` channels. If ran on any other, the function has no effect.
 pub fn convert_text_to_announcement(modify: Modify) -> Modify {
   case modify {
     ModifyText(..) -> ModifyText(..modify, convert_to_announcement: True)
@@ -1409,6 +2066,7 @@ pub fn convert_text_to_announcement(modify: Modify) -> Modify {
   }
 }
 
+/// Only applies to `Announcement` channels. If ran on any other, the function has no effect.
 pub fn convert_announcement_to_text(modify: Modify) -> Modify {
   case modify {
     ModifyAnnouncement(..) ->
@@ -1417,6 +2075,7 @@ pub fn convert_announcement_to_text(modify: Modify) -> Modify {
   }
 }
 
+/// Only applies to `Text`, `Voice`, `Category`, `Announcement`, `Stage`, `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_position(modify: Modify, position: Modification(Int)) -> Modify {
   case modify {
     ModifyText(..) -> ModifyText(..modify, position:)
@@ -1430,6 +2089,7 @@ pub fn modify_position(modify: Modify, position: Modification(Int)) -> Modify {
   }
 }
 
+/// Only applies to `Text`, `Announcement`, `Forum`, and `Media` channnels. If ran on any other, the function has no effect.
 pub fn modify_topic(modify: Modify, topic: Modification(String)) -> Modify {
   case modify {
     ModifyText(..) -> ModifyText(..modify, topic:)
@@ -1440,6 +2100,7 @@ pub fn modify_topic(modify: Modify, topic: Modification(String)) -> Modify {
   }
 }
 
+/// Only applies to `Text`, `Voice`, `Announcement`, `Stage`, `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_nsfw_status(modify: Modify, is_nsfw: Bool) -> Modify {
   case modify {
     ModifyText(..) -> ModifyText(..modify, is_nsfw: Some(is_nsfw))
@@ -1453,6 +2114,7 @@ pub fn modify_nsfw_status(modify: Modify, is_nsfw: Bool) -> Modify {
   }
 }
 
+/// Only applies to `Text`, `Voice`, `Stage`, `Forum`, `Media`, and `Thread` channels. If ran on any other, the function has no effect.
 pub fn modify_rate_limit_per_user(
   modify: Modify,
   rate_limit_per_user: Modification(Duration),
@@ -1468,6 +2130,7 @@ pub fn modify_rate_limit_per_user(
   }
 }
 
+/// Only applies to `Voice`, and `Stage` channels. If ran on any other, the function has no effect.
 pub fn modify_bitrate(modify: Modify, bitrate: Modification(Int)) -> Modify {
   case modify {
     ModifyVoice(..) -> ModifyVoice(..modify, bitrate:)
@@ -1476,6 +2139,7 @@ pub fn modify_bitrate(modify: Modify, bitrate: Modification(Int)) -> Modify {
   }
 }
 
+/// Only applies to `Voice`, and `Stage` channels. If ran on any other, the function has no effect.
 pub fn modify_user_limit(
   modify: Modify,
   user_limit: Modification(Int),
@@ -1487,6 +2151,7 @@ pub fn modify_user_limit(
   }
 }
 
+/// Only applies to `Text`, `Voice`, `Category`, `Announcement`, `Stage`, `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_permission_overwrites(
   modify: Modify,
   permission_overwrites: Modification(List(permission_overwrite.Create)),
@@ -1504,6 +2169,7 @@ pub fn modify_permission_overwrites(
   }
 }
 
+/// Only applies to `Text`, `Voice`, `Announcement`, `Stage`, `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_parent_id(
   modify: Modify,
   parent_id: Modification(String),
@@ -1519,6 +2185,7 @@ pub fn modify_parent_id(
   }
 }
 
+/// Only applies to `Voice`, and `Stage` channels. If ran on any other, the function has no effect.
 pub fn modify_rtc_region_id(
   modify: Modify,
   rtc_region_id: Modification(String),
@@ -1530,6 +2197,7 @@ pub fn modify_rtc_region_id(
   }
 }
 
+/// Only applies to `Voice`, and `Stage` channels. If ran on any other, the function has no effect.
 pub fn modify_video_quality_mode(
   modify: Modify,
   video_quality_mode: Modification(VideoQualityMode),
@@ -1541,6 +2209,7 @@ pub fn modify_video_quality_mode(
   }
 }
 
+/// Only applies to `Text`, `Announcement`, `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_default_auto_archive_duration(
   modify: Modify,
   default_auto_archive_duration: Modification(Duration),
@@ -1555,6 +2224,7 @@ pub fn modify_default_auto_archive_duration(
   }
 }
 
+/// Only applies to `Forum` channels. If ran on any other, the function has no effect.
 pub fn modify_forum_flags(modify: Modify, new flags: List(forum.Flag)) -> Modify {
   case modify {
     ModifyForum(..) -> ModifyForum(..modify, flags: Some(flags))
@@ -1562,6 +2232,7 @@ pub fn modify_forum_flags(modify: Modify, new flags: List(forum.Flag)) -> Modify
   }
 }
 
+/// Only applies to `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_media_flags(modify: Modify, new flags: List(media.Flag)) -> Modify {
   case modify {
     ModifyMedia(..) -> ModifyMedia(..modify, flags: Some(flags))
@@ -1569,6 +2240,7 @@ pub fn modify_media_flags(modify: Modify, new flags: List(media.Flag)) -> Modify
   }
 }
 
+/// Only applies to `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_available_tags(
   modify: Modify,
   new available_tags: List(forum.Tag),
@@ -1582,6 +2254,7 @@ pub fn modify_available_tags(
   }
 }
 
+/// Only applies to `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_default_reaction_emoji(
   modify: Modify,
   default_reaction_emoji: Modification(forum.DefaultReaction),
@@ -1593,6 +2266,7 @@ pub fn modify_default_reaction_emoji(
   }
 }
 
+/// Only applies to `Text`, `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_default_thread_rate_limit_per_user(
   modify: Modify,
   new default_thread_rate_limit_per_user: Duration,
@@ -1623,6 +2297,7 @@ pub fn modify_default_thread_rate_limit_per_user(
   }
 }
 
+/// Only applies to `Forum`, and `Media` channels. If ran on any other, the function has no effect.
 pub fn modify_default_sort_order(
   modify: Modify,
   default_sort_order: Modification(forum.SortOrder),
@@ -1634,6 +2309,7 @@ pub fn modify_default_sort_order(
   }
 }
 
+/// Only applies to `Forum` channels. If ran on any other, the function has no effect.
 pub fn modify_forum_default_layout(
   modify: Modify,
   new default_layout: forum.Layout,
@@ -1645,6 +2321,7 @@ pub fn modify_forum_default_layout(
   }
 }
 
+/// Only applies to `Thread` channels. If ran on any other, the function has no effect.
 pub fn archive_thread(modify: Modify) -> Modify {
   case modify {
     ModifyThread(..) -> ModifyThread(..modify, is_archived: Some(True))
@@ -1652,6 +2329,7 @@ pub fn archive_thread(modify: Modify) -> Modify {
   }
 }
 
+/// Only applies to `Thread` channels. If ran on any other, the function has no effect.
 pub fn unarchive_thread(modify: Modify) -> Modify {
   case modify {
     ModifyThread(..) -> ModifyThread(..modify, is_archived: Some(False))
@@ -1659,6 +2337,7 @@ pub fn unarchive_thread(modify: Modify) -> Modify {
   }
 }
 
+/// Only applies to `Thread` channels. If ran on any other, the function has no effect.
 pub fn modify_auto_archive_duration(
   modify: Modify,
   new auto_archive_duration: Duration,
@@ -1670,6 +2349,7 @@ pub fn modify_auto_archive_duration(
   }
 }
 
+/// Only applies to `Thread` channels. If ran on any other, the function has no effect.
 pub fn lock_thread(modify: Modify) -> Modify {
   case modify {
     ModifyThread(..) -> ModifyThread(..modify, is_locked: Some(True))
@@ -1677,6 +2357,7 @@ pub fn lock_thread(modify: Modify) -> Modify {
   }
 }
 
+/// Only applies to `Thread` channels. If ran on any other, the function has no effect.
 pub fn unlock_thread(modify: Modify) -> Modify {
   case modify {
     ModifyThread(..) -> ModifyThread(..modify, is_locked: Some(False))
@@ -1684,6 +2365,7 @@ pub fn unlock_thread(modify: Modify) -> Modify {
   }
 }
 
+/// Only applies to `Thread` channels. If ran on any other, the function has no effect.
 pub fn modify_thread_invitable_status(
   modify: Modify,
   is_invitable: Bool,
@@ -1694,6 +2376,7 @@ pub fn modify_thread_invitable_status(
   }
 }
 
+/// Only applies to `Thread` channels. If ran on any other, the function has no effect.
 pub fn modify_thread_flags(
   modify: Modify,
   new flags: List(thread.Flag),
@@ -1704,6 +2387,7 @@ pub fn modify_thread_flags(
   }
 }
 
+/// Only applies to `Thread` channels. If ran on any other, the function has no effect.
 pub fn modify_thread_applied_tags_ids(
   modify: Modify,
   new applied_tags_ids: List(String),
@@ -1888,5 +2572,61 @@ pub fn get_joined_private_archived_threads(
 
   response.body
   |> json.parse(using: received_threads_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_all_from_guild(
+  client: Client,
+  id guild_id: String,
+) -> Result(List(Channel), Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/channels")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(decoder()))
+  |> result.map_error(error.CouldNotDecode)
+}
+
+/// `because` has no effect if creating a DM channel.
+pub fn create(
+  client: Client,
+  using create: Create,
+  because reason: Option(String),
+) -> Result(Channel, Error) {
+  let endpoint = case create {
+    CreateDmChannel(_) -> "/users/@me/channels"
+    CreateTextChannel(inner) -> "/guilds/" <> inner.guild_id <> "/channels"
+    CreateVoiceChannel(inner) -> "/guilds/" <> inner.guild_id <> "/channels"
+    CreateCategoryChannel(inner) -> "/guilds/" <> inner.guild_id <> "/channels"
+    CreateAnnouncementChannel(inner) ->
+      "/guilds/" <> inner.guild_id <> "/channels"
+    CreateStageChannel(inner) -> "/guilds/" <> inner.guild_id <> "/channels"
+    CreateForumChannel(inner) -> "/guilds/" <> inner.guild_id <> "/channels"
+    CreateMediaChannel(inner) -> "/guilds/" <> inner.guild_id <> "/channels"
+  }
+
+  let json =
+    create
+    |> create_to_json
+    |> json.to_string
+
+  let reason = case create {
+    CreateDmChannel(_) -> None
+    _ -> reason
+  }
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, endpoint)
+    |> request.set_body(json)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
   |> result.map_error(error.CouldNotDecode)
 }

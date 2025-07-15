@@ -160,7 +160,7 @@ pub fn sort_order_type_encode(sort_order_type: SortOrder) -> Json {
 }
 
 @internal
-pub fn layout_type_encode(layout_type: Layout) -> Json {
+pub fn layout_to_json(layout_type: Layout) -> Json {
   case layout_type {
     LayoutNotSet -> 0
     ListLayout -> 1
