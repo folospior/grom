@@ -14,6 +14,7 @@ import grom/emoji.{type Emoji}
 import grom/error.{type Error}
 import grom/guild/auto_moderation
 import grom/guild/role.{type Role}
+import grom/guild_member.{type GuildMember}
 import grom/image
 import grom/internal/flags
 import grom/internal/rest
@@ -1295,5 +1296,66 @@ pub fn get_active_threads(
 
   response.body
   |> json.parse(using: received_threads_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+/// If `maximum` is not provided, a default of `1` will be used.
+/// See: https://discord.com/developers/docs/resources/guild#list-guild-members
+pub fn get_members(
+  client: Client,
+  for guild_id: String,
+  maximum limit: Option(Int),
+  later_than_id after: Option(String),
+) -> Result(List(GuildMember), Error) {
+  let query =
+    [
+      case limit {
+        Some(limit) -> [#("limit", int.to_string(limit))]
+        None -> []
+      },
+      case after {
+        Some(id) -> [#("after", id)]
+        None -> []
+      },
+    ]
+    |> list.flatten
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/members")
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(guild_member.decoder()))
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn search_for_members(
+  client: Client,
+  in guild_id: String,
+  named query_param: String,
+  maximum limit: Option(Int),
+) -> Result(List(GuildMember), Error) {
+  let query =
+    [
+      [#("query", query_param)],
+      case limit {
+        Some(limit) -> [#("limit", int.to_string(limit))]
+        None -> []
+      },
+    ]
+    |> list.flatten
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/members/search")
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(guild_member.decoder()))
   |> result.map_error(error.CouldNotDecode)
 }
