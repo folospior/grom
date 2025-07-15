@@ -1,7 +1,7 @@
 import gleam/option.{type Option}
 import grom/channel/thread
-import grom/guild
 import grom/guild/role.{type Role}
+import grom/guild_member.{type GuildMember}
 import grom/message.{type Message}
 import grom/message/attachment.{type Attachment}
 import grom/permission.{type Permission}
@@ -10,7 +10,7 @@ import grom/user.{type User}
 pub type Resolved {
   Resolved(
     users: Option(List(#(String, User))),
-    members: Option(List(#(String, guild.Member))),
+    members: Option(List(#(String, GuildMember))),
     roles: Option(List(#(String, Role))),
     channels: Option(List(#(String, Channel))),
     messages: Option(List(#(String, Message))),

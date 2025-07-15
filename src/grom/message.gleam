@@ -9,8 +9,8 @@ import grom/application.{type Application}
 import grom/channel/thread.{type Thread}
 import grom/client.{type Client}
 import grom/error.{type Error}
-import grom/guild
 import grom/guild/role.{type Role}
+import grom/guild_member.{type GuildMember}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
@@ -158,7 +158,7 @@ pub type Snapshot {
 pub type Resolved {
   Resolved(
     users: Option(Dict(String, User)),
-    members: Option(Dict(String, guild.Member)),
+    members: Option(Dict(String, GuildMember)),
     roles: Option(Dict(String, Role)),
     channels: Option(Dict(String, ResolvedChannel)),
     messages: Option(Dict(String, Message)),
@@ -717,7 +717,7 @@ pub fn resolved_decoder() -> decode.Decoder(Resolved) {
   use members <- decode.optional_field(
     "members",
     None,
-    decode.optional(decode.dict(decode.string, guild.member_decoder())),
+    decode.optional(decode.dict(decode.string, guild_member.decoder())),
   )
   use roles <- decode.optional_field(
     "roles",

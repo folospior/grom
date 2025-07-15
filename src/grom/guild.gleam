@@ -2,7 +2,6 @@ import gleam/bool
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
-import gleam/http/response
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
