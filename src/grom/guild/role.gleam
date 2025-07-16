@@ -1,7 +1,17 @@
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/int
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
+import gleam/result
+import grom/client.{type Client}
+import grom/error.{type Error}
+import grom/image
 import grom/internal/flags
+import grom/internal/rest
+import grom/modification.{type Modification, Skip}
 import grom/permission.{type Permission}
 
 // TYPES -----------------------------------------------------------------------
@@ -10,7 +20,7 @@ pub type Role {
   Role(
     id: String,
     name: String,
-    color: Int,
+    colors: Colors,
     is_hoisted: Bool,
     icon_hash: Option(String),
     unicode_emoji: Option(String),
@@ -38,6 +48,36 @@ pub type Flag {
   InPrompt
 }
 
+pub type Colors {
+  Colors(primary: Int, secondary: Option(Int), tertiary: Option(Int))
+}
+
+pub type Create {
+  Create(
+    /// If None -> "new role"
+    name: Option(String),
+    /// If None -> same as @everyone permissions
+    permissions: Option(List(Permission)),
+    colors: Option(Colors),
+    is_hoisted: Bool,
+    icon: Option(image.Data),
+    unicode_emoji: Option(String),
+    is_mentionable: Bool,
+  )
+}
+
+pub type Modify {
+  Modify(
+    name: Modification(String),
+    permissions: Modification(List(Permission)),
+    colors: Modification(Colors),
+    is_hoisted: Option(Bool),
+    icon: Modification(image.Data),
+    unicode_emoji: Modification(String),
+    is_mentionable: Option(Bool),
+  )
+}
+
 // FLAGS -----------------------------------------------------------------------
 
 @internal
@@ -51,7 +91,7 @@ pub fn bits_flags() -> List(#(Int, Flag)) {
 pub fn decoder() -> decode.Decoder(Role) {
   use id <- decode.field("id", decode.string)
   use name <- decode.field("name", decode.string)
-  use color <- decode.field("color", decode.int)
+  use colors <- decode.field("colors", colors_decoder())
   use is_hoisted <- decode.field("hoisted", decode.bool)
   use icon_hash <- decode.optional_field(
     "icon",
@@ -76,7 +116,7 @@ pub fn decoder() -> decode.Decoder(Role) {
   decode.success(Role(
     id:,
     name:,
-    color:,
+    colors:,
     is_hoisted:,
     icon_hash:,
     unicode_emoji:,
@@ -120,4 +160,228 @@ pub fn tags_decoder() -> decode.Decoder(Tags) {
     available_for_purchase:,
     guild_connections:,
   ))
+}
+
+@internal
+pub fn colors_decoder() -> decode.Decoder(Colors) {
+  use primary <- decode.field("primary_color", decode.int)
+  use secondary <- decode.field("secondary_color", decode.optional(decode.int))
+  use tertiary <- decode.field("tertiary_color", decode.optional(decode.int))
+
+  decode.success(Colors(primary:, secondary:, tertiary:))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn create_to_json(create: Create) -> Json {
+  let name = case create.name {
+    Some(name) -> [#("name", json.string(name))]
+    None -> []
+  }
+
+  let permissions = case create.permissions {
+    Some(permissions) -> [#("permissions", permission.encode(permissions))]
+    None -> []
+  }
+
+  let colors = case create.colors {
+    Some(colors) -> [#("colors", colors_to_json(colors))]
+    None -> []
+  }
+
+  let is_hoisted = [#("hoist", json.bool(create.is_hoisted))]
+
+  let icon = case create.icon {
+    Some(icon) -> [#("icon", image.to_json(icon))]
+    None -> []
+  }
+
+  let unicode_emoji = case create.unicode_emoji {
+    Some(emoji) -> [#("unicode_emoji", json.string(emoji))]
+    None -> []
+  }
+
+  let is_mentionable = [#("mentionable", json.bool(create.is_mentionable))]
+
+  [name, permissions, colors, is_hoisted, icon, unicode_emoji, is_mentionable]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn colors_to_json(colors: Colors) -> Json {
+  json.object([
+    #("primary_color", json.int(colors.primary)),
+    #("secondary_color", json.nullable(colors.secondary, json.int)),
+    #("tertiary_color", json.nullable(colors.tertiary, json.int)),
+  ])
+}
+
+@internal
+pub fn modify_to_json(modify: Modify) -> Json {
+  let name =
+    modify.name
+    |> modification.encode("name", json.string)
+
+  let permissions =
+    modify.permissions
+    |> modification.encode("permissions", permission.encode)
+
+  let colors =
+    modify.colors
+    |> modification.encode("colors", colors_to_json)
+
+  let is_hoisted = case modify.is_hoisted {
+    Some(hoisted) -> [#("hoisted", json.bool(hoisted))]
+    None -> []
+  }
+
+  let icon =
+    modify.icon
+    |> modification.encode("icon", image.to_json)
+
+  let unicode_emoji =
+    modify.unicode_emoji
+    |> modification.encode("unicode_emoji", json.string)
+
+  let is_mentionable = case modify.is_mentionable {
+    Some(mentionable) -> [#("mentionable", json.bool(mentionable))]
+    None -> []
+  }
+
+  [name, permissions, colors, is_hoisted, icon, unicode_emoji, is_mentionable]
+  |> list.flatten
+  |> json.object
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get(
+  client: Client,
+  for guild_id: String,
+  id role_id: String,
+) -> Result(Role, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/guilds/" <> guild_id <> "/roles/" <> role_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn create(
+  client: Client,
+  in guild_id: String,
+  using create: Create,
+  because reason: Option(String),
+) -> Result(Role, Error) {
+  let json =
+    create
+    |> create_to_json
+    |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/guilds/" <> guild_id <> "/roles")
+    |> request.set_body(json)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+/// Usage example:
+/// ```gleam
+/// let create_role_data = role.Create(..role.new_create(), name: Some("name"))
+///
+/// use role <- result.try(
+///   client
+///   |> role.create(
+///     in: "guild_id",
+///     using: create_role_data,
+///     because: Some("reason")
+///   )
+/// )
+/// ```
+pub fn new_create() -> Create {
+  Create(None, None, None, False, None, None, False)
+}
+
+pub fn modify(
+  client: Client,
+  in guild_id: String,
+  id role_id: String,
+  using modify: Modify,
+  because reason: Option(String),
+) -> Result(Role, Error) {
+  let json =
+    modify
+    |> modify_to_json
+    |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Patch,
+      "/guilds/" <> guild_id <> "/roles/" <> role_id,
+    )
+    |> request.set_body(json)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+/// Usage example:
+/// ```gleam
+/// let modify_role_data = role.Modify(
+///   ..role.new_modify(),
+///   name: New("name"),
+///   icon: Delete,
+/// )
+///
+/// use role <- result.try(
+///   client
+///   |> role.modify(
+///     in: "guild_id",
+///     id: "role_id",
+///     using: modify_role_data,
+///     because: Some("reason"),
+///   ),
+/// )
+/// ```
+pub fn new_modify() -> Modify {
+  Modify(Skip, Skip, Skip, None, Skip, Skip, None)
+}
+
+pub fn delete(
+  client: Client,
+  from guild_id: String,
+  id role_id: String,
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/guilds/" <> guild_id <> "/roles/" <> role_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
 }

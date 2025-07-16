@@ -255,6 +255,10 @@ pub type BulkBanResponse {
   )
 }
 
+pub type RoleToMove {
+  RoleToMove(id: String, position: Option(Int))
+}
+
 // FLAGS ------------------------------------------------------------------
 
 @internal
@@ -949,6 +953,19 @@ pub fn feature_to_json(feature: Feature) -> Json {
   |> json.string
 }
 
+@internal
+pub fn role_to_move_to_json(role_to_move: RoleToMove) -> Json {
+  let id = [#("id", json.string(role_to_move.id))]
+  let position = case role_to_move.position {
+    Some(position) -> [#("position", json.int(position))]
+    None -> []
+  }
+
+  [id, position]
+  |> list.flatten
+  |> json.object
+}
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 /// `get_counts`: Whether to get the `approximate_member_count` and `approximate_presence_count`
@@ -1517,5 +1534,45 @@ pub fn bulk_ban(
 
   response.body
   |> json.parse(using: bulk_ban_response_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_roles(
+  client: Client,
+  for guild_id: String,
+) -> Result(List(Role), Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/roles")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(role.decoder()))
+  |> result.map_error(error.CouldNotDecode)
+}
+
+/// Returns a list of all of the guild's roles.
+pub fn move_roles(
+  client: Client,
+  in guild_id: String,
+  roles roles: List(RoleToMove),
+  because reason: Option(String),
+) -> Result(List(Role), Error) {
+  let json =
+    roles
+    |> json.array(role_to_move_to_json)
+    |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/guilds/" <> guild_id <> "/roles")
+    |> request.set_body(json)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(role.decoder()))
   |> result.map_error(error.CouldNotDecode)
 }
