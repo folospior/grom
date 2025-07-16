@@ -7,6 +7,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom/channel/thread.{type Thread}
 import grom/client.{type Client}
@@ -18,6 +19,7 @@ import grom/guild_member.{type GuildMember}
 import grom/image
 import grom/internal/flags
 import grom/internal/rest
+import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/modification.{type Modification, Skip}
 import grom/sticker.{type Sticker}
@@ -244,6 +246,13 @@ pub opaque type Modify {
 
 pub type ReceivedThreads {
   ReceivedThreads(threads: List(Thread), current_members: List(thread.Member))
+}
+
+pub type BulkBanResponse {
+  BulkBanResponse(
+    banned_users_ids: List(String),
+    failed_users_ids: List(String),
+  )
 }
 
 // FLAGS ------------------------------------------------------------------
@@ -707,6 +716,20 @@ pub fn received_threads_decoder() -> decode.Decoder(ReceivedThreads) {
     decode.list(thread.member_decoder()),
   )
   decode.success(ReceivedThreads(threads:, current_members:))
+}
+
+@internal
+pub fn bulk_ban_response_decoder() -> decode.Decoder(BulkBanResponse) {
+  use banned_users_ids <- decode.field(
+    "banned_users",
+    decode.list(decode.string),
+  )
+  use failed_users_ids <- decode.field(
+    "failed_users",
+    decode.list(decode.string),
+  )
+
+  decode.success(BulkBanResponse(banned_users_ids:, failed_users_ids:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1357,5 +1380,142 @@ pub fn search_for_members(
 
   response.body
   |> json.parse(using: decode.list(guild_member.decoder()))
+  |> result.map_error(error.CouldNotDecode)
+}
+
+/// See: https://discord.com/developers/docs/resources/guild#get-guild-bans
+pub fn get_bans(
+  client: Client,
+  for guild_id: String,
+  maximum limit: Option(Int),
+  earlier_than_id before: Option(String),
+  later_than_id after: Option(String),
+) -> Result(List(Ban), Error) {
+  let query =
+    [
+      case limit {
+        Some(limit) -> [#("limit", int.to_string(limit))]
+        None -> []
+      },
+      case before, after {
+        Some(before), _ -> [#("before", before)]
+        None, Some(after) -> [#("after", after)]
+        None, None -> []
+      },
+    ]
+    |> list.flatten
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/bans")
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(ban_decoder()))
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn get_ban(
+  client: Client,
+  from guild_id: String,
+  for user_id: String,
+) -> Result(Ban, Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/bans/" <> user_id)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: ban_decoder())
+  |> result.map_error(error.CouldNotDecode)
+}
+
+pub fn create_ban(
+  client: Client,
+  in guild_id: String,
+  for user_id: String,
+  delete_messages_since delete_message_duration: Option(Duration),
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  let json =
+    case delete_message_duration {
+      Some(duration) -> [
+        #(
+          "delete_message_seconds",
+          time_duration.to_int_seconds_encode(duration),
+        ),
+      ]
+      None -> []
+    }
+    |> json.object
+    |> json.to_string
+
+  use _response <- result.try(
+    client
+    |> rest.new_request(http.Put, "/guilds/" <> guild_id <> "/bans/" <> user_id)
+    |> request.set_body(json)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn remove_ban(
+  client: Client,
+  in guild_id: String,
+  from user_id: String,
+  because reason: Option(String),
+) -> Result(Nil, Error) {
+  use _response <- result.try(
+    client
+    |> rest.new_request(
+      http.Delete,
+      "/guilds/" <> guild_id <> "/bans/" <> user_id,
+    )
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  Ok(Nil)
+}
+
+pub fn bulk_ban(
+  client: Client,
+  in guild_id: String,
+  users user_ids: List(String),
+  delete_messages_since delete_message_duration: Option(Duration),
+  because reason: Option(String),
+) -> Result(BulkBanResponse, Error) {
+  let json =
+    [
+      [#("user_ids", json.array(user_ids, json.string))],
+      case delete_message_duration {
+        Some(duration) -> [
+          #(
+            "delete_message_seconds",
+            time_duration.to_int_seconds_encode(duration),
+          ),
+        ]
+        None -> []
+      },
+    ]
+    |> list.flatten
+    |> json.object
+    |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/guilds/" <> guild_id <> "/bulk-ban")
+    |> request.set_body(json)
+    |> rest.with_reason(reason)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: bulk_ban_response_decoder())
   |> result.map_error(error.CouldNotDecode)
 }
