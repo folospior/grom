@@ -9,7 +9,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
-import grom/client.{type Client}
+import grom
 import grom/error.{type Error}
 import grom/guild_member.{type GuildMember}
 import grom/internal/flags
@@ -371,7 +371,7 @@ pub fn start_without_message_encode(
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn modify(
-  client: Client,
+  client: grom.Client,
   id channel_id: String,
   with modify: Modify,
   because reason: Option(String),
@@ -449,7 +449,7 @@ pub fn modify_applied_tags_ids(
 }
 
 pub fn start_from_message(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
   from message_id: String,
   with start_from_message: StartFromMessage,
@@ -496,7 +496,7 @@ pub fn start_from_message_with_rate_limit_per_user(
 }
 
 pub fn start_without_message(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
   with start_without_message: StartWithoutMessage,
   reason reason: Option(String),
@@ -557,7 +557,7 @@ pub fn start_without_message_with_rate_limit_per_user(
   StartWithoutMessage(..start_without_message, rate_limit_per_user: Some(limit))
 }
 
-pub fn join(client: Client, id thread_id: String) -> Result(Nil, Error) {
+pub fn join(client: grom.Client, id thread_id: String) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -571,7 +571,7 @@ pub fn join(client: Client, id thread_id: String) -> Result(Nil, Error) {
 }
 
 pub fn add_member(
-  client: Client,
+  client: grom.Client,
   to thread_id: String,
   id user_id: String,
 ) -> Result(Nil, Error) {
@@ -587,7 +587,7 @@ pub fn add_member(
   Ok(Nil)
 }
 
-pub fn leave(client: Client, id thread_id: String) -> Result(Nil, Error) {
+pub fn leave(client: grom.Client, id thread_id: String) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -601,7 +601,7 @@ pub fn leave(client: Client, id thread_id: String) -> Result(Nil, Error) {
 }
 
 pub fn remove_member(
-  client: Client,
+  client: grom.Client,
   from thread_id: String,
   id user_id: String,
 ) -> Result(Nil, Error) {
@@ -618,7 +618,7 @@ pub fn remove_member(
 }
 
 pub fn get_member(
-  client: Client,
+  client: grom.Client,
   from thread_id: String,
   id user_id: String,
   with_guild_member with_guild_member: Bool,
@@ -639,7 +639,7 @@ pub fn get_member(
 }
 
 pub fn get_members(
-  client: Client,
+  client: grom.Client,
   from thread_id: String,
   with_guild_member with_guild_member: Bool,
   older_than_id after: Option(String),

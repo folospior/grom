@@ -8,7 +8,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
-import grom/client.{type Client}
+import grom
 import grom/error.{type Error}
 import grom/file.{type File}
 import multipart_form
@@ -58,7 +58,7 @@ pub fn execute_multipart(
 
 @internal
 pub fn new_request(
-  client: Client,
+  client: grom.Client,
   method: http.Method,
   path: String,
 ) -> Request(String) {
@@ -70,14 +70,14 @@ pub fn new_request(
   |> request.prepend_header("authorization", "Bot " <> client.token)
   |> request.prepend_header(
     "user-agent",
-    "DiscordBot (https://github.com/folospior/grom, " <> client.version() <> ")",
+    "DiscordBot (https://github.com/folospior/grom, " <> grom.version() <> ")",
   )
   |> request.prepend_header("content-type", "application/json")
 }
 
 @internal
 pub fn new_multipart_request(
-  client: Client,
+  client: grom.Client,
   method: http.Method,
   path: String,
   payload_json: Json,

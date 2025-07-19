@@ -5,8 +5,8 @@ import gleam/int
 import gleam/json
 import gleam/result
 import gleam/set.{type Set}
+import grom
 import grom/channel.{type Channel}
-import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/guild/audit_log/entry.{type Entry}
 import grom/guild/auto_moderation
@@ -115,7 +115,7 @@ pub fn partial_user_decoder() -> decode.Decoder(PartialUser) {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
   with query: Set(GetQuery),
 ) -> Result(AuditLog, Error) {

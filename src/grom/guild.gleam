@@ -9,8 +9,8 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
+import grom
 import grom/channel/thread.{type Thread}
-import grom/client.{type Client}
 import grom/emoji.{type Emoji}
 import grom/error.{type Error}
 import grom/guild/auto_moderation
@@ -970,7 +970,7 @@ pub fn role_to_move_to_json(role_to_move: RoleToMove) -> Json {
 
 /// `get_counts`: Whether to get the `approximate_member_count` and `approximate_presence_count`
 pub fn get(
-  client: Client,
+  client: grom.Client,
   id guild_id: String,
   get_counts with_counts: Bool,
 ) -> Result(Guild, Error) {
@@ -989,7 +989,7 @@ pub fn get(
 }
 
 pub fn get_preview(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
 ) -> Result(Preview, Error) {
   use response <- result.try(
@@ -1004,7 +1004,7 @@ pub fn get_preview(
 }
 
 pub fn modify(
-  client: Client,
+  client: grom.Client,
   id guild_id: String,
   with modify: Modify,
   because reason: Option(String),
@@ -1170,7 +1170,7 @@ pub fn modify_safety_alerts_channel_id(
   Modify(..modify, safety_alerts_channel_id:)
 }
 
-pub fn leave(client: Client, id guild_id: String) -> Result(Nil, Error) {
+pub fn leave(client: grom.Client, id guild_id: String) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(http.Delete, "/users/@me/guilds/" <> guild_id)
@@ -1181,7 +1181,7 @@ pub fn leave(client: Client, id guild_id: String) -> Result(Nil, Error) {
 }
 
 pub fn get_auto_moderation_rules(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
 ) -> Result(List(auto_moderation.Rule), Error) {
   use response <- result.try(
@@ -1199,7 +1199,7 @@ pub fn get_auto_moderation_rules(
 }
 
 pub fn get_emojis(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
 ) -> Result(List(Emoji), Error) {
   use response <- result.try(
@@ -1214,7 +1214,7 @@ pub fn get_emojis(
 }
 
 pub fn get_emoji(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   id emoji_id: String,
 ) -> Result(Emoji, Error) {
@@ -1233,7 +1233,7 @@ pub fn get_emoji(
 }
 
 pub fn create_emoji(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   named name: String,
   bytes image: image.Data,
@@ -1261,7 +1261,7 @@ pub fn create_emoji(
 }
 
 pub fn modify_emoji(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   id emoji_id: String,
   rename name: Option(String),
@@ -1296,7 +1296,7 @@ pub fn modify_emoji(
 }
 
 pub fn delete_emoji(
-  client: Client,
+  client: grom.Client,
   from guild_id: String,
   id emoji_id: String,
   because reason: Option(String),
@@ -1314,7 +1314,7 @@ pub fn delete_emoji(
   Ok(Nil)
 }
 
-pub fn delete(client: Client, id guild_id: String) -> Result(Nil, Error) {
+pub fn delete(client: grom.Client, id guild_id: String) -> Result(Nil, Error) {
   use _response <- result.try(
     client
     |> rest.new_request(http.Delete, "/guilds/" <> guild_id)
@@ -1325,7 +1325,7 @@ pub fn delete(client: Client, id guild_id: String) -> Result(Nil, Error) {
 }
 
 pub fn get_active_threads(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
 ) -> Result(ReceivedThreads, Error) {
   use response <- result.try(
@@ -1342,7 +1342,7 @@ pub fn get_active_threads(
 /// If `maximum` is not provided, a default of `1` will be used.
 /// See: https://discord.com/developers/docs/resources/guild#list-guild-members
 pub fn get_members(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
   maximum limit: Option(Int),
   later_than_id after: Option(String),
@@ -1373,7 +1373,7 @@ pub fn get_members(
 }
 
 pub fn search_for_members(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   named query_param: String,
   maximum limit: Option(Int),
@@ -1402,7 +1402,7 @@ pub fn search_for_members(
 
 /// See: https://discord.com/developers/docs/resources/guild#get-guild-bans
 pub fn get_bans(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
   maximum limit: Option(Int),
   earlier_than_id before: Option(String),
@@ -1435,7 +1435,7 @@ pub fn get_bans(
 }
 
 pub fn get_ban(
-  client: Client,
+  client: grom.Client,
   from guild_id: String,
   for user_id: String,
 ) -> Result(Ban, Error) {
@@ -1451,7 +1451,7 @@ pub fn get_ban(
 }
 
 pub fn create_ban(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   for user_id: String,
   delete_messages_since delete_message_duration: Option(Duration),
@@ -1482,7 +1482,7 @@ pub fn create_ban(
 }
 
 pub fn remove_ban(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   from user_id: String,
   because reason: Option(String),
@@ -1501,7 +1501,7 @@ pub fn remove_ban(
 }
 
 pub fn bulk_ban(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   users user_ids: List(String),
   delete_messages_since delete_message_duration: Option(Duration),
@@ -1538,7 +1538,7 @@ pub fn bulk_ban(
 }
 
 pub fn get_roles(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
 ) -> Result(List(Role), Error) {
   use response <- result.try(
@@ -1554,7 +1554,7 @@ pub fn get_roles(
 
 /// Returns a list of all of the guild's roles.
 pub fn move_roles(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   roles roles: List(RoleToMove),
   because reason: Option(String),

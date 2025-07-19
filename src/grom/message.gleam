@@ -5,9 +5,9 @@ import gleam/int
 import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
+import grom
 import grom/application.{type Application}
 import grom/channel/thread.{type Thread}
-import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/guild/role.{type Role}
 import grom/guild_member.{type GuildMember}
@@ -753,7 +753,7 @@ pub fn resolved_decoder() -> decode.Decoder(Resolved) {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn pin(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
   id message_id: String,
   reason reason: Option(String),
@@ -772,7 +772,7 @@ pub fn pin(
 }
 
 pub fn unpin(
-  client: Client,
+  client: grom.Client,
   from channel_id: String,
   id message_id: String,
   reason reason: Option(String),

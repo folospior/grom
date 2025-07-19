@@ -8,11 +8,11 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
+import grom
 import grom/channel/forum
 import grom/channel/media
 import grom/channel/permission_overwrite.{type PermissionOverwrite}
 import grom/channel/thread.{type Thread}
-import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/internal/flags
 import grom/internal/rest
@@ -1943,7 +1943,7 @@ pub fn create_media_to_json(create_media: CreateMedia) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(client: Client, id channel_id: String) -> Result(Channel, Error) {
+pub fn get(client: grom.Client, id channel_id: String) -> Result(Channel, Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/channels/" <> channel_id)
@@ -1956,7 +1956,7 @@ pub fn get(client: Client, id channel_id: String) -> Result(Channel, Error) {
 }
 
 pub fn modify(
-  client: Client,
+  client: grom.Client,
   id channel_id: String,
   with modify: Modify,
   because reason: Option(String),
@@ -2392,7 +2392,7 @@ pub fn modify_thread_applied_tags_ids(
 }
 
 pub fn delete(
-  client: Client,
+  client: grom.Client,
   id channel_id: String,
   because reason: Option(String),
 ) -> Result(Channel, Error) {
@@ -2409,7 +2409,7 @@ pub fn delete(
 }
 
 pub fn announcement_follow(
-  client: Client,
+  client: grom.Client,
   from channel_id: String,
   to webhook_channel_id: String,
   because reason: Option(String),
@@ -2431,7 +2431,7 @@ pub fn announcement_follow(
 }
 
 pub fn trigger_typing_indicator(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
 ) -> Result(Nil, Error) {
   use _response <- result.try(
@@ -2445,7 +2445,7 @@ pub fn trigger_typing_indicator(
 
 // TODO: add pagination stuff!!
 pub fn get_pinned_messages(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
 ) -> Result(List(Message), Error) {
   use response <- result.try(
@@ -2463,7 +2463,7 @@ pub fn get_pinned_messages(
 }
 
 pub fn get_public_archived_threads(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
   earlier_than before: Option(Timestamp),
   maximum limit: Option(Int),
@@ -2498,7 +2498,7 @@ pub fn get_public_archived_threads(
 }
 
 pub fn get_private_archived_threads(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
   earlier_than before: Option(Timestamp),
   maximum limit: Option(Int),
@@ -2533,7 +2533,7 @@ pub fn get_private_archived_threads(
 }
 
 pub fn get_joined_private_archived_threads(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
   earlier_than before: Option(Timestamp),
   maximum limit: Option(Int),
@@ -2568,7 +2568,7 @@ pub fn get_joined_private_archived_threads(
 }
 
 pub fn get_all_from_guild(
-  client: Client,
+  client: grom.Client,
   id guild_id: String,
 ) -> Result(List(Channel), Error) {
   use response <- result.try(
@@ -2584,7 +2584,7 @@ pub fn get_all_from_guild(
 
 /// `because` has no effect if creating a DM channel.
 pub fn create(
-  client: Client,
+  client: grom.Client,
   using create: Create,
   because reason: Option(String),
 ) -> Result(Channel, Error) {

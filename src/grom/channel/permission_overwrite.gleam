@@ -4,7 +4,7 @@ import gleam/http/request
 import gleam/json.{type Json}
 import gleam/option.{type Option}
 import gleam/result
-import grom/client.{type Client}
+import grom
 import grom/error.{type Error}
 import grom/internal/rest
 import grom/permission.{type Permission}
@@ -76,8 +76,8 @@ pub fn type_to_json(type_: Type) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn edit(
-  client: Client,
+pub fn modify(
+  client: grom.Client,
   for channel_id: String,
   id overwrite_id: String,
   new overwrite: Create,
@@ -100,7 +100,7 @@ pub fn edit(
 }
 
 pub fn delete(
-  client: Client,
+  client: grom.Client,
   for channel_id: String,
   id overwrite_id: String,
   because reason: Option(String),

@@ -7,7 +7,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import grom/client.{type Client}
+import grom
 import grom/error.{type Error}
 import grom/guild_member.{type GuildMember}
 import grom/image
@@ -58,7 +58,7 @@ pub fn modify_encode(modify: Modify) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(client: Client) -> Result(User, Error) {
+pub fn get(client: grom.Client) -> Result(User, Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/users/@me")
@@ -70,7 +70,7 @@ pub fn get(client: Client) -> Result(User, Error) {
   |> result.map_error(error.CouldNotDecode)
 }
 
-pub fn modify(client: Client, with data: Modify) -> Result(User, Error) {
+pub fn modify(client: grom.Client, with data: Modify) -> Result(User, Error) {
   let json = data |> modify_encode
   use response <- result.try(
     client
@@ -101,7 +101,7 @@ pub fn modify_banner(modify: Modify, banner: image.Data) -> Modify {
 }
 
 pub fn get_guilds(
-  client: Client,
+  client: grom.Client,
   with query: List(GetGuildsQuery),
 ) -> Result(User, Error) {
   let query =
@@ -132,7 +132,7 @@ pub fn get_guilds(
 }
 
 pub fn get_as_member(
-  client: Client,
+  client: grom.Client,
   guild_id: String,
 ) -> Result(GuildMember, Error) {
   use response <- result.try(

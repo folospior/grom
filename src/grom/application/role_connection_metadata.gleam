@@ -7,7 +7,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
-import grom/client.{type Client}
+import grom
 import grom/error
 import grom/internal/rest
 
@@ -132,7 +132,7 @@ fn type_encode(type_: Type) -> Json {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get(
-  client: Client,
+  client: grom.Client,
   application_id: String,
 ) -> Result(List(RoleConnectionMetadata), error.Error) {
   use response <- result.try(
@@ -150,7 +150,7 @@ pub fn get(
 }
 
 pub fn modify(
-  client: Client,
+  client: grom.Client,
   application_id: String,
   new metadata: List(RoleConnectionMetadata),
 ) -> Result(List(RoleConnectionMetadata), error.Error) {

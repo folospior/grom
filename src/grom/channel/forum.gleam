@@ -7,8 +7,8 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
+import grom
 import grom/channel/thread.{type Thread}
-import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/file.{type File}
 import grom/internal/flags
@@ -279,7 +279,7 @@ pub fn start_thread_message_to_json(message: StartThreadMessage) -> Json {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn start_thread(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
   with start_thread: StartThread,
   because reason: Option(String),

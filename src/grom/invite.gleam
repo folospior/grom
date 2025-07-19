@@ -6,9 +6,9 @@ import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
+import grom
 import grom/application.{type Application}
 import grom/channel.{type Channel}
-import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/guild.{type Guild}
 import grom/internal/rest
@@ -286,7 +286,7 @@ pub fn create_encode(create: Create) -> Json {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get_many(
-  client: Client,
+  client: grom.Client,
   for channel_id: String,
 ) -> Result(List(WithMetadata), Error) {
   use response <- result.try(
@@ -301,7 +301,7 @@ pub fn get_many(
 }
 
 pub fn create(
-  client: Client,
+  client: grom.Client,
   for channel_id: String,
   with create: Create,
   reason reason: Option(String),

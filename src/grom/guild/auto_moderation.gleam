@@ -6,7 +6,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
-import grom/client.{type Client}
+import grom
 import grom/error.{type Error}
 import grom/internal/rest
 import grom/internal/time_duration
@@ -392,7 +392,7 @@ pub fn modify_rule_to_json(modify_rule: ModifyRule) -> Json {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get_rule(
-  client: Client,
+  client: grom.Client,
   from guild_id: String,
   id rule_id: String,
 ) -> Result(Rule, Error) {
@@ -411,7 +411,7 @@ pub fn get_rule(
 }
 
 pub fn create_rule(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   with create_rule: CreateRule,
   because reason: Option(String),
@@ -465,7 +465,7 @@ pub fn create_rule_with_exempt_channels(
 }
 
 pub fn modify_rule(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   id rule_id: String,
   with modify_rule: ModifyRule,
@@ -530,7 +530,7 @@ pub fn exempt_channels_from_rule(
 }
 
 pub fn delete_rule(
-  client: Client,
+  client: grom.Client,
   from guild_id: String,
   id rule_id: String,
   because reason: Option(String),

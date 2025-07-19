@@ -3,7 +3,7 @@ import gleam/http/request
 import gleam/json
 import gleeunit
 import gleeunit/should
-import grom/client
+import grom
 import grom/file.{File}
 import grom/internal/rest
 import grom/user/current_user
@@ -22,7 +22,7 @@ pub fn encode_modify_current_test() {
 
 pub fn multipart_request_test() {
   let expected =
-    rest.new_request(client.Client("token"), http.Post, "/")
+    rest.new_request(grom.Client("token"), http.Post, "/")
     |> request.set_body(<<
       "--gleam_multipart_form\r\n":utf8,
       "Content-Disposition: form-data; name=\"payload_json\"\r\n":utf8,
@@ -42,7 +42,7 @@ pub fn multipart_request_test() {
 
   let result =
     rest.new_multipart_request(
-      client.Client("token"),
+      grom.Client("token"),
       http.Post,
       "/",
       json.object([]),

@@ -1,9 +1,9 @@
 import gleam/int
 import gleam/option.{type Option}
 import gleam/time/duration.{type Duration}
+import grom
 import grom/channel/forum
 import grom/channel/thread.{type Thread}
-import grom/client.{type Client}
 import grom/error.{type Error}
 import grom/file.{type File}
 import grom/message/allowed_mentions.{type AllowedMentions}
@@ -40,7 +40,7 @@ pub fn bits_flags() -> List(#(Int, Flag)) {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn start_thread(
-  client: Client,
+  client: grom.Client,
   in channel_id: String,
   with start_thread: StartThread,
   because reason: Option(String),

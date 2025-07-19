@@ -6,7 +6,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
-import grom/client.{type Client}
+import grom
 import grom/error.{type Error}
 import grom/image
 import grom/internal/flags
@@ -258,7 +258,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
   id role_id: String,
 ) -> Result(Role, Error) {
@@ -277,7 +277,7 @@ pub fn get(
 }
 
 pub fn create(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   using create: Create,
   because reason: Option(String),
@@ -318,7 +318,7 @@ pub fn new_create() -> Create {
 }
 
 pub fn modify(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   id role_id: String,
   using modify: Modify,
@@ -368,7 +368,7 @@ pub fn new_modify() -> Modify {
 }
 
 pub fn delete(
-  client: Client,
+  client: grom.Client,
   from guild_id: String,
   id role_id: String,
   because reason: Option(String),

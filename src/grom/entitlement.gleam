@@ -10,7 +10,7 @@ import gleam/json.{type Json}
 import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
-import grom/client.{type Client}
+import grom
 import grom/error.{type Error}
 import grom/internal/rest
 import grom/internal/time_rfc3339
@@ -125,7 +125,7 @@ pub fn owner_type_to_json(owner_type: OwnerType) -> Json {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
   id entitlement_id: String,
 ) -> Result(Entitlement, Error) {
@@ -144,7 +144,7 @@ pub fn get(
 }
 
 pub fn consume(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
   id entitlement_id: String,
 ) -> Result(Nil, Error) {
@@ -165,7 +165,7 @@ pub fn consume(
 }
 
 pub fn create_test(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
   sku sku_id: String,
   to owner_id: String,
@@ -194,7 +194,7 @@ pub fn create_test(
 }
 
 pub fn delete_test(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
   id entitlement_id: String,
 ) -> Result(Nil, Error) {

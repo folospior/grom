@@ -7,7 +7,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
-import grom/client.{type Client}
+import grom
 import grom/error.{type Error}
 import grom/internal/flags
 import grom/internal/rest
@@ -207,7 +207,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get(
-  client: Client,
+  client: grom.Client,
   for guild_id: String,
   id user_id: String,
 ) -> Result(GuildMember, Error) {
@@ -226,7 +226,7 @@ pub fn get(
 }
 
 pub fn modify(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   id user_id: String,
   with modify: Modify,
@@ -254,7 +254,7 @@ pub fn modify(
 }
 
 pub fn set_current_nick(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   to nick: Modification(String),
   because reason: Option(String),
@@ -279,7 +279,7 @@ pub fn set_current_nick(
 }
 
 pub fn add_role(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   to user_id: String,
   id role_id: String,
@@ -299,7 +299,7 @@ pub fn add_role(
 }
 
 pub fn remove_role(
-  client: Client,
+  client: grom.Client,
   in guild_id: String,
   from user_id: String,
   id role_id: String,
@@ -319,7 +319,7 @@ pub fn remove_role(
 }
 
 pub fn remove(
-  client: Client,
+  client: grom.Client,
   from guild_id: String,
   id user_id: String,
   because reason: Option(String),
@@ -338,7 +338,7 @@ pub fn remove(
 }
 
 pub fn kick(
-  client: Client,
+  client: grom.Client,
   from guild_id: String,
   id user_id: String,
   because reason: Option(String),

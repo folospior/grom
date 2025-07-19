@@ -9,8 +9,8 @@ import gleam/option.{type Option, None}
 import gleam/result
 import gleam/set.{type Set}
 import gleam/string
+import grom
 import grom/application/team.{type Team}
-import grom/client.{type Client}
 import grom/emoji.{type Emoji}
 import grom/entitlement.{type Entitlement}
 import grom/error.{type Error}
@@ -372,7 +372,7 @@ pub fn event_webhook_status_encode(
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn get_emojis(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
 ) -> Result(List(Emoji), Error) {
   use response <- result.try(
@@ -390,7 +390,7 @@ pub fn get_emojis(
 }
 
 pub fn get_emoji(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
   id emoji_id: String,
 ) -> Result(Emoji, Error) {
@@ -409,7 +409,7 @@ pub fn get_emoji(
 }
 
 pub fn create_emoji(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
   named name: String,
   bytes image: image.Data,
@@ -436,7 +436,7 @@ pub fn create_emoji(
 }
 
 pub fn rename_emoji(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
   id emoji_id: String,
   to name: String,
@@ -459,7 +459,7 @@ pub fn rename_emoji(
 }
 
 pub fn delete_emoji(
-  client: Client,
+  client: grom.Client,
   from application_id: String,
   id emoji_id: String,
 ) -> Result(Nil, Error) {
@@ -476,7 +476,7 @@ pub fn delete_emoji(
 }
 
 pub fn get_entitlements(
-  client: Client,
+  client: grom.Client,
   for application_id: String,
   with query: Set(GetEntitlementsQuery),
 ) -> Result(List(Entitlement), Error) {
