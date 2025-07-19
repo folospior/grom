@@ -10,7 +10,6 @@ import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom
-import grom/error.{type Error}
 import grom/guild_member.{type GuildMember}
 import grom/internal/flags
 import grom/internal/rest
@@ -375,7 +374,7 @@ pub fn modify(
   id channel_id: String,
   with modify: Modify,
   because reason: Option(String),
-) -> Result(Thread, Error) {
+) -> Result(Thread, grom.Error) {
   let json = modify |> modify_encode
 
   use response <- result.try(
@@ -388,7 +387,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_modify() -> Modify {
@@ -454,7 +453,7 @@ pub fn start_from_message(
   from message_id: String,
   with start_from_message: StartFromMessage,
   because reason: Option(String),
-) -> Result(Thread, Error) {
+) -> Result(Thread, grom.Error) {
   let json = start_from_message |> start_from_message_encode
 
   use response <- result.try(
@@ -470,7 +469,7 @@ pub fn start_from_message(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_start_from_message(name: String) -> StartFromMessage {
@@ -500,7 +499,7 @@ pub fn start_without_message(
   in channel_id: String,
   with start_without_message: StartWithoutMessage,
   reason reason: Option(String),
-) -> Result(Thread, Error) {
+) -> Result(Thread, grom.Error) {
   let json = start_without_message |> start_without_message_encode
 
   use response <- result.try(
@@ -513,7 +512,7 @@ pub fn start_without_message(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_start_without_message(name: String) -> StartWithoutMessage {
@@ -557,7 +556,10 @@ pub fn start_without_message_with_rate_limit_per_user(
   StartWithoutMessage(..start_without_message, rate_limit_per_user: Some(limit))
 }
 
-pub fn join(client: grom.Client, id thread_id: String) -> Result(Nil, Error) {
+pub fn join(
+  client: grom.Client,
+  id thread_id: String,
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -574,7 +576,7 @@ pub fn add_member(
   client: grom.Client,
   to thread_id: String,
   id user_id: String,
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -587,7 +589,10 @@ pub fn add_member(
   Ok(Nil)
 }
 
-pub fn leave(client: grom.Client, id thread_id: String) -> Result(Nil, Error) {
+pub fn leave(
+  client: grom.Client,
+  id thread_id: String,
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -604,7 +609,7 @@ pub fn remove_member(
   client: grom.Client,
   from thread_id: String,
   id user_id: String,
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -622,7 +627,7 @@ pub fn get_member(
   from thread_id: String,
   id user_id: String,
   with_guild_member with_guild_member: Bool,
-) -> Result(Member, Error) {
+) -> Result(Member, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -635,7 +640,7 @@ pub fn get_member(
 
   response.body
   |> json.parse(using: member_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_members(
@@ -644,7 +649,7 @@ pub fn get_members(
   with_guild_member with_guild_member: Bool,
   older_than_id after: Option(String),
   maximum limit: Option(Int),
-) -> Result(List(Member), Error) {
+) -> Result(List(Member), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -670,5 +675,5 @@ pub fn get_members(
 
   response.body
   |> json.parse(using: decode.list(member_decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }

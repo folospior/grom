@@ -8,7 +8,6 @@ import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/application.{type Application}
 import grom/channel/thread.{type Thread}
-import grom/error.{type Error}
 import grom/guild/role.{type Role}
 import grom/guild_member.{type GuildMember}
 import grom/internal/flags
@@ -757,7 +756,7 @@ pub fn pin(
   in channel_id: String,
   id message_id: String,
   reason reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -776,7 +775,7 @@ pub fn unpin(
   from channel_id: String,
   id message_id: String,
   reason reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(

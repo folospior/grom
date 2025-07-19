@@ -11,7 +11,6 @@ import gleam/option.{type Option, None}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 import grom
-import grom/error.{type Error}
 import grom/internal/rest
 import grom/internal/time_rfc3339
 
@@ -128,7 +127,7 @@ pub fn get(
   client: grom.Client,
   for application_id: String,
   id entitlement_id: String,
-) -> Result(Entitlement, Error) {
+) -> Result(Entitlement, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -140,14 +139,14 @@ pub fn get(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn consume(
   client: grom.Client,
   for application_id: String,
   id entitlement_id: String,
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -170,7 +169,7 @@ pub fn create_test(
   sku sku_id: String,
   to owner_id: String,
   owner_is owner_type: OwnerType,
-) -> Result(Entitlement, Error) {
+) -> Result(Entitlement, grom.Error) {
   let json =
     json.object([
       #("sku_id", json.string(sku_id)),
@@ -190,14 +189,14 @@ pub fn create_test(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn delete_test(
   client: grom.Client,
   for application_id: String,
   id entitlement_id: String,
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(

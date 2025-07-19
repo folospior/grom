@@ -9,7 +9,6 @@ import gleam/result
 import gleam/time/duration.{type Duration}
 import grom
 import grom/channel/thread.{type Thread}
-import grom/error.{type Error}
 import grom/file.{type File}
 import grom/internal/flags
 import grom/internal/rest
@@ -283,7 +282,7 @@ pub fn start_thread(
   in channel_id: String,
   with start_thread: StartThread,
   because reason: Option(String),
-) -> Result(Thread, Error) {
+) -> Result(Thread, grom.Error) {
   use response <- result.try(case start_thread.files {
     Some(files) -> {
       client
@@ -309,7 +308,7 @@ pub fn start_thread(
 
   response.body
   |> json.parse(using: thread.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_start_thread(

@@ -8,7 +8,6 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
 import grom
-import grom/error.{type Error}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
@@ -210,7 +209,7 @@ pub fn get(
   client: grom.Client,
   for guild_id: String,
   id user_id: String,
-) -> Result(GuildMember, Error) {
+) -> Result(GuildMember, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -222,7 +221,7 @@ pub fn get(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn modify(
@@ -231,7 +230,7 @@ pub fn modify(
   id user_id: String,
   with modify: Modify,
   because reason: Option(String),
-) -> Result(GuildMember, Error) {
+) -> Result(GuildMember, grom.Error) {
   let json =
     modify
     |> modify_to_json
@@ -250,7 +249,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn set_current_nick(
@@ -258,7 +257,7 @@ pub fn set_current_nick(
   in guild_id: String,
   to nick: Modification(String),
   because reason: Option(String),
-) -> Result(GuildMember, Error) {
+) -> Result(GuildMember, grom.Error) {
   let json =
     nick
     |> modification.encode("nick", json.string)
@@ -275,7 +274,7 @@ pub fn set_current_nick(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn add_role(
@@ -284,7 +283,7 @@ pub fn add_role(
   to user_id: String,
   id role_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -304,7 +303,7 @@ pub fn remove_role(
   from user_id: String,
   id role_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -323,7 +322,7 @@ pub fn remove(
   from guild_id: String,
   id user_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -342,6 +341,6 @@ pub fn kick(
   from guild_id: String,
   id user_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   remove(client, from: guild_id, id: user_id, because: reason)
 }

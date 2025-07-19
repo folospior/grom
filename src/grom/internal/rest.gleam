@@ -9,7 +9,6 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import grom
-import grom/error.{type Error}
 import grom/file.{type File}
 import multipart_form
 import multipart_form/field
@@ -23,11 +22,11 @@ const discord_api_path = "api/v10"
 // INTERNAL FUNCTIONS ----------------------------------------------------------
 
 @internal
-pub fn execute(request: Request(String)) -> Result(Response(String), Error) {
+pub fn execute(request: Request(String)) -> Result(Response(String), grom.Error) {
   use response <- result.try(
     request
     |> httpc.send
-    |> result.map_error(error.HttpError),
+    |> result.map_error(grom.HttpError),
   )
 
   response
@@ -37,17 +36,17 @@ pub fn execute(request: Request(String)) -> Result(Response(String), Error) {
 @internal
 pub fn execute_multipart(
   request: Request(BitArray),
-) -> Result(Response(String), Error) {
+) -> Result(Response(String), grom.Error) {
   use response <- result.try(
     request
     |> httpc.send_bits
-    |> result.map_error(error.HttpError),
+    |> result.map_error(grom.HttpError),
   )
 
   use body <- result.try(
     response.body
     |> bit_array.to_string
-    |> result.replace_error(error.BodyNotValidUtf8(response.body)),
+    |> result.replace_error(grom.ResponseNotValidUtf8(response.body)),
   )
 
   let response = Response(..response, body:)
@@ -124,9 +123,9 @@ pub fn with_reason(request: Request(a), reason: Option(String)) -> Request(a) {
 
 fn ensure_status_code_success(
   response: Response(String),
-) -> Result(Response(String), Error) {
+) -> Result(Response(String), grom.Error) {
   case response.status {
     status if status >= 200 && status < 300 -> Ok(response)
-    _ -> Error(error.StatusCodeUnsuccessful(response))
+    _ -> Error(grom.StatusCodeUnsuccessful(response))
   }
 }

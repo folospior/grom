@@ -4,7 +4,6 @@ import gleam/time/duration.{type Duration}
 import grom
 import grom/channel/forum
 import grom/channel/thread.{type Thread}
-import grom/error.{type Error}
 import grom/file.{type File}
 import grom/message/allowed_mentions.{type AllowedMentions}
 import grom/message/attachment
@@ -44,7 +43,7 @@ pub fn start_thread(
   in channel_id: String,
   with start_thread: StartThread,
   because reason: Option(String),
-) -> Result(Thread, Error) {
+) -> Result(Thread, grom.Error) {
   forum.start_thread(
     client,
     in: channel_id,

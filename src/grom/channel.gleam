@@ -13,7 +13,6 @@ import grom/channel/forum
 import grom/channel/media
 import grom/channel/permission_overwrite.{type PermissionOverwrite}
 import grom/channel/thread.{type Thread}
-import grom/error.{type Error}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
@@ -1943,7 +1942,10 @@ pub fn create_media_to_json(create_media: CreateMedia) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(client: grom.Client, id channel_id: String) -> Result(Channel, Error) {
+pub fn get(
+  client: grom.Client,
+  id channel_id: String,
+) -> Result(Channel, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/channels/" <> channel_id)
@@ -1952,7 +1954,7 @@ pub fn get(client: grom.Client, id channel_id: String) -> Result(Channel, Error)
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn modify(
@@ -1960,7 +1962,7 @@ pub fn modify(
   id channel_id: String,
   with modify: Modify,
   because reason: Option(String),
-) -> Result(Channel, Error) {
+) -> Result(Channel, grom.Error) {
   let json = modify |> modify_to_json
 
   use response <- result.try(
@@ -1973,7 +1975,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_modify_text() -> Modify {
@@ -2395,7 +2397,7 @@ pub fn delete(
   client: grom.Client,
   id channel_id: String,
   because reason: Option(String),
-) -> Result(Channel, Error) {
+) -> Result(Channel, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Delete, "/channels/" <> channel_id)
@@ -2405,7 +2407,7 @@ pub fn delete(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn announcement_follow(
@@ -2413,7 +2415,7 @@ pub fn announcement_follow(
   from channel_id: String,
   to webhook_channel_id: String,
   because reason: Option(String),
-) -> Result(FollowedChannel, Error) {
+) -> Result(FollowedChannel, grom.Error) {
   let json =
     json.object([#("webhook_channel_id", json.string(webhook_channel_id))])
 
@@ -2427,13 +2429,13 @@ pub fn announcement_follow(
 
   response.body
   |> json.parse(using: followed_channel_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn trigger_typing_indicator(
   client: grom.Client,
   in channel_id: String,
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/typing")
@@ -2447,7 +2449,7 @@ pub fn trigger_typing_indicator(
 pub fn get_pinned_messages(
   client: grom.Client,
   in channel_id: String,
-) -> Result(List(Message), Error) {
+) -> Result(List(Message), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -2459,7 +2461,7 @@ pub fn get_pinned_messages(
 
   response.body
   |> json.parse(using: decode.list(message.decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_public_archived_threads(
@@ -2467,7 +2469,7 @@ pub fn get_public_archived_threads(
   in channel_id: String,
   earlier_than before: Option(Timestamp),
   maximum limit: Option(Int),
-) -> Result(ReceivedThreads, Error) {
+) -> Result(ReceivedThreads, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -2494,7 +2496,7 @@ pub fn get_public_archived_threads(
 
   response.body
   |> json.parse(using: received_threads_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_private_archived_threads(
@@ -2502,7 +2504,7 @@ pub fn get_private_archived_threads(
   in channel_id: String,
   earlier_than before: Option(Timestamp),
   maximum limit: Option(Int),
-) -> Result(ReceivedThreads, Error) {
+) -> Result(ReceivedThreads, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -2529,7 +2531,7 @@ pub fn get_private_archived_threads(
 
   response.body
   |> json.parse(using: received_threads_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_joined_private_archived_threads(
@@ -2537,7 +2539,7 @@ pub fn get_joined_private_archived_threads(
   in channel_id: String,
   earlier_than before: Option(Timestamp),
   maximum limit: Option(Int),
-) -> Result(ReceivedThreads, Error) {
+) -> Result(ReceivedThreads, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -2564,13 +2566,13 @@ pub fn get_joined_private_archived_threads(
 
   response.body
   |> json.parse(using: received_threads_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_all_from_guild(
   client: grom.Client,
   id guild_id: String,
-) -> Result(List(Channel), Error) {
+) -> Result(List(Channel), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/channels")
@@ -2579,7 +2581,7 @@ pub fn get_all_from_guild(
 
   response.body
   |> json.parse(using: decode.list(decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 /// `because` has no effect if creating a DM channel.
@@ -2587,7 +2589,7 @@ pub fn create(
   client: grom.Client,
   using create: Create,
   because reason: Option(String),
-) -> Result(Channel, Error) {
+) -> Result(Channel, grom.Error) {
   let endpoint = case create {
     CreateDmChannel(_) -> "/users/@me/channels"
     CreateTextChannel(inner) -> "/guilds/" <> inner.guild_id <> "/channels"
@@ -2620,7 +2622,7 @@ pub fn create(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_create_text(named name: String, in guild_id: String) -> CreateText {

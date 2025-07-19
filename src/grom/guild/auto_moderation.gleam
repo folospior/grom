@@ -7,7 +7,6 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
 import grom
-import grom/error.{type Error}
 import grom/internal/rest
 import grom/internal/time_duration
 
@@ -395,7 +394,7 @@ pub fn get_rule(
   client: grom.Client,
   from guild_id: String,
   id rule_id: String,
-) -> Result(Rule, Error) {
+) -> Result(Rule, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -407,7 +406,7 @@ pub fn get_rule(
 
   response.body
   |> json.parse(using: rule_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn create_rule(
@@ -415,7 +414,7 @@ pub fn create_rule(
   in guild_id: String,
   with create_rule: CreateRule,
   because reason: Option(String),
-) -> Result(Rule, Error) {
+) -> Result(Rule, grom.Error) {
   let json = create_rule |> create_rule_to_json
 
   use response <- result.try(
@@ -431,7 +430,7 @@ pub fn create_rule(
 
   response.body
   |> json.parse(using: rule_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_create_rule(
@@ -470,7 +469,7 @@ pub fn modify_rule(
   id rule_id: String,
   with modify_rule: ModifyRule,
   because reason: Option(String),
-) -> Result(Rule, Error) {
+) -> Result(Rule, grom.Error) {
   let json = modify_rule |> modify_rule_to_json
 
   use response <- result.try(
@@ -486,7 +485,7 @@ pub fn modify_rule(
 
   response.body
   |> json.parse(using: rule_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn modify_rule_name(modify_rule: ModifyRule, new name: String) -> ModifyRule {
@@ -534,7 +533,7 @@ pub fn delete_rule(
   from guild_id: String,
   id rule_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(

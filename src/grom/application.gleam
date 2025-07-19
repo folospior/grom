@@ -13,7 +13,6 @@ import grom
 import grom/application/team.{type Team}
 import grom/emoji.{type Emoji}
 import grom/entitlement.{type Entitlement}
-import grom/error.{type Error}
 import grom/guild.{type Guild}
 import grom/image
 import grom/internal/flags
@@ -374,7 +373,7 @@ pub fn event_webhook_status_encode(
 pub fn get_emojis(
   client: grom.Client,
   for application_id: String,
-) -> Result(List(Emoji), Error) {
+) -> Result(List(Emoji), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -386,14 +385,14 @@ pub fn get_emojis(
 
   response.body
   |> json.parse(using: decode.at(["items"], decode.list(emoji.decoder())))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_emoji(
   client: grom.Client,
   for application_id: String,
   id emoji_id: String,
-) -> Result(Emoji, Error) {
+) -> Result(Emoji, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -405,7 +404,7 @@ pub fn get_emoji(
 
   response.body
   |> json.parse(using: emoji.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn create_emoji(
@@ -413,7 +412,7 @@ pub fn create_emoji(
   for application_id: String,
   named name: String,
   bytes image: image.Data,
-) -> Result(Emoji, Error) {
+) -> Result(Emoji, grom.Error) {
   let json =
     json.object([
       #("name", json.string(name)),
@@ -432,7 +431,7 @@ pub fn create_emoji(
 
   response.body
   |> json.parse(using: emoji.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn rename_emoji(
@@ -440,7 +439,7 @@ pub fn rename_emoji(
   for application_id: String,
   id emoji_id: String,
   to name: String,
-) -> Result(Emoji, Error) {
+) -> Result(Emoji, grom.Error) {
   let json = json.object([#("name", json.string(name))])
 
   use response <- result.try(
@@ -455,14 +454,14 @@ pub fn rename_emoji(
 
   response.body
   |> json.parse(using: emoji.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn delete_emoji(
   client: grom.Client,
   from application_id: String,
   id emoji_id: String,
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -479,7 +478,7 @@ pub fn get_entitlements(
   client: grom.Client,
   for application_id: String,
   with query: Set(GetEntitlementsQuery),
-) -> Result(List(Entitlement), Error) {
+) -> Result(List(Entitlement), grom.Error) {
   let query =
     set.map(query, fn(item) {
       case item {
@@ -521,5 +520,5 @@ pub fn get_entitlements(
 
   response.body
   |> json.parse(using: decode.list(entitlement.decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }

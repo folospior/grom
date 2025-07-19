@@ -7,7 +7,6 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import grom
-import grom/error.{type Error}
 import grom/image
 import grom/internal/flags
 import grom/internal/rest
@@ -261,7 +260,7 @@ pub fn get(
   client: grom.Client,
   for guild_id: String,
   id role_id: String,
-) -> Result(Role, Error) {
+) -> Result(Role, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -273,7 +272,7 @@ pub fn get(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn create(
@@ -281,7 +280,7 @@ pub fn create(
   in guild_id: String,
   using create: Create,
   because reason: Option(String),
-) -> Result(Role, Error) {
+) -> Result(Role, grom.Error) {
   let json =
     create
     |> create_to_json
@@ -297,7 +296,7 @@ pub fn create(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 /// Usage example:
@@ -323,7 +322,7 @@ pub fn modify(
   id role_id: String,
   using modify: Modify,
   because reason: Option(String),
-) -> Result(Role, Error) {
+) -> Result(Role, grom.Error) {
   let json =
     modify
     |> modify_to_json
@@ -342,7 +341,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 /// Usage example:
@@ -372,7 +371,7 @@ pub fn delete(
   from guild_id: String,
   id role_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(

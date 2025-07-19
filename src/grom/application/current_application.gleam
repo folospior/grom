@@ -7,7 +7,6 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import grom
 import grom/application.{type Application}
-import grom/error
 import grom/image
 import grom/internal/flags
 import grom/internal/rest
@@ -146,7 +145,7 @@ fn modify_encode(modify: Modify) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get(client: grom.Client) -> Result(Application, error.Error) {
+pub fn get(client: grom.Client) -> Result(Application, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/applications/@me")
@@ -155,13 +154,13 @@ pub fn get(client: grom.Client) -> Result(Application, error.Error) {
 
   response.body
   |> json.parse(using: application.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn modify(
   client: grom.Client,
   with modify: Modify,
-) -> Result(Application, error.Error) {
+) -> Result(Application, grom.Error) {
   let json = modify |> modify_encode
 
   use response <- result.try(
@@ -173,7 +172,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: application.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_modify() -> Modify {

@@ -9,7 +9,6 @@ import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/application.{type Application}
 import grom/channel.{type Channel}
-import grom/error.{type Error}
 import grom/guild.{type Guild}
 import grom/internal/rest
 import grom/internal/time_duration
@@ -288,7 +287,7 @@ pub fn create_encode(create: Create) -> Json {
 pub fn get_many(
   client: grom.Client,
   for channel_id: String,
-) -> Result(List(WithMetadata), Error) {
+) -> Result(List(WithMetadata), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/invites")
@@ -297,7 +296,7 @@ pub fn get_many(
 
   response.body
   |> json.parse(using: decode.list(with_metadata_decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn create(
@@ -305,7 +304,7 @@ pub fn create(
   for channel_id: String,
   with create: Create,
   reason reason: Option(String),
-) -> Result(WithoutMetadata, Error) {
+) -> Result(WithoutMetadata, grom.Error) {
   let json = create |> create_encode
 
   use response <- result.try(
@@ -318,5 +317,5 @@ pub fn create(
 
   response.body
   |> json.parse(using: without_metadata_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }

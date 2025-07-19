@@ -8,7 +8,6 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import grom
-import grom/error
 import grom/internal/rest
 
 // TYPES -----------------------------------------------------------------------
@@ -134,7 +133,7 @@ fn type_encode(type_: Type) -> Json {
 pub fn get(
   client: grom.Client,
   application_id: String,
-) -> Result(List(RoleConnectionMetadata), error.Error) {
+) -> Result(List(RoleConnectionMetadata), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -146,14 +145,14 @@ pub fn get(
 
   response.body
   |> json.parse(using: decode.list(decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn modify(
   client: grom.Client,
   application_id: String,
   new metadata: List(RoleConnectionMetadata),
-) -> Result(List(RoleConnectionMetadata), error.Error) {
+) -> Result(List(RoleConnectionMetadata), grom.Error) {
   let json = json.array(metadata, encode)
 
   use response <- result.try(
@@ -168,5 +167,5 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decode.list(decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }

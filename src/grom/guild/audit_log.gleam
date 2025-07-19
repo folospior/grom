@@ -7,7 +7,6 @@ import gleam/result
 import gleam/set.{type Set}
 import grom
 import grom/channel.{type Channel}
-import grom/error.{type Error}
 import grom/guild/audit_log/entry.{type Entry}
 import grom/guild/auto_moderation
 import grom/guild/scheduled_event.{type ScheduledEvent}
@@ -118,7 +117,7 @@ pub fn get(
   client: grom.Client,
   for guild_id: String,
   with query: Set(GetQuery),
-) -> Result(AuditLog, Error) {
+) -> Result(AuditLog, grom.Error) {
   let query =
     query
     |> set.map(fn(parameter) {
@@ -145,5 +144,5 @@ pub fn get(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }

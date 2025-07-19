@@ -5,7 +5,6 @@ import gleam/json.{type Json}
 import gleam/option.{type Option}
 import gleam/result
 import grom
-import grom/error.{type Error}
 import grom/internal/rest
 import grom/permission.{type Permission}
 
@@ -82,7 +81,7 @@ pub fn modify(
   id overwrite_id: String,
   new overwrite: Create,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   let json = overwrite |> create_to_json
 
   use _response <- result.try(
@@ -104,7 +103,7 @@ pub fn delete(
   for channel_id: String,
   id overwrite_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(

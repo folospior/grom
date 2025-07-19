@@ -12,7 +12,6 @@ import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/channel/thread.{type Thread}
 import grom/emoji.{type Emoji}
-import grom/error.{type Error}
 import grom/guild/auto_moderation
 import grom/guild/role.{type Role}
 import grom/guild_member.{type GuildMember}
@@ -973,7 +972,7 @@ pub fn get(
   client: grom.Client,
   id guild_id: String,
   get_counts with_counts: Bool,
-) -> Result(Guild, Error) {
+) -> Result(Guild, grom.Error) {
   let query = [#("with_counts", bool.to_string(with_counts))]
 
   use response <- result.try(
@@ -985,13 +984,13 @@ pub fn get(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_preview(
   client: grom.Client,
   for guild_id: String,
-) -> Result(Preview, Error) {
+) -> Result(Preview, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/preview")
@@ -1000,7 +999,7 @@ pub fn get_preview(
 
   response.body
   |> json.parse(using: preview_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn modify(
@@ -1008,7 +1007,7 @@ pub fn modify(
   id guild_id: String,
   with modify: Modify,
   because reason: Option(String),
-) -> Result(Guild, Error) {
+) -> Result(Guild, grom.Error) {
   let json = modify |> modify_to_json
 
   use response <- result.try(
@@ -1021,7 +1020,7 @@ pub fn modify(
 
   response.body
   |> json.parse(using: decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn new_modify() -> Modify {
@@ -1170,7 +1169,10 @@ pub fn modify_safety_alerts_channel_id(
   Modify(..modify, safety_alerts_channel_id:)
 }
 
-pub fn leave(client: grom.Client, id guild_id: String) -> Result(Nil, Error) {
+pub fn leave(
+  client: grom.Client,
+  id guild_id: String,
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(http.Delete, "/users/@me/guilds/" <> guild_id)
@@ -1183,7 +1185,7 @@ pub fn leave(client: grom.Client, id guild_id: String) -> Result(Nil, Error) {
 pub fn get_auto_moderation_rules(
   client: grom.Client,
   for guild_id: String,
-) -> Result(List(auto_moderation.Rule), Error) {
+) -> Result(List(auto_moderation.Rule), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -1195,13 +1197,13 @@ pub fn get_auto_moderation_rules(
 
   response.body
   |> json.parse(using: decode.list(auto_moderation.rule_decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_emojis(
   client: grom.Client,
   for guild_id: String,
-) -> Result(List(Emoji), Error) {
+) -> Result(List(Emoji), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/emojis")
@@ -1210,14 +1212,14 @@ pub fn get_emojis(
 
   response.body
   |> json.parse(using: decode.list(emoji.decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_emoji(
   client: grom.Client,
   in guild_id: String,
   id emoji_id: String,
-) -> Result(Emoji, Error) {
+) -> Result(Emoji, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(
@@ -1229,7 +1231,7 @@ pub fn get_emoji(
 
   response.body
   |> json.parse(using: emoji.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn create_emoji(
@@ -1239,7 +1241,7 @@ pub fn create_emoji(
   bytes image: image.Data,
   allowed_roles roles: List(String),
   because reason: Option(String),
-) -> Result(Emoji, Error) {
+) -> Result(Emoji, grom.Error) {
   let json =
     json.object([
       #("name", json.string(name)),
@@ -1257,7 +1259,7 @@ pub fn create_emoji(
 
   response.body
   |> json.parse(using: emoji.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn modify_emoji(
@@ -1267,7 +1269,7 @@ pub fn modify_emoji(
   rename name: Option(String),
   allowed_roles roles: Modification(List(String)),
   because reason: Option(String),
-) -> Result(Emoji, Error) {
+) -> Result(Emoji, grom.Error) {
   let json =
     [
       case name {
@@ -1292,7 +1294,7 @@ pub fn modify_emoji(
 
   response.body
   |> json.parse(using: emoji.decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn delete_emoji(
@@ -1300,7 +1302,7 @@ pub fn delete_emoji(
   from guild_id: String,
   id emoji_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -1314,7 +1316,10 @@ pub fn delete_emoji(
   Ok(Nil)
 }
 
-pub fn delete(client: grom.Client, id guild_id: String) -> Result(Nil, Error) {
+pub fn delete(
+  client: grom.Client,
+  id guild_id: String,
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(http.Delete, "/guilds/" <> guild_id)
@@ -1327,7 +1332,7 @@ pub fn delete(client: grom.Client, id guild_id: String) -> Result(Nil, Error) {
 pub fn get_active_threads(
   client: grom.Client,
   in guild_id: String,
-) -> Result(ReceivedThreads, Error) {
+) -> Result(ReceivedThreads, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/threads/active")
@@ -1336,7 +1341,7 @@ pub fn get_active_threads(
 
   response.body
   |> json.parse(using: received_threads_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 /// If `maximum` is not provided, a default of `1` will be used.
@@ -1346,7 +1351,7 @@ pub fn get_members(
   for guild_id: String,
   maximum limit: Option(Int),
   later_than_id after: Option(String),
-) -> Result(List(GuildMember), Error) {
+) -> Result(List(GuildMember), grom.Error) {
   let query =
     [
       case limit {
@@ -1369,7 +1374,7 @@ pub fn get_members(
 
   response.body
   |> json.parse(using: decode.list(guild_member.decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn search_for_members(
@@ -1377,7 +1382,7 @@ pub fn search_for_members(
   in guild_id: String,
   named query_param: String,
   maximum limit: Option(Int),
-) -> Result(List(GuildMember), Error) {
+) -> Result(List(GuildMember), grom.Error) {
   let query =
     [
       [#("query", query_param)],
@@ -1397,7 +1402,7 @@ pub fn search_for_members(
 
   response.body
   |> json.parse(using: decode.list(guild_member.decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 /// See: https://discord.com/developers/docs/resources/guild#get-guild-bans
@@ -1407,7 +1412,7 @@ pub fn get_bans(
   maximum limit: Option(Int),
   earlier_than_id before: Option(String),
   later_than_id after: Option(String),
-) -> Result(List(Ban), Error) {
+) -> Result(List(Ban), grom.Error) {
   let query =
     [
       case limit {
@@ -1431,14 +1436,14 @@ pub fn get_bans(
 
   response.body
   |> json.parse(using: decode.list(ban_decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_ban(
   client: grom.Client,
   from guild_id: String,
   for user_id: String,
-) -> Result(Ban, Error) {
+) -> Result(Ban, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/bans/" <> user_id)
@@ -1447,7 +1452,7 @@ pub fn get_ban(
 
   response.body
   |> json.parse(using: ban_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn create_ban(
@@ -1456,7 +1461,7 @@ pub fn create_ban(
   for user_id: String,
   delete_messages_since delete_message_duration: Option(Duration),
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   let json =
     case delete_message_duration {
       Some(duration) -> [
@@ -1486,7 +1491,7 @@ pub fn remove_ban(
   in guild_id: String,
   from user_id: String,
   because reason: Option(String),
-) -> Result(Nil, Error) {
+) -> Result(Nil, grom.Error) {
   use _response <- result.try(
     client
     |> rest.new_request(
@@ -1506,7 +1511,7 @@ pub fn bulk_ban(
   users user_ids: List(String),
   delete_messages_since delete_message_duration: Option(Duration),
   because reason: Option(String),
-) -> Result(BulkBanResponse, Error) {
+) -> Result(BulkBanResponse, grom.Error) {
   let json =
     [
       [#("user_ids", json.array(user_ids, json.string))],
@@ -1534,13 +1539,13 @@ pub fn bulk_ban(
 
   response.body
   |> json.parse(using: bulk_ban_response_decoder())
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 pub fn get_roles(
   client: grom.Client,
   for guild_id: String,
-) -> Result(List(Role), Error) {
+) -> Result(List(Role), grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/roles")
@@ -1549,7 +1554,7 @@ pub fn get_roles(
 
   response.body
   |> json.parse(using: decode.list(role.decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
 
 /// Returns a list of all of the guild's roles.
@@ -1558,7 +1563,7 @@ pub fn move_roles(
   in guild_id: String,
   roles roles: List(RoleToMove),
   because reason: Option(String),
-) -> Result(List(Role), Error) {
+) -> Result(List(Role), grom.Error) {
   let json =
     roles
     |> json.array(role_to_move_to_json)
@@ -1574,5 +1579,5 @@ pub fn move_roles(
 
   response.body
   |> json.parse(using: decode.list(role.decoder()))
-  |> result.map_error(error.CouldNotDecode)
+  |> result.map_error(grom.CouldNotDecode)
 }
