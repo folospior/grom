@@ -1,6 +1,7 @@
 import gleam/http/response.{type Response}
 import gleam/httpc
 import gleam/json
+import gleam/otp/actor
 
 // TYPES -----------------------------------------------------------------------
 
@@ -13,10 +14,13 @@ pub type Error {
   CouldNotDecode(json.DecodeError)
   StatusCodeUnsuccessful(Response(String))
   ResponseNotValidUtf8(BitArray)
+  InvalidGatewayUrl(String)
+  CouldNotStartActor(actor.StartError)
+  CouldNotSendSocketMessage
 }
 
 // FUNCTIONS -------------------------------------------------------------------
 
-pub fn version() {
+pub fn version() -> String {
   "v0.0.0"
 }
