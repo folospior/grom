@@ -1,23 +1,58 @@
 {
   "nodes": {
+    "gleam": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1756534066,
+        "narHash": "sha256-NYo6q4youHIZbIPUByuUFQ3vFZLxrSDZXFaM7hGrGVU=",
+        "owner": "Comamoca",
+        "repo": "gleam-overlay",
+        "rev": "b79302ccfc543f97368c15a41c38938efdc46847",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Comamoca",
+        "repo": "gleam-overlay",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1750133334,
-        "narHash": "sha256-urV51uWH7fVnhIvsZIELIYalMYsyr2FCalvlRTzqWRw=",
+        "lastModified": 1754725699,
+        "narHash": "sha256-iAcj9T/Y+3DBy2J0N+yF9XQQQ8IEb5swLFzs23CdP88=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "85dbfc7aaf52ecb755f87e577ddbe6dbbdbc1054",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1756542300,
+        "narHash": "sha256-tlOn88coG5fzdyqz6R93SQL5Gpq+m/DsWpekNFhqPQk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "36ab78dab7da2e4e27911007033713bab534187b",
+        "rev": "d7600c775f877cd87b4f5a831c28aa94137377aa",
         "type": "github"
       },
       "original": {
         "id": "nixpkgs",
-        "ref": "nixos-25.05",
+        "ref": "nixos-unstable",
         "type": "indirect"
       }
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "gleam": "gleam",
+        "nixpkgs": "nixpkgs_2"
       }
     }
   },
