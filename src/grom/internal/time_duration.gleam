@@ -12,6 +12,12 @@ pub fn from_minutes_decoder() -> decode.Decoder(Duration) {
 }
 
 @internal
+pub fn from_milliseconds_decoder() -> decode.Decoder(Duration) {
+  use milliseconds <- decode.then(decode.int)
+  decode.success(duration.milliseconds(milliseconds))
+}
+
+@internal
 pub fn from_float_seconds_decoder() -> decode.Decoder(Duration) {
   use seconds <- decode.then(decode.float)
 
