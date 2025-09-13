@@ -18,6 +18,7 @@ import grom/image
 import grom/internal/flags
 import grom/internal/rest
 import grom/permission.{type Permission}
+import grom/sku.{type Sku}
 import grom/user.{type User}
 import grom/webhook_event
 
@@ -520,5 +521,20 @@ pub fn get_entitlements(
 
   response.body
   |> json.parse(using: decode.list(entitlement.decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_skus(
+  client: grom.Client,
+  for application_id: String,
+) -> Result(List(Sku), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/applications/" <> application_id <> "/skus")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: sku.decoder()))
   |> result.map_error(grom.CouldNotDecode)
 }
