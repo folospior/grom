@@ -14,13 +14,17 @@ import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/activity.{type Activity}
+import grom/application
 import grom/gateway/heartbeat
 import grom/gateway/intent.{type Intent}
+import grom/gateway/resuming
 import grom/gateway/sequence
+import grom/guild
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_timestamp
+import grom/user.{type User, User}
 import operating_system
 import repeatedly
 import stratus
@@ -33,6 +37,10 @@ pub type GatewayData {
     recommended_shards: Int,
     session_start_limits: SessionStartLimits,
   )
+}
+
+pub type ReadyApplication {
+  ReadyApplication(id: String, flags: List(application.Flag))
 }
 
 pub type Shard {
@@ -48,7 +56,8 @@ pub type PresenceStatus {
 }
 
 pub type Event {
-  Errored(grom.Error)
+  ReadyEvent(ReadyMessage)
+  ErrorEvent(grom.Error)
 }
 
 pub type SessionStartLimits {
@@ -65,6 +74,7 @@ type State {
     actor: Subject(Event),
     sequence_holder: Subject(sequence.Message),
     heartbeat_counter: Subject(heartbeat.Message),
+    resuming_info_holder: Subject(resuming.Message),
     identify: IdentifyMessage,
   )
 }
@@ -73,12 +83,31 @@ type State {
 
 pub type ReceivedMessage {
   Hello(HelloMessage)
+  Dispatch(DispatchedMessage)
   HeartbeatAcknowledged
   HeartbeatRequest
 }
 
 pub type HelloMessage {
   HelloMessage(heartbeat_interval: Duration)
+}
+
+// RECEIVED DISPATCH EVENTS ----------------------------------------------------
+
+pub type DispatchedMessage {
+  Ready(sequence: Int, data: ReadyMessage)
+}
+
+pub type ReadyMessage {
+  ReadyMessage(
+    api_version: Int,
+    user: User,
+    guilds: List(guild.UnavailableGuild),
+    session_id: String,
+    resume_gateway_url: String,
+    shard: Option(Shard),
+    application: ReadyApplication,
+  )
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -159,6 +188,48 @@ pub fn session_start_limits_decoder() -> decode.Decoder(SessionStartLimits) {
 pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
   use opcode <- decode.field("op", decode.int)
   case opcode {
+    0 -> {
+      use sequence <- decode.field("s", decode.int)
+      use type_ <- decode.field("t", decode.string)
+      use data <- decode.field("d", case type_ {
+        "READY" -> {
+          use ready <- decode.then(ready_message_decoder())
+          decode.success(Ready(sequence, ready))
+        }
+        _ ->
+          decode.failure(
+            Ready(
+              0,
+              ReadyMessage(
+                api_version: 0,
+                user: User(
+                  "",
+                  "",
+                  "",
+                  None,
+                  None,
+                  None,
+                  None,
+                  None,
+                  None,
+                  None,
+                  None,
+                  None,
+                  None,
+                  None,
+                ),
+                guilds: [],
+                session_id: "",
+                resume_gateway_url: "",
+                shard: None,
+                application: ReadyApplication("", []),
+              ),
+            ),
+            "DispatchedMessage",
+          )
+      })
+      decode.success(Dispatch(data))
+    }
     1 -> decode.success(HeartbeatRequest)
     10 -> {
       use msg <- decode.field("d", hello_event_decoder())
@@ -178,6 +249,48 @@ pub fn hello_event_decoder() -> decode.Decoder(HelloMessage) {
   )
 
   decode.success(HelloMessage(heartbeat_interval:))
+}
+
+@internal
+pub fn ready_message_decoder() -> decode.Decoder(ReadyMessage) {
+  use api_version <- decode.field("v", decode.int)
+  use user <- decode.field("user", user.decoder())
+  use guilds <- decode.field(
+    "guilds",
+    decode.list(of: guild.unavailable_guild_decoder()),
+  )
+  use session_id <- decode.field("session_id", decode.string)
+  use resume_gateway_url <- decode.field("resume_gateway_url", decode.string)
+  use shard <- decode.optional_field(
+    "shard",
+    None,
+    decode.optional(shard_decoder()),
+  )
+  use application <- decode.field("application", ready_application_decoder())
+
+  decode.success(ReadyMessage(
+    api_version:,
+    user:,
+    guilds:,
+    session_id:,
+    resume_gateway_url:,
+    shard:,
+    application:,
+  ))
+}
+
+@internal
+pub fn shard_decoder() -> decode.Decoder(Shard) {
+  use id <- decode.field(0, decode.int)
+  use num_shards <- decode.field(1, decode.int)
+  decode.success(Shard(id:, num_shards:))
+}
+
+@internal
+pub fn ready_application_decoder() -> decode.Decoder(ReadyApplication) {
+  use id <- decode.field("id", decode.string)
+  use flags <- decode.field("flags", flags.decoder(application.bits_flags()))
+  decode.success(ReadyApplication(id:, flags:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -324,8 +437,12 @@ pub fn start(
     |> get_data,
   )
 
+  let request_url =
+    string.replace(in: gateway_data.url, each: "wss://", with: "https://")
+    <> "?v=10&encoding=json"
+
   use connection_request <- result.try(
-    request.to(gateway_data.url <> "?v=10&encoding=json")
+    request.to(request_url)
     |> result.replace_error(grom.InvalidGatewayUrl(gateway_data.url)),
   )
 
@@ -371,7 +488,20 @@ fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
   )
   let heartbeat_counter = heartbeat_counter.data
 
-  let state = State(actor:, sequence_holder:, heartbeat_counter:, identify:)
+  use resuming_info_holder <- result.try(
+    resuming.info_holder_start()
+    |> result.map_error(string.inspect),
+  )
+  let resuming_info_holder = resuming_info_holder.data
+
+  let state =
+    State(
+      actor:,
+      sequence_holder:,
+      heartbeat_counter:,
+      resuming_info_holder:,
+      identify:,
+    )
 
   Ok(stratus.initialised(state))
 }
@@ -398,7 +528,7 @@ fn on_text_message(
       case parse_message(text_message) {
         Ok(msg) -> next(msg)
         Error(err) -> {
-          actor.send(state.actor, Errored(err))
+          actor.send(state.actor, ErrorEvent(err))
           stratus.continue(state)
         }
       }
@@ -406,6 +536,7 @@ fn on_text_message(
 
   case message {
     Hello(event) -> on_hello_event(state, connection, event)
+    Dispatch(message) -> on_dispatch(state, message)
     HeartbeatAcknowledged -> on_heartbeat_acknowledged(state)
     HeartbeatRequest -> on_heartbeat_request(state, connection)
   }
@@ -413,12 +544,33 @@ fn on_text_message(
   stratus.continue(state)
 }
 
+fn on_dispatch(state: State, message: DispatchedMessage) {
+  state.sequence_holder
+  |> sequence.set(to: Some(message.sequence))
+
+  case message {
+    Ready(data:, ..) -> on_ready(state, data)
+  }
+}
+
+fn on_ready(state: State, message: ReadyMessage) {
+  state.resuming_info_holder
+  |> resuming.set_info(to: resuming.Info(
+    session_id: message.session_id,
+    resume_gateway_url: message.resume_gateway_url,
+    last_received_close_reason: None,
+  ))
+
+  state.actor
+  |> actor.send(ReadyEvent(message))
+}
+
 fn on_heartbeat_request(state: State, connection: stratus.Connection) -> Nil {
   case send_heartbeat(state, connection) {
     Ok(_) -> Nil
     Error(err) -> {
       state.actor
-      |> actor.send(Errored(err))
+      |> actor.send(ErrorEvent(err))
     }
   }
 }
@@ -447,7 +599,7 @@ fn send_identify(state: State, connection: stratus.Connection) {
 
   case result {
     Ok(_) -> Nil
-    Error(error) -> actor.send(state.actor, Errored(error))
+    Error(error) -> actor.send(state.actor, ErrorEvent(error))
   }
 }
 
@@ -479,14 +631,14 @@ fn start_heartbeats(
           |> result.map_error(grom.CouldNotStartHeartbeatCycle)
         {
           Ok(_) -> next()
-          Error(error) -> actor.send(state.actor, Errored(error))
+          Error(error) -> actor.send(state.actor, ErrorEvent(error))
         }
       }
 
     repeatedly.call(regular_wait_duration, Nil, fn(_state, _i) {
       case send_heartbeat(state, connection) {
         Ok(_) -> Nil
-        Error(error) -> actor.send(state.actor, Errored(error))
+        Error(error) -> actor.send(state.actor, ErrorEvent(error))
       }
     })
     Nil
@@ -534,6 +686,7 @@ fn jitter() -> Float {
 
 pub fn receive_opcode(event: ReceivedMessage) -> Int {
   case event {
+    Dispatch(..) -> 0
     Hello(..) -> 10
     HeartbeatAcknowledged -> 11
     HeartbeatRequest -> 1

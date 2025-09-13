@@ -78,6 +78,10 @@ pub type Guild {
   )
 }
 
+pub type UnavailableGuild {
+  UnavailableGuild(id: String, unavailable: Bool)
+}
+
 pub type IncidentsData {
   IncidentsData(
     invites_disabled_until: Option(Timestamp),
@@ -517,6 +521,13 @@ pub fn decoder() -> decode.Decoder(Guild) {
     safety_alerts_channel_id:,
     incidents_data:,
   ))
+}
+
+@internal
+pub fn unavailable_guild_decoder() -> decode.Decoder(UnavailableGuild) {
+  use id <- decode.field("id", decode.string)
+  use unavailable <- decode.optional_field("unavailable", False, decode.bool)
+  decode.success(UnavailableGuild(id:, unavailable:))
 }
 
 @internal
