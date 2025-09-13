@@ -162,11 +162,11 @@ pub fn decoder() -> decode.Decoder(GuildMember) {
 pub fn modify_to_json(modify: Modify) -> Json {
   let nick =
     modify.nick
-    |> modification.encode("nick", json.string)
+    |> modification.to_json("nick", json.string)
 
   let role_ids =
     modify.role_ids
-    |> modification.encode("roles", json.array(_, json.string))
+    |> modification.to_json("roles", json.array(_, json.string))
 
   let is_mute = case modify.is_mute {
     Some(mute) -> [#("mute", json.bool(mute))]
@@ -180,15 +180,18 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let voice_channel_id =
     modify.voice_channel_id
-    |> modification.encode("channel_id", json.string)
+    |> modification.to_json("channel_id", json.string)
 
   let communication_disabled_until =
     modify.communication_disabled_until
-    |> modification.encode("communication_disabled_until", time_rfc3339.to_json)
+    |> modification.to_json(
+      "communication_disabled_until",
+      time_rfc3339.to_json,
+    )
 
   let flags =
     modify.flags
-    |> modification.encode("flags", flags.to_json(_, bits_member_flags()))
+    |> modification.to_json("flags", flags.to_json(_, bits_member_flags()))
 
   [
     nick,
@@ -260,7 +263,7 @@ pub fn set_current_nick(
 ) -> Result(GuildMember, grom.Error) {
   let json =
     nick
-    |> modification.encode("nick", json.string)
+    |> modification.to_json("nick", json.string)
     |> json.object
     |> json.to_string
 

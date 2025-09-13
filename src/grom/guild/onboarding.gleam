@@ -174,11 +174,11 @@ pub fn prompt_type_decoder() -> decode.Decoder(PromptType) {
 pub fn modify_to_json(modify: Modify) -> Json {
   json.object(
     [
-      modification.encode(modify.prompts, "prompts", json.array(
+      modification.to_json(modify.prompts, "prompts", json.array(
         _,
         prompt_to_json,
       )),
-      modification.encode(
+      modification.to_json(
         modify.default_channel_ids,
         "default_channel_ids",
         json.array(_, json.string),
@@ -187,7 +187,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         Some(enabled) -> [#("enabled", json.bool(enabled))]
         None -> []
       },
-      modification.encode(modify.mode, "mode", mode_to_json),
+      modification.to_json(modify.mode, "mode", mode_to_json),
     ]
     |> list.flatten,
   )

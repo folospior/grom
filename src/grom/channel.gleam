@@ -881,11 +881,11 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let position =
         modify.position
-        |> modification.encode("position", json.int)
+        |> modification.to_json("position", json.int)
 
       let topic =
         modify.topic
-        |> modification.encode("topic", json.string)
+        |> modification.to_json("topic", json.string)
 
       let is_nsfw = case modify.is_nsfw {
         Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
@@ -894,25 +894,25 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let rate_limit_per_user =
         modify.rate_limit_per_user
-        |> modification.encode(
+        |> modification.to_json(
           "rate_limit_per_user",
           time_duration.to_int_seconds_encode,
         )
 
       let permission_overwrites =
         modify.permission_overwrites
-        |> modification.encode("permission_overwrites", json.array(
+        |> modification.to_json("permission_overwrites", json.array(
           _,
           permission_overwrite.create_to_json,
         ))
 
       let parent_id =
         modify.parent_id
-        |> modification.encode("parent_id", json.string)
+        |> modification.to_json("parent_id", json.string)
 
       let default_auto_archive_duration =
         modify.default_auto_archive_duration
-        |> modification.encode(
+        |> modification.to_json(
           "default_auto_archive_duration",
           // FIXME: THIS IS SUPPOSED TO BE MINUTES!!!
           time_duration.to_int_seconds_encode,
@@ -953,7 +953,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let position =
         modify.position
-        |> modification.encode("position", json.int)
+        |> modification.to_json("position", json.int)
 
       let is_nsfw = case modify.is_nsfw {
         Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
@@ -962,37 +962,40 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let rate_limit_per_user =
         modify.rate_limit_per_user
-        |> modification.encode(
+        |> modification.to_json(
           "rate_limit_per_user",
           time_duration.to_int_seconds_encode,
         )
 
       let bitrate =
         modify.bitrate
-        |> modification.encode("bitrate", json.int)
+        |> modification.to_json("bitrate", json.int)
 
       let user_limit =
         modify.user_limit
-        |> modification.encode("user_limit", json.int)
+        |> modification.to_json("user_limit", json.int)
 
       let permission_overwrites =
         modify.permission_overwrites
-        |> modification.encode("permission_overwrites", json.array(
+        |> modification.to_json("permission_overwrites", json.array(
           _,
           permission_overwrite.create_to_json,
         ))
 
       let parent_id =
         modify.parent_id
-        |> modification.encode("parent_id", json.string)
+        |> modification.to_json("parent_id", json.string)
 
       let rtc_region_id =
         modify.rtc_region_id
-        |> modification.encode("rtc_region", json.string)
+        |> modification.to_json("rtc_region", json.string)
 
       let video_quality_mode =
         modify.video_quality_mode
-        |> modification.encode("video_quality_mode", video_quality_mode_to_json)
+        |> modification.to_json(
+          "video_quality_mode",
+          video_quality_mode_to_json,
+        )
 
       [
         name,
@@ -1017,11 +1020,11 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let position =
         modify.position
-        |> modification.encode("position", json.int)
+        |> modification.to_json("position", json.int)
 
       let permission_overwrites =
         modify.permission_overwrites
-        |> modification.encode("permission_overwrites", json.array(
+        |> modification.to_json("permission_overwrites", json.array(
           _,
           permission_overwrite.create_to_json,
         ))
@@ -1043,11 +1046,11 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let position =
         modify.position
-        |> modification.encode("position", json.int)
+        |> modification.to_json("position", json.int)
 
       let topic =
         modify.topic
-        |> modification.encode("topic", json.string)
+        |> modification.to_json("topic", json.string)
 
       let is_nsfw = case modify.is_nsfw {
         Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
@@ -1056,18 +1059,18 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let permission_overwrites =
         modify.permission_overwrites
-        |> modification.encode("permission_overwrites", json.array(
+        |> modification.to_json("permission_overwrites", json.array(
           _,
           permission_overwrite.create_to_json,
         ))
 
       let parent_id =
         modify.parent_id
-        |> modification.encode("parent_id", json.string)
+        |> modification.to_json("parent_id", json.string)
 
       let default_auto_archive_duration =
         modify.default_auto_archive_duration
-        |> modification.encode(
+        |> modification.to_json(
           "default_auto_archive_duration",
           time_duration.to_int_seconds_encode,
         )
@@ -1118,7 +1121,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let rate_limit_per_user =
         modify.rate_limit_per_user
-        |> modification.encode(
+        |> modification.to_json(
           "rate_limit_per_user",
           time_duration.to_int_seconds_encode,
         )
@@ -1154,7 +1157,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let position =
         modify.position
-        |> modification.encode("position", json.int)
+        |> modification.to_json("position", json.int)
 
       let is_nsfw = case modify.is_nsfw {
         Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
@@ -1163,37 +1166,40 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let rate_limit_per_user =
         modify.rate_limit_per_user
-        |> modification.encode(
+        |> modification.to_json(
           "rate_limit_per_user",
           time_duration.to_int_seconds_encode,
         )
 
       let bitrate =
         modify.bitrate
-        |> modification.encode("bitrate", json.int)
+        |> modification.to_json("bitrate", json.int)
 
       let user_limit =
         modify.user_limit
-        |> modification.encode("user_limit", json.int)
+        |> modification.to_json("user_limit", json.int)
 
       let permission_overwrites =
         modify.permission_overwrites
-        |> modification.encode("permission_overwrites", json.array(
+        |> modification.to_json("permission_overwrites", json.array(
           _,
           permission_overwrite.create_to_json,
         ))
 
       let parent_id =
         modify.parent_id
-        |> modification.encode("parent_id", json.string)
+        |> modification.to_json("parent_id", json.string)
 
       let rtc_region_id =
         modify.rtc_region_id
-        |> modification.encode("rtc_region", json.string)
+        |> modification.to_json("rtc_region", json.string)
 
       let video_quality_mode =
         modify.video_quality_mode
-        |> modification.encode("video_quality_mode", video_quality_mode_to_json)
+        |> modification.to_json(
+          "video_quality_mode",
+          video_quality_mode_to_json,
+        )
 
       [
         name,
@@ -1218,11 +1224,11 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let position =
         modify.position
-        |> modification.encode("position", json.int)
+        |> modification.to_json("position", json.int)
 
       let topic =
         modify.topic
-        |> modification.encode("topic", json.string)
+        |> modification.to_json("topic", json.string)
 
       let is_nsfw = case modify.is_nsfw {
         Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
@@ -1231,25 +1237,25 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let rate_limit_per_user =
         modify.rate_limit_per_user
-        |> modification.encode(
+        |> modification.to_json(
           "rate_limit_per_user",
           time_duration.to_int_seconds_encode,
         )
 
       let permission_overwrites =
         modify.permission_overwrites
-        |> modification.encode("permission_overwrites", json.array(
+        |> modification.to_json("permission_overwrites", json.array(
           _,
           permission_overwrite.create_to_json,
         ))
 
       let parent_id =
         modify.parent_id
-        |> modification.encode("parent_id", json.string)
+        |> modification.to_json("parent_id", json.string)
 
       let default_auto_archive_duration =
         modify.default_auto_archive_duration
-        |> modification.encode(
+        |> modification.to_json(
           "default_auto_archive_duration",
           time_duration.to_int_seconds_encode,
         )
@@ -1266,7 +1272,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let default_reaction_emoji =
         modify.default_reaction_emoji
-        |> modification.encode(
+        |> modification.to_json(
           "default_reaction_emoji",
           forum.default_reaction_encode,
         )
@@ -1285,7 +1291,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let default_sort_order =
         modify.default_sort_order
-        |> modification.encode(
+        |> modification.to_json(
           "default_sort_order",
           forum.sort_order_type_encode,
         )
@@ -1316,11 +1322,11 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let position =
         modify.position
-        |> modification.encode("position", json.int)
+        |> modification.to_json("position", json.int)
 
       let topic =
         modify.topic
-        |> modification.encode("topic", json.string)
+        |> modification.to_json("topic", json.string)
 
       let is_nsfw = case modify.is_nsfw {
         Some(nsfw) -> [#("nsfw", json.bool(nsfw))]
@@ -1329,21 +1335,21 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let rate_limit_per_user =
         modify.rate_limit_per_user
-        |> modification.encode(
+        |> modification.to_json(
           "rate_limit_per_user",
           time_duration.to_int_seconds_encode,
         )
 
       let permission_overwrites =
         modify.permission_overwrites
-        |> modification.encode("permission_overwrites", json.array(
+        |> modification.to_json("permission_overwrites", json.array(
           _,
           permission_overwrite.create_to_json,
         ))
 
       let default_auto_archive_duration =
         modify.default_auto_archive_duration
-        |> modification.encode(
+        |> modification.to_json(
           "default_auto_archive_duration",
           time_duration.to_int_seconds_encode,
         )
@@ -1360,7 +1366,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let default_reaction_emoji =
         modify.default_reaction_emoji
-        |> modification.encode(
+        |> modification.to_json(
           "default_reaction_emoji",
           forum.default_reaction_encode,
         )
@@ -1379,7 +1385,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
       let default_sort_order =
         modify.default_sort_order
-        |> modification.encode(
+        |> modification.to_json(
           "default_sort_order",
           forum.sort_order_type_encode,
         )

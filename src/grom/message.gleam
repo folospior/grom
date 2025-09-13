@@ -929,22 +929,25 @@ pub fn nonce_to_json(nonce: Nonce) -> Json {
 pub fn modify_to_json(modify: Modify) -> Json {
   json.object(
     [
-      modification.encode(modify.content, "content", json.string),
-      modification.encode(modify.embeds, "embdeds", json.array(_, embed.to_json)),
-      modification.encode(modify.flags, "flags", flags.to_json(
+      modification.to_json(modify.content, "content", json.string),
+      modification.to_json(modify.embeds, "embdeds", json.array(
+        _,
+        embed.to_json,
+      )),
+      modification.to_json(modify.flags, "flags", flags.to_json(
         _,
         bits_modify_flags(),
       )),
-      modification.encode(
+      modification.to_json(
         modify.allowed_mentions,
         "allowed_mentions",
         allowed_mentions.to_json,
       ),
-      modification.encode(modify.components, "components", json.array(
+      modification.to_json(modify.components, "components", json.array(
         _,
         component.to_json,
       )),
-      modification.encode(modify.attachments, "attachments", json.array(
+      modification.to_json(modify.attachments, "attachments", json.array(
         _,
         modify_attachment_to_json,
       )),

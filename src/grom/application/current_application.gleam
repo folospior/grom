@@ -86,11 +86,11 @@ fn modify_encode(modify: Modify) -> Json {
 
   let icon =
     modify.icon
-    |> modification.encode("icon", image.to_json)
+    |> modification.to_json("icon", image.to_json)
 
   let cover_image =
     modify.cover_image
-    |> modification.encode("cover_image", image.to_json)
+    |> modification.to_json("cover_image", image.to_json)
 
   let interactions_endpoint_url = case modify.interactions_endpoint_url {
     Some(url) -> [#("interactions_endpoint_url", json.string(url))]

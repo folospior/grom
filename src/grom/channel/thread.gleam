@@ -278,20 +278,20 @@ pub fn modify_encode(modify: Modify) -> Json {
 
   let rate_limit_per_user =
     modify.rate_limit_per_user
-    |> modification.encode(
+    |> modification.to_json(
       "rate_limit_per_user",
       time_duration.to_int_seconds_encode,
     )
 
   let flags =
     modify.flags
-    |> modification.encode("flags", fn(flags) {
+    |> modification.to_json("flags", fn(flags) {
       flags.to_json(flags, bits_flags())
     })
 
   let applied_tags_ids =
     modify.applied_tags_ids
-    |> modification.encode("applied_tags", fn(tags) {
+    |> modification.to_json("applied_tags", fn(tags) {
       json.array(tags, json.string)
     })
 
