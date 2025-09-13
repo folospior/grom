@@ -1218,3 +1218,22 @@ pub fn delete(
   |> rest.execute
   |> result.replace(Nil)
 }
+
+pub fn end_poll(
+  client: grom.Client,
+  in channel_id: String,
+  id message_id: String,
+) -> Result(Message, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Post,
+      "/channels/" <> channel_id <> "/polls/" <> message_id <> "/expire",
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
