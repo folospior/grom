@@ -1,22 +1,33 @@
-import gleam/option.{None, Some}
+import gleam/erlang/process
+import gleam/otp/actor
+import grom
 import grom/channel
-import grom/client
+import grom/gateway
+import grom/gateway/intent
+import grom/guild
+import grom/message
 
-const token = "l.u.c.y"
-
-const guild_id = "768594524158427167"
+const token = "super secret token"
 
 pub fn main() {
-  let client = client.Client(token:)
+  let client = grom.Client(token:)
 
-  let data =
-    channel.CreateText(
-      ..channel.new_create_text(named: "hello", in: guild_id),
-      position: Some(100),
-    )
-    |> channel.CreateTextChannel
+  let identify = gateway.identify(client, intent.all_unprivileged)
 
-  client
-  |> channel.create(using: data, because: None)
-  |> echo
+  let assert Ok(actor) =
+    actor.new(Nil)
+    |> actor.on_message(fn(_current, event: gateway.Event) {
+      case event {
+        gateway.ReadyEvent(_event) -> {
+          actor.continue(Nil)
+        }
+        _ -> actor.continue(Nil)
+      }
+    })
+    |> actor.start
+
+  let actor = actor.data
+
+  let assert Ok(_) = gateway.start(client, identify, actor)
+  process.sleep_forever()
 }
