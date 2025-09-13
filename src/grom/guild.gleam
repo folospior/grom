@@ -13,6 +13,7 @@ import grom
 import grom/channel/thread.{type Thread}
 import grom/emoji.{type Emoji}
 import grom/guild/auto_moderation
+import grom/guild/integration.{type Integration}
 import grom/guild/role.{type Role}
 import grom/guild_member.{type GuildMember}
 import grom/image
@@ -23,6 +24,7 @@ import grom/internal/time_rfc3339
 import grom/modification.{type Modification, Skip}
 import grom/sticker.{type Sticker}
 import grom/user.{type User}
+import grom/voice
 
 // TYPES ----------------------------------------------------------------------
 
@@ -216,7 +218,7 @@ pub type WelcomeChannel {
   )
 }
 
-pub opaque type Modify {
+pub type Modify {
   Modify(
     name: Option(String),
     verification_level: Option(VerificationLevel),
@@ -256,6 +258,33 @@ pub type BulkBanResponse {
 
 pub type RoleToMove {
   RoleToMove(id: String, position: Option(Int))
+}
+
+pub type Prune {
+  Prune(days: Int, compute_pruned_count: Bool, include_role_ids: List(String))
+}
+
+pub type PruneResponse {
+  PruneResponse(pruned_count: Option(Int))
+}
+
+pub type VanityInvite {
+  VanityInvite(code: Option(String), uses: Int)
+}
+
+pub type ModifyWelcomeScreen {
+  ModifyWelcomeScreen(
+    is_enabled: Option(Bool),
+    welcome_channels: Modification(List(WelcomeChannel)),
+    description: Modification(String),
+  )
+}
+
+pub type ModifyIncidentActions {
+  ModifyIncidentActions(
+    invites_disabled_until: Modification(Timestamp),
+    dms_disabled_until: Modification(Timestamp),
+  )
 }
 
 // FLAGS ------------------------------------------------------------------
@@ -735,6 +764,19 @@ pub fn bulk_ban_response_decoder() -> decode.Decoder(BulkBanResponse) {
   decode.success(BulkBanResponse(banned_users_ids:, failed_users_ids:))
 }
 
+@internal
+pub fn prune_response_decoder() -> decode.Decoder(PruneResponse) {
+  use pruned_count <- decode.field("pruned", decode.optional(decode.int))
+  decode.success(PruneResponse(pruned_count:))
+}
+
+@internal
+pub fn vanity_invite_decoder() -> decode.Decoder(VanityInvite) {
+  use code <- decode.field("code", decode.optional(decode.string))
+  use uses <- decode.field("uses", decode.int)
+  decode.success(VanityInvite(code:, uses:))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -963,6 +1005,66 @@ pub fn role_to_move_to_json(role_to_move: RoleToMove) -> Json {
   [id, position]
   |> list.flatten
   |> json.object
+}
+
+@internal
+pub fn prune_to_json(prune: Prune) -> Json {
+  json.object([
+    #("days", json.int(prune.days)),
+    #("compute_prune_count", json.bool(prune.compute_pruned_count)),
+    #("include_roles", json.array(prune.include_role_ids, json.string)),
+  ])
+}
+
+@internal
+pub fn modify_welcome_screen_to_json(modify: ModifyWelcomeScreen) -> Json {
+  let is_enabled = case modify.is_enabled {
+    Some(enabled) -> [#("enabled", json.bool(enabled))]
+    None -> []
+  }
+
+  let welcome_channels =
+    modify.welcome_channels
+    |> modification.encode("welcome_channels", json.array(
+      _,
+      welcome_channel_to_json,
+    ))
+
+  let description =
+    modify.description
+    |> modification.encode("description", json.string)
+
+  [is_enabled, welcome_channels, description]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn welcome_channel_to_json(welcome_channel: WelcomeChannel) -> Json {
+  json.object([
+    #("channel_id", json.string(welcome_channel.channel_id)),
+    #("description", json.string(welcome_channel.description)),
+    #("emoji_id", json.nullable(welcome_channel.emoji_id, json.string)),
+    #("emoji_name", json.nullable(welcome_channel.emoji_name, json.string)),
+  ])
+}
+
+@internal
+pub fn modify_incident_actions_to_json(modify: ModifyIncidentActions) -> Json {
+  json.object(
+    list.flatten([
+      modification.encode(
+        modify.invites_disabled_until,
+        "invites_disabled_until",
+        time_rfc3339.to_json,
+      ),
+      modification.encode(
+        modify.dms_disabled_until,
+        "dms_disabled_until",
+        time_rfc3339.to_json,
+      ),
+    ]),
+  )
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
@@ -1579,5 +1681,130 @@ pub fn move_roles(
 
   response.body
   |> json.parse(using: decode.list(role.decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn begin_prune(
+  client: grom.Client,
+  in guild_id: String,
+  using prune: Prune,
+  because reason: Option(String),
+) -> Result(PruneResponse, grom.Error) {
+  let json = prune |> prune_to_json |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Post, "/guilds/" <> guild_id <> "/prune")
+    |> rest.with_reason(reason)
+    |> request.set_body(json)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: prune_response_decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_voice_regions(
+  client: grom.Client,
+  for guild_id: String,
+) -> Result(List(voice.Region), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/regions")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: voice.region_decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_integrations(
+  client: grom.Client,
+  for guild_id: String,
+) -> Result(List(Integration), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/integrations")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: integration.decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_vanity_invite(
+  client: grom.Client,
+  for guild_id: String,
+) -> Result(VanityInvite, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/vanity-url")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: vanity_invite_decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_welcome_screen(
+  client: grom.Client,
+  for guild_id: String,
+) -> Result(WelcomeScreen, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/welcome-screen")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: welcome_screen_decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn modify_welcome_screen(
+  client: grom.Client,
+  in guild_id: String,
+  using modify: ModifyWelcomeScreen,
+  because reason: Option(String),
+) -> Result(WelcomeScreen, grom.Error) {
+  let json = modify |> modify_welcome_screen_to_json |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Patch, "/guilds/" <> guild_id <> "/welcome-screen")
+    |> rest.with_reason(reason)
+    |> request.set_body(json)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: welcome_screen_decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn new_modify_welcome_screen() -> ModifyWelcomeScreen {
+  ModifyWelcomeScreen(None, Skip, Skip)
+}
+
+pub fn modify_incident_actions(
+  client: grom.Client,
+  in guild_id: String,
+  using modify: ModifyIncidentActions,
+) -> Result(IncidentsData, grom.Error) {
+  let json = modify |> modify_incident_actions_to_json |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Put, "/guilds/" <> guild_id <> "/incident-actions")
+    |> request.set_body(json)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: incidents_data_decoder())
   |> result.map_error(grom.CouldNotDecode)
 }
