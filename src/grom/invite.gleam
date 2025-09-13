@@ -1,8 +1,10 @@
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
 import gleam/json.{type Json}
-import gleam/option.{type Option, None}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
@@ -277,27 +279,27 @@ pub fn create_encode(create: Create) -> Json {
   json.object([
     #("max_age", case max_age {
       None -> json.null()
-      option.Some(value) -> time_duration.to_int_seconds_encode(value)
+      Some(value) -> time_duration.to_int_seconds_encode(value)
     }),
     #("max_uses", case max_uses {
       None -> json.null()
-      option.Some(value) -> json.int(value)
+      Some(value) -> json.int(value)
     }),
     #("is_temporary", case is_temporary {
       None -> json.null()
-      option.Some(value) -> json.bool(value)
+      Some(value) -> json.bool(value)
     }),
     #("target_type", case target_type {
       None -> json.null()
-      option.Some(value) -> target_type_encode(value)
+      Some(value) -> target_type_encode(value)
     }),
     #("target_user_id", case target_user_id {
       None -> json.null()
-      option.Some(value) -> json.string(value)
+      Some(value) -> json.string(value)
     }),
     #("target_application_id", case target_application_id {
       None -> json.null()
-      option.Some(value) -> json.string(value)
+      Some(value) -> json.string(value)
     }),
   ])
 }
@@ -353,4 +355,44 @@ pub fn create(
   response.body
   |> json.parse(using: without_metadata_decoder())
   |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get(
+  client: grom.Client,
+  code invite_code: String,
+  include_counts with_counts: Bool,
+  scheduled_event_id guild_scheduled_event_id: Option(String),
+) -> Result(Invite, grom.Error) {
+  let query =
+    [
+      [#("with_counts", bool.to_string(with_counts))],
+      case guild_scheduled_event_id {
+        Some(id) -> [#("guild_scheduled_event_id", id)]
+        None -> []
+      },
+    ]
+    |> list.flatten
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/invites/" <> invite_code)
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn delete(
+  client: grom.Client,
+  code invite_code: String,
+  because reason: Option(String),
+) -> Result(Nil, grom.Error) {
+  client
+  |> rest.new_request(http.Delete, "/invites/" <> invite_code)
+  |> rest.with_reason(reason)
+  |> rest.execute
+  |> result.replace(Nil)
 }
