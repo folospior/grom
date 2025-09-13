@@ -1,10 +1,12 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 
 // TYPES -----------------------------------------------------------------------
 
 pub type MessageReference {
-  Reference(
+  MessageReference(
     type_: Type,
     message_id: Option(String),
     channel_id: Option(String),
@@ -43,7 +45,7 @@ pub fn decoder() -> decode.Decoder(MessageReference) {
     None,
     decode.optional(decode.bool),
   )
-  decode.success(Reference(
+  decode.success(MessageReference(
     type_:,
     message_id:,
     channel_id:,
@@ -60,4 +62,44 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     2 -> decode.success(Forward)
     _ -> decode.failure(Default, "Type")
   }
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn to_json(reference: MessageReference) -> Json {
+  let type_ = [#("type", type_to_json(reference.type_))]
+
+  let message_id = case reference.message_id {
+    Some(id) -> [#("message_id", json.string(id))]
+    None -> []
+  }
+
+  let channel_id = case reference.channel_id {
+    Some(id) -> [#("channel_id", json.string(id))]
+    None -> []
+  }
+
+  let guild_id = case reference.guild_id {
+    Some(id) -> [#("guild_id", json.string(id))]
+    None -> []
+  }
+
+  let fail_if_not_exists = case reference.fail_if_not_exists {
+    Some(fail) -> [#("fail_if_not_exists", json.bool(fail))]
+    None -> []
+  }
+
+  [type_, message_id, channel_id, guild_id, fail_if_not_exists]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn type_to_json(type_: Type) -> Json {
+  case type_ {
+    Default -> 0
+    Forward -> 1
+  }
+  |> json.int
 }

@@ -853,7 +853,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
     Some(flags) -> [
       #(
         "system_channel_flags",
-        flags.encode(flags, bits_system_channel_flags()),
+        flags.to_json(flags, bits_system_channel_flags()),
       ),
     ]
     None -> []

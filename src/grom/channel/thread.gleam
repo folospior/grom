@@ -286,7 +286,7 @@ pub fn modify_encode(modify: Modify) -> Json {
   let flags =
     modify.flags
     |> modification.encode("flags", fn(flags) {
-      flags.encode(flags, bits_flags())
+      flags.to_json(flags, bits_flags())
     })
 
   let applied_tags_ids =

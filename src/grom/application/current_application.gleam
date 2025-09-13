@@ -80,7 +80,7 @@ fn modify_encode(modify: Modify) -> Json {
   }
 
   let flags = case modify.flags {
-    Some(flags) -> [#("flags", flags.encode(flags, application.bits_flags()))]
+    Some(flags) -> [#("flags", flags.to_json(flags, application.bits_flags()))]
     None -> []
   }
 

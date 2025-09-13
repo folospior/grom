@@ -1,7 +1,11 @@
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
+import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom/emoji.{type Emoji}
+import grom/internal/time_duration
 import grom/internal/time_rfc3339
 
 // TYPES -----------------------------------------------------------------------
@@ -35,6 +39,24 @@ pub type AnswerCount {
 
 pub type LayoutType {
   Default
+}
+
+pub type Create {
+  Create(
+    question: CreateQuestion,
+    answers: List(CreateAnswer),
+    duration: Option(Duration),
+    allow_multiselect: Bool,
+    layout_type: Option(LayoutType),
+  )
+}
+
+pub type CreateQuestion {
+  CreateQuestion(text: Option(String))
+}
+
+pub type CreateAnswer {
+  CreateAnswer(media: Media)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -108,4 +130,71 @@ pub fn answer_count_decoder() -> decode.Decoder(AnswerCount) {
   use count <- decode.field("count", decode.int)
   use current_user_voted <- decode.field("me_voted", decode.bool)
   decode.success(AnswerCount(id:, count:, current_user_voted:))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn create_to_json(create: Create) -> Json {
+  let question = [#("question", create_question_to_json(create.question))]
+
+  let answers = [
+    #("answers", json.array(create.answers, create_answer_to_json)),
+  ]
+
+  let duration = case create.duration {
+    Some(duration) -> [#("duration", time_duration.to_int_hours_json(duration))]
+    None -> []
+  }
+
+  let allow_multiselect = [
+    #("allow_multiselect", json.bool(create.allow_multiselect)),
+  ]
+
+  let layout_type = case create.layout_type {
+    Some(type_) -> [#("layout_type", layout_type_to_json(type_))]
+    None -> []
+  }
+
+  [question, answers, duration, allow_multiselect, layout_type]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn create_question_to_json(question: CreateQuestion) -> Json {
+  json.object(case question.text {
+    Some(text) -> [#("text", json.string(text))]
+    None -> []
+  })
+}
+
+@internal
+pub fn create_answer_to_json(answer: CreateAnswer) -> Json {
+  json.object([#("poll_media", media_to_json(answer.media))])
+}
+
+@internal
+pub fn media_to_json(media: Media) -> Json {
+  let text = case media.text {
+    Some(text) -> [#("text", json.string(text))]
+    None -> []
+  }
+
+  let emoji = case media.emoji {
+    Some(emoji) -> [#("emoji", emoji.to_json(emoji))]
+    None -> []
+  }
+
+  [text, emoji]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn layout_type_to_json(layout_type: LayoutType) -> Json {
+  case layout_type {
+    Default -> 1
+  }
+  |> json.int
 }

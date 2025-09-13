@@ -376,6 +376,12 @@ pub type ReceivedThreads {
   )
 }
 
+pub type GetMessagesQuery {
+  BeforeId(String)
+  AroundId(String)
+  AfterId(String)
+}
+
 // DECODERS --------------------------------------------------------------------
 
 @internal
@@ -1118,7 +1124,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         )
 
       let flags = case modify.flags {
-        Some(flags) -> [#("flags", flags.encode(flags, thread.bits_flags()))]
+        Some(flags) -> [#("flags", flags.to_json(flags, thread.bits_flags()))]
         None -> []
       }
 
@@ -1249,7 +1255,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         )
 
       let flags = case modify.flags {
-        Some(flags) -> [#("flags", flags.encode(flags, forum.bits_flags()))]
+        Some(flags) -> [#("flags", flags.to_json(flags, forum.bits_flags()))]
         None -> []
       }
 
@@ -1343,7 +1349,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         )
 
       let flags = case modify.flags {
-        Some(flags) -> [#("flags", flags.encode(flags, media.bits_flags()))]
+        Some(flags) -> [#("flags", flags.to_json(flags, media.bits_flags()))]
         None -> []
       }
 
@@ -2713,4 +2719,56 @@ pub fn new_create_media(named name: String, in guild_id: String) -> CreateMedia 
     None,
     None,
   )
+}
+
+/// `maximum` defaults to 50 if not provided.
+pub fn get_messages(
+  client: grom.Client,
+  in channel_id: String,
+  time query: Option(GetMessagesQuery),
+  maximum limit: Option(Int),
+) -> Result(List(Message), grom.Error) {
+  let query =
+    case query {
+      Some(AroundId(id)) -> [#("around", id)]
+      Some(BeforeId(id)) -> [#("before", id)]
+      Some(AfterId(id)) -> [#("after", id)]
+      None -> []
+    }
+    |> list.append(case limit {
+      Some(limit) -> [#("limit", int.to_string(int.clamp(limit, 1, 100)))]
+      None -> []
+    })
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/channels/" <> channel_id <> "/messages")
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: message.decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn bulk_delete_messages(
+  client: grom.Client,
+  in channel_id: String,
+  ids message_ids: List(String),
+  because reason: Option(String),
+) -> Result(Nil, grom.Error) {
+  let json =
+    json.object([#("messages", json.array(message_ids, json.string))])
+    |> json.to_string
+
+  client
+  |> rest.new_request(
+    http.Post,
+    "/channels/" <> channel_id <> "/messages/bulk-delete",
+  )
+  |> rest.with_reason(reason)
+  |> request.set_body(json)
+  |> rest.execute
+  |> result.replace(Nil)
 }
