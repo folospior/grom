@@ -1,6 +1,10 @@
 import gleam/dynamic/decode
+import gleam/http
 import gleam/option.{type Option, None}
+import gleam/result
 import gleam/time/timestamp.{type Timestamp}
+import grom
+import grom/internal/rest
 import grom/internal/time_rfc3339
 import grom/user.{type User}
 
@@ -174,4 +178,22 @@ pub fn expire_behavior_decoder() {
     1 -> decode.success(Kick)
     _ -> decode.failure(RemoveRole, "ExpireBehavior")
   }
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn delete(
+  client: grom.Client,
+  from guild_id: String,
+  id integration_id: String,
+  because reason: Option(String),
+) -> Result(Nil, grom.Error) {
+  client
+  |> rest.new_request(
+    http.Delete,
+    "/guilds/" <> guild_id <> "/integrations/" <> integration_id,
+  )
+  |> rest.with_reason(reason)
+  |> rest.execute
+  |> result.replace(Nil)
 }

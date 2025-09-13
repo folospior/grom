@@ -17,6 +17,11 @@ import grom/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
 
+pub type Invite {
+  InviteWithoutMetadata(WithoutMetadata)
+  InviteWithMetadata(WithMetadata)
+}
+
 pub type WithoutMetadata {
   WithoutMetadata(
     type_: Type,
@@ -77,6 +82,21 @@ pub type TargetType {
 }
 
 // DECODERS --------------------------------------------------------------------
+
+@internal
+pub fn decoder() -> decode.Decoder(Invite) {
+  let without_metadata = {
+    use invite <- decode.then(without_metadata_decoder())
+    decode.success(InviteWithoutMetadata(invite))
+  }
+
+  let with_metadata = {
+    use invite <- decode.then(with_metadata_decoder())
+    decode.success(InviteWithMetadata(invite))
+  }
+
+  decode.one_of(with_metadata, or: [without_metadata])
+}
 
 @internal
 pub fn without_metadata_decoder() -> decode.Decoder(WithoutMetadata) {
@@ -284,9 +304,9 @@ pub fn create_encode(create: Create) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn get_many(
+pub fn get_all_for_channel(
   client: grom.Client,
-  for channel_id: String,
+  with_id channel_id: String,
 ) -> Result(List(WithMetadata), grom.Error) {
   use response <- result.try(
     client
@@ -296,6 +316,21 @@ pub fn get_many(
 
   response.body
   |> json.parse(using: decode.list(with_metadata_decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_all_for_guild(
+  client: grom.Client,
+  with_id guild_id: String,
+) -> Result(List(Invite), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/invites")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: decoder()))
   |> result.map_error(grom.CouldNotDecode)
 }
 
