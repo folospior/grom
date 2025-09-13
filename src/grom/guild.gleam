@@ -817,7 +817,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let afk_channel_id =
     modify.afk_channel_id
-    |> modification.encode("afk_channel_id", json.string)
+    |> modification.to_json("afk_channel_id", json.string)
 
   let afk_timeout = case modify.afk_timeout {
     Some(timeout) -> [#("afk_timeout", json.int(timeout))]
@@ -826,7 +826,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let icon =
     modify.icon
-    |> modification.encode("icon", image.to_json)
+    |> modification.to_json("icon", image.to_json)
 
   let owner_id = case modify.owner_id {
     Some(id) -> [#("owner_id", json.string(id))]
@@ -835,19 +835,19 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let splash =
     modify.splash
-    |> modification.encode("splash", image.to_json)
+    |> modification.to_json("splash", image.to_json)
 
   let discovery_splash =
     modify.discovery_splash
-    |> modification.encode("discovery_splash", image.to_json)
+    |> modification.to_json("discovery_splash", image.to_json)
 
   let banner =
     modify.banner
-    |> modification.encode("banner", image.to_json)
+    |> modification.to_json("banner", image.to_json)
 
   let system_channnel_id =
     modify.system_channel_id
-    |> modification.encode("system_channel_id", json.string)
+    |> modification.to_json("system_channel_id", json.string)
 
   let system_channel_flags = case modify.system_channel_flags {
     Some(flags) -> [
@@ -861,15 +861,15 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let rules_channel_id =
     modify.rules_channel_id
-    |> modification.encode("rules_channel_id", json.string)
+    |> modification.to_json("rules_channel_id", json.string)
 
   let public_updates_channel_id =
     modify.public_updates_channel_id
-    |> modification.encode("public_updates_channel_id", json.string)
+    |> modification.to_json("public_updates_channel_id", json.string)
 
   let preferred_locale =
     modify.preferred_locale
-    |> modification.encode("preferred_locale", json.string)
+    |> modification.to_json("preferred_locale", json.string)
 
   let features = case modify.features {
     Some(features) -> [#("features", json.array(features, feature_to_json))]
@@ -878,7 +878,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let description =
     modify.description
-    |> modification.encode("description", json.string)
+    |> modification.to_json("description", json.string)
 
   let is_premium_progress_bar_enabled = case
     modify.is_premium_progress_bar_enabled
@@ -891,7 +891,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let safety_alerts_channel_id =
     modify.safety_alerts_channel_id
-    |> modification.encode("safety_alerts_channel_id", json.string)
+    |> modification.to_json("safety_alerts_channel_id", json.string)
 
   [
     name,
@@ -1025,14 +1025,14 @@ pub fn modify_welcome_screen_to_json(modify: ModifyWelcomeScreen) -> Json {
 
   let welcome_channels =
     modify.welcome_channels
-    |> modification.encode("welcome_channels", json.array(
+    |> modification.to_json("welcome_channels", json.array(
       _,
       welcome_channel_to_json,
     ))
 
   let description =
     modify.description
-    |> modification.encode("description", json.string)
+    |> modification.to_json("description", json.string)
 
   [is_enabled, welcome_channels, description]
   |> list.flatten
@@ -1053,12 +1053,12 @@ pub fn welcome_channel_to_json(welcome_channel: WelcomeChannel) -> Json {
 pub fn modify_incident_actions_to_json(modify: ModifyIncidentActions) -> Json {
   json.object(
     list.flatten([
-      modification.encode(
+      modification.to_json(
         modify.invites_disabled_until,
         "invites_disabled_until",
         time_rfc3339.to_json,
       ),
-      modification.encode(
+      modification.to_json(
         modify.dms_disabled_until,
         "dms_disabled_until",
         time_rfc3339.to_json,
@@ -1378,7 +1378,7 @@ pub fn modify_emoji(
         Some(name) -> [#("name", json.string(name))]
         None -> []
       },
-      modification.encode(roles, "roles", json.array(_, json.string)),
+      modification.to_json(roles, "roles", json.array(_, json.string)),
     ]
     |> list.flatten
     |> json.object

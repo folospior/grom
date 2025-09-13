@@ -17,7 +17,7 @@ pub type Modification(a) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn encode(
+pub fn to_json(
   modification: Modification(a),
   key: String,
   success_encoder: fn(a) -> Json,

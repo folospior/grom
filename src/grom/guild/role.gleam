@@ -221,15 +221,15 @@ pub fn colors_to_json(colors: Colors) -> Json {
 pub fn modify_to_json(modify: Modify) -> Json {
   let name =
     modify.name
-    |> modification.encode("name", json.string)
+    |> modification.to_json("name", json.string)
 
   let permissions =
     modify.permissions
-    |> modification.encode("permissions", permission.encode)
+    |> modification.to_json("permissions", permission.encode)
 
   let colors =
     modify.colors
-    |> modification.encode("colors", colors_to_json)
+    |> modification.to_json("colors", colors_to_json)
 
   let is_hoisted = case modify.is_hoisted {
     Some(hoisted) -> [#("hoisted", json.bool(hoisted))]
@@ -238,11 +238,11 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let icon =
     modify.icon
-    |> modification.encode("icon", image.to_json)
+    |> modification.to_json("icon", image.to_json)
 
   let unicode_emoji =
     modify.unicode_emoji
-    |> modification.encode("unicode_emoji", json.string)
+    |> modification.to_json("unicode_emoji", json.string)
 
   let is_mentionable = case modify.is_mentionable {
     Some(mentionable) -> [#("mentionable", json.bool(mentionable))]
