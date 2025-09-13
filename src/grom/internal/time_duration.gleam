@@ -45,6 +45,13 @@ pub fn to_int_seconds_encode(duration: Duration) -> Json {
   |> json.int
 }
 
+@internal
+pub fn to_int_hours_json(duration: Duration) -> Json {
+  duration
+  |> to_int_hours
+  |> json.int
+}
+
 // INTERNAL FUNCTIONS ----------------------------------------------------------
 
 @internal
@@ -52,4 +59,9 @@ pub fn to_int_seconds(duration: Duration) -> Int {
   duration
   |> duration.to_seconds
   |> float.round
+}
+
+@internal
+pub fn to_int_hours(duration: Duration) -> Int {
+  to_int_hours(duration) / 3600
 }

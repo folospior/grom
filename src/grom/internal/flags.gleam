@@ -23,7 +23,7 @@ pub fn decoder(bits_flags: List(#(Int, flag))) -> decode.Decoder(List(flag)) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn encode(flags: List(flag), bits_flags: List(#(Int, flag))) -> Json {
+pub fn to_json(flags: List(flag), bits_flags: List(#(Int, flag))) -> Json {
   json.int(flags |> to_int(bits_flags))
 }
 

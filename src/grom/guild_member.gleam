@@ -188,7 +188,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let flags =
     modify.flags
-    |> modification.encode("flags", flags.encode(_, bits_member_flags()))
+    |> modification.encode("flags", flags.to_json(_, bits_member_flags()))
 
   [
     nick,

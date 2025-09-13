@@ -1,19 +1,26 @@
+import gleam/bit_array
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/http
+import gleam/http/request
 import gleam/int
-import gleam/option.{type Option, None}
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/timestamp.{type Timestamp}
+import gleam/uri
 import grom
 import grom/application.{type Application}
 import grom/channel/thread.{type Thread}
+import grom/file.{type File}
 import grom/guild/role.{type Role}
 import grom/guild_member.{type GuildMember}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
 import grom/message/activity.{type Activity}
+import grom/message/allowed_mentions.{type AllowedMentions}
 import grom/message/attachment.{type Attachment}
 import grom/message/call.{type Call}
 import grom/message/component.{type Component}
@@ -22,6 +29,7 @@ import grom/message/interaction_metadata.{type InteractionMetadata}
 import grom/message/message_reference.{type MessageReference}
 import grom/message/poll.{type Poll}
 import grom/message/reaction.{type Reaction}
+import grom/modification.{type Modification, New, Skip}
 import grom/permission.{type Permission}
 import grom/sticker
 import grom/user.{type User}
@@ -278,6 +286,59 @@ pub type ChannelMention {
   )
 }
 
+pub type Create {
+  Create(
+    content: Option(String),
+    nonce: Option(Nonce),
+    is_tts: Option(Bool),
+    embeds: Option(List(Embed)),
+    allowed_mentions: Option(AllowedMentions),
+    message_reference: Option(MessageReference),
+    components: Option(List(Component)),
+    sticker_ids: Option(List(String)),
+    files: Option(List(File)),
+    attachments: Option(List(attachment.Create)),
+    flags: Option(List(CreateFlag)),
+    enforce_nonce: Option(Bool),
+    poll: Option(poll.Create),
+  )
+}
+
+pub type CreateFlag {
+  CreateWithSuppressedEmbeds
+  CreateWithSuppressedNotifications
+  CreateAsVoiceMessage
+  CreateWithComponentsV2
+}
+
+pub type GetReactionsQuery {
+  Type(reaction.Type)
+  AfterUserId(String)
+  Limit(Int)
+}
+
+pub type Modify {
+  Modify(
+    content: Modification(String),
+    embeds: Modification(List(Embed)),
+    flags: Modification(List(ModifyFlag)),
+    allowed_mentions: Modification(AllowedMentions),
+    components: Modification(List(Component)),
+    files: Modification(List(File)),
+    attachments: Modification(List(ModifyAttachment)),
+  )
+}
+
+pub type ModifyFlag {
+  ModifyEmbedSuppression
+  ModifyUsingComponentsV2
+}
+
+pub type ModifyAttachment {
+  ExistingAttachment(id: String)
+  NewAttachment(attachment.Create)
+}
+
 // FLAGS -----------------------------------------------------------------------
 
 @internal
@@ -296,6 +357,24 @@ pub fn bits_flags() -> List(#(Int, Flag)) {
     #(int.bitwise_shift_left(1, 13), IsVoiceMessage),
     #(int.bitwise_shift_left(1, 14), HasSnapshot),
     #(int.bitwise_shift_left(1, 15), IsComponentsV2),
+  ]
+}
+
+@internal
+pub fn bits_create_flags() -> List(#(Int, CreateFlag)) {
+  [
+    #(int.bitwise_shift_left(1, 2), CreateWithSuppressedEmbeds),
+    #(int.bitwise_shift_left(1, 12), CreateWithSuppressedNotifications),
+    #(int.bitwise_shift_left(1, 13), CreateAsVoiceMessage),
+    #(int.bitwise_shift_left(1, 15), CreateWithComponentsV2),
+  ]
+}
+
+@internal
+pub fn bits_modify_flags() -> List(#(Int, ModifyFlag)) {
+  [
+    #(int.bitwise_shift_left(1, 2), ModifyEmbedSuppression),
+    #(int.bitwise_shift_left(1, 15), ModifyUsingComponentsV2),
   ]
 }
 
@@ -749,6 +828,139 @@ pub fn resolved_decoder() -> decode.Decoder(Resolved) {
   ))
 }
 
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn create_to_json(create: Create) -> Json {
+  let content = case create.content {
+    Some(content) -> [#("content", json.string(content))]
+    None -> []
+  }
+
+  let nonce = case create.nonce {
+    Some(nonce) -> [#("nonce", nonce_to_json(nonce))]
+    None -> []
+  }
+
+  let is_tts = case create.is_tts {
+    Some(tts) -> [#("tts", json.bool(tts))]
+    None -> []
+  }
+
+  let embeds = case create.embeds {
+    Some(embeds) -> [#("embeds", json.array(embeds, of: embed.to_json))]
+    None -> []
+  }
+
+  let allowed_mentions = case create.allowed_mentions {
+    Some(allowed_mentions) -> [
+      #("allowed_mentions", allowed_mentions.to_json(allowed_mentions)),
+    ]
+    None -> []
+  }
+
+  let message_reference = case create.message_reference {
+    Some(reference) -> [
+      #("message_reference", message_reference.to_json(reference)),
+    ]
+    None -> []
+  }
+
+  let components = case create.components {
+    Some(components) -> [
+      #("components", json.array(components, of: component.to_json)),
+    ]
+    None -> []
+  }
+
+  let sticker_ids = case create.sticker_ids {
+    Some(ids) -> [#("sticker_ids", json.array(ids, json.string))]
+    None -> []
+  }
+
+  let attachments = case create.attachments {
+    Some(attachments) -> [
+      #("attachments", json.array(attachments, of: attachment.create_to_json)),
+    ]
+    None -> []
+  }
+
+  let flags = case create.flags {
+    Some(flags) -> [#("flags", flags.to_json(flags, bits_create_flags()))]
+    None -> []
+  }
+
+  let enforce_nonce = case create.enforce_nonce {
+    Some(enforce_nonce) -> [#("enforce_nonce", json.bool(enforce_nonce))]
+    None -> []
+  }
+
+  let poll = case create.poll {
+    Some(poll) -> [#("poll", poll.create_to_json(poll))]
+    None -> []
+  }
+
+  [
+    content,
+    nonce,
+    is_tts,
+    embeds,
+    allowed_mentions,
+    message_reference,
+    components,
+    sticker_ids,
+    attachments,
+    flags,
+    enforce_nonce,
+    poll,
+  ]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn nonce_to_json(nonce: Nonce) -> Json {
+  case nonce {
+    IntNonce(nonce) -> json.int(nonce)
+    StringNonce(nonce) -> json.string(nonce)
+  }
+}
+
+pub fn modify_to_json(modify: Modify) -> Json {
+  json.object(
+    [
+      modification.encode(modify.content, "content", json.string),
+      modification.encode(modify.embeds, "embdeds", json.array(_, embed.to_json)),
+      modification.encode(modify.flags, "flags", flags.to_json(
+        _,
+        bits_modify_flags(),
+      )),
+      modification.encode(
+        modify.allowed_mentions,
+        "allowed_mentions",
+        allowed_mentions.to_json,
+      ),
+      modification.encode(modify.components, "components", json.array(
+        _,
+        component.to_json,
+      )),
+      modification.encode(modify.attachments, "attachments", json.array(
+        _,
+        modify_attachment_to_json,
+      )),
+    ]
+    |> list.flatten,
+  )
+}
+
+@internal
+pub fn modify_attachment_to_json(modify_attachment: ModifyAttachment) -> Json {
+  case modify_attachment {
+    ExistingAttachment(id:) -> json.object([#("id", json.string(id))])
+    NewAttachment(create) -> attachment.create_to_json(create)
+  }
+}
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 pub fn pin(
@@ -787,4 +999,219 @@ pub fn unpin(
   )
 
   Ok(Nil)
+}
+
+pub fn get(
+  client: grom.Client,
+  in channel_id: String,
+  id message_id: String,
+) -> Result(Message, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/channels/" <> channel_id <> "/messages/" <> message_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn create(
+  client: grom.Client,
+  in channel_id: String,
+  using create: Create,
+) -> Result(Message, grom.Error) {
+  let json = create |> create_to_json
+
+  let request = case create.files {
+    Some(files) -> {
+      client
+      |> rest.new_multipart_request(
+        http.Post,
+        "/channels/" <> channel_id <> "/messages",
+        json,
+        files,
+      )
+    }
+    None -> {
+      client
+      |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/messages")
+      |> request.set_body(json |> json.to_string |> bit_array.from_string)
+    }
+  }
+
+  use response <- result.try(rest.execute_multipart(request))
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn new_create() -> Create {
+  Create(
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+  )
+}
+
+pub fn crosspost(
+  client: grom.Client,
+  from channel_id: String,
+  id message_id: String,
+) -> Result(Message, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Post,
+      "/channels/" <> channel_id <> "/messages/" <> message_id <> "/crosspost",
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_reactions(
+  client: grom.Client,
+  in channel_id: String,
+  on message_id: String,
+  emoji emoji_id: String,
+  using query: List(GetReactionsQuery),
+) -> Result(List(User), grom.Error) {
+  let query =
+    query
+    |> list.map(fn(single_query) {
+      case single_query {
+        Type(type_) -> #("type", reaction.type_to_int(type_) |> int.to_string)
+        AfterUserId(id) -> #("after", id)
+        Limit(limit) -> #("limit", int.to_string(limit))
+      }
+    })
+
+  let emoji = uri.percent_encode(emoji_id)
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/channels/"
+        <> channel_id
+        <> "/messages/"
+        <> message_id
+        <> "/reactions/"
+        <> emoji,
+    )
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: user.decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn delete_all_reactions(
+  client: grom.Client,
+  in channel_id: String,
+  from message_id: String,
+) -> Result(Nil, grom.Error) {
+  client
+  |> rest.new_request(
+    http.Delete,
+    "/channels/" <> channel_id <> "/messages/" <> message_id <> "/reactions",
+  )
+  |> rest.execute
+  |> result.replace(Nil)
+}
+
+pub fn delete_all_reactions_for_emoji(
+  client: grom.Client,
+  in channel_id: String,
+  from message_id: String,
+  emoji emoji_id: String,
+) -> Result(Nil, grom.Error) {
+  let emoji = uri.percent_encode(emoji_id)
+
+  client
+  |> rest.new_request(
+    http.Delete,
+    "/channels/"
+      <> channel_id
+      <> "/messages/"
+      <> message_id
+      <> "/reactions/"
+      <> emoji,
+  )
+  |> rest.execute
+  |> result.replace(Nil)
+}
+
+pub fn modify(
+  client: grom.Client,
+  in channel_id: String,
+  id message_id: String,
+  using modify: Modify,
+) -> Result(Message, grom.Error) {
+  let json = modify |> modify_to_json
+
+  let request = case modify.files {
+    New(files) ->
+      client
+      |> rest.new_multipart_request(
+        http.Patch,
+        "/channels/" <> channel_id <> "/messages/" <> message_id,
+        json,
+        files,
+      )
+    _ ->
+      client
+      |> rest.new_request(
+        http.Patch,
+        "/channels/" <> channel_id <> "/messages/" <> message_id,
+      )
+      |> request.set_body(json |> json.to_string |> bit_array.from_string)
+  }
+
+  use response <- result.try(rest.execute_multipart(request))
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn new_modify() -> Modify {
+  Modify(Skip, Skip, Skip, Skip, Skip, Skip, Skip)
+}
+
+pub fn delete(
+  client: grom.Client,
+  in channel_id: String,
+  id message_id: String,
+  because reason: Option(String),
+) -> Result(Nil, grom.Error) {
+  client
+  |> rest.new_request(
+    http.Delete,
+    "/channels/" <> channel_id <> "/messages/" <> message_id,
+  )
+  |> rest.with_reason(reason)
+  |> rest.execute
+  |> result.replace(Nil)
 }

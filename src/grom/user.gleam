@@ -284,7 +284,7 @@ pub fn to_json(user: User) -> Json {
   }
 
   let flags = case user.flags {
-    Some(flags) -> [#("flags", flags.encode(flags, bits_flags()))]
+    Some(flags) -> [#("flags", flags.to_json(flags, bits_flags()))]
     None -> []
   }
 
@@ -294,7 +294,7 @@ pub fn to_json(user: User) -> Json {
   }
 
   let public_flags = case user.public_flags {
-    Some(flags) -> [#("public_flags", flags.encode(flags, bits_flags()))]
+    Some(flags) -> [#("public_flags", flags.to_json(flags, bits_flags()))]
     None -> []
   }
 
