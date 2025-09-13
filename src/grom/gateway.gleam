@@ -1,17 +1,28 @@
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/erlang/process.{type Subject}
 import gleam/float
 import gleam/http
 import gleam/http/request
 import gleam/json.{type Json}
-import gleam/option.{type Option, None}
+import gleam/list
+import gleam/option.{type Option, None, Some}
+import gleam/otp/actor
 import gleam/result
 import gleam/string
 import gleam/time/duration.{type Duration}
+import gleam/time/timestamp.{type Timestamp}
 import grom
+import grom/activity.{type Activity}
+import grom/gateway/heartbeat
+import grom/gateway/intent.{type Intent}
 import grom/gateway/sequence
+import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
+import grom/internal/time_timestamp
+import operating_system
+import repeatedly
 import stratus
 
 // TYPES -----------------------------------------------------------------------
@@ -24,6 +35,22 @@ pub type GatewayData {
   )
 }
 
+pub type Shard {
+  Shard(id: Int, num_shards: Int)
+}
+
+pub type PresenceStatus {
+  Online
+  DoNotDisturb
+  Idle
+  Invisible
+  Offline
+}
+
+pub type Event {
+  Errored(grom.Error)
+}
+
 pub type SessionStartLimits {
   SessionStartLimits(
     maximum_starts: Int,
@@ -34,13 +61,20 @@ pub type SessionStartLimits {
 }
 
 type State {
-  State(sequence_holder: Subject(sequence.Message))
+  State(
+    actor: Subject(Event),
+    sequence_holder: Subject(sequence.Message),
+    heartbeat_counter: Subject(heartbeat.Message),
+    identify: IdentifyMessage,
+  )
 }
 
 // RECEIVE EVENTS --------------------------------------------------------------
 
 pub type ReceivedMessage {
   Hello(HelloMessage)
+  HeartbeatAcknowledged
+  HeartbeatRequest
 }
 
 pub type HelloMessage {
@@ -51,10 +85,38 @@ pub type HelloMessage {
 
 pub type SentMessage {
   Heartbeat(HeartbeatMessage)
+  Identify(IdentifyMessage)
+  UpdatePresence(UpdatePresenceMessage)
 }
 
 pub type HeartbeatMessage {
   HeartbeatMessage(last_sequence: Option(Int))
+}
+
+pub type IdentifyMessage {
+  IdentifyMessage(
+    token: String,
+    properties: IdentifyProperties,
+    supports_compression: Bool,
+    max_offline_members: Option(Int),
+    shard: Option(Shard),
+    presence: Option(UpdatePresenceMessage),
+    intents: List(Intent),
+  )
+}
+
+pub type UpdatePresenceMessage {
+  UpdatePresenceMessage(
+    /// Only for Idle.
+    since: Option(Timestamp),
+    activities: List(Activity),
+    status: PresenceStatus,
+    is_afk: Bool,
+  )
+}
+
+pub type IdentifyProperties {
+  IdentifyProperties(os: String, browser: String, device: String)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -97,10 +159,12 @@ pub fn session_start_limits_decoder() -> decode.Decoder(SessionStartLimits) {
 pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
   use opcode <- decode.field("op", decode.int)
   case opcode {
+    1 -> decode.success(HeartbeatRequest)
     10 -> {
       use msg <- decode.field("d", hello_event_decoder())
       decode.success(Hello(msg))
     }
+    11 -> decode.success(HeartbeatAcknowledged)
     _ ->
       decode.failure(Hello(HelloMessage(duration.seconds(0))), "ReceivedEvent")
   }
@@ -122,7 +186,111 @@ pub fn hello_event_decoder() -> decode.Decoder(HelloMessage) {
 pub fn message_to_json(message: SentMessage) -> Json {
   case message {
     Heartbeat(msg) -> heartbeat_to_json(msg)
+    Identify(msg) -> identify_to_json(msg)
+    UpdatePresence(msg) -> update_presence_to_json(msg, True)
   }
+}
+
+fn update_presence_to_json(
+  msg: UpdatePresenceMessage,
+  with_opcode: Bool,
+) -> Json {
+  let data = {
+    let since = case msg.since, msg.status {
+      Some(timestamp), Idle -> [
+        #("since", json.int(time_timestamp.to_unix_milliseconds(timestamp))),
+      ]
+      _, _ -> [#("since", json.null())]
+    }
+
+    let activities = [
+      #("activities", json.array(msg.activities, activity.to_json)),
+    ]
+
+    let status = [#("status", presence_status_to_json(msg.status))]
+
+    let is_afk = [#("afk", json.bool(msg.is_afk))]
+
+    [since, activities, status, is_afk]
+    |> list.flatten
+    |> json.object
+  }
+
+  case with_opcode {
+    True -> json.object([#("op", json.int(3)), #("d", data)])
+    False -> data
+  }
+}
+
+fn presence_status_to_json(status: PresenceStatus) -> Json {
+  case status {
+    Online -> "online"
+    DoNotDisturb -> "dnd"
+    Idle -> "idle"
+    Invisible -> "invisible"
+    Offline -> "offline"
+  }
+  |> json.string
+}
+
+fn identify_to_json(msg: IdentifyMessage) -> Json {
+  let data = {
+    let token = [#("token", json.string(msg.token))]
+
+    let properties = [
+      #("properties", identify_properties_to_json(msg.properties)),
+    ]
+
+    let supports_compression = [
+      #("compress", json.bool(msg.supports_compression)),
+    ]
+
+    let max_offline_members = case msg.max_offline_members {
+      Some(threshold) -> [#("large_threshold", json.int(threshold))]
+      None -> []
+    }
+
+    let shard = case msg.shard {
+      Some(shard) -> [
+        #("shard", json.array([shard.id, shard.num_shards], json.int)),
+      ]
+      None -> []
+    }
+
+    let presence = case msg.presence {
+      Some(presence) -> [
+        #("presence", update_presence_to_json(presence, False)),
+      ]
+      None -> []
+    }
+
+    let intents = [
+      #("intents", flags.encode(msg.intents, intent.bits_intents())),
+    ]
+
+    [
+      token,
+      properties,
+      supports_compression,
+      max_offline_members,
+      shard,
+      presence,
+      intents,
+    ]
+    |> list.flatten
+    |> json.object
+  }
+
+  json.object([#("op", json.int(2)), #("d", data)])
+}
+
+fn identify_properties_to_json(properties: IdentifyProperties) -> Json {
+  [
+    #("os", json.string(properties.os)),
+    #("browser", json.string(properties.browser)),
+    #("device", json.string(properties.device)),
+  ]
+  |> json.object
 }
 
 fn heartbeat_to_json(heartbeat: HeartbeatMessage) -> Json {
@@ -146,7 +314,11 @@ pub fn get_data(client: grom.Client) -> Result(GatewayData, grom.Error) {
   |> result.map_error(grom.CouldNotDecode)
 }
 
-pub fn start(client: grom.Client) {
+pub fn start(
+  client: grom.Client,
+  identify: IdentifyMessage,
+  notify actor: Subject(Event),
+) {
   use gateway_data <- result.try(
     client
     |> get_data,
@@ -157,19 +329,49 @@ pub fn start(client: grom.Client) {
     |> result.replace_error(grom.InvalidGatewayUrl(gateway_data.url)),
   )
 
-  stratus.new_with_initialiser(connection_request, init_connection)
+  stratus.new_with_initialiser(connection_request, fn() {
+    init_state(actor, identify)
+  })
   |> stratus.on_message(on_message)
   |> stratus.start
   |> result.map_error(grom.CouldNotInitializeWebsocketConnection)
 }
 
-fn init_connection() {
+pub fn identify(client: grom.Client, intents: List(Intent)) -> IdentifyMessage {
+  IdentifyMessage(
+    token: client.token,
+    properties: IdentifyProperties(
+      os: operating_system.name(),
+      browser: "grom",
+      device: "grom",
+    ),
+    supports_compression: False,
+    max_offline_members: None,
+    shard: None,
+    presence: None,
+    intents:,
+  )
+}
+
+pub fn identify_with_presence(
+  identify: IdentifyMessage,
+  presence: UpdatePresenceMessage,
+) -> IdentifyMessage {
+  IdentifyMessage(..identify, presence: Some(presence))
+}
+
+fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
   use sequence_holder <- result.try(
     sequence.holder_start() |> result.map_error(string.inspect),
   )
   let sequence_holder = sequence_holder.data
 
-  let state = State(sequence_holder:)
+  use heartbeat_counter <- result.try(
+    heartbeat.counter_start() |> result.map_error(string.inspect),
+  )
+  let heartbeat_counter = heartbeat_counter.data
+
+  let state = State(actor:, sequence_holder:, heartbeat_counter:, identify:)
 
   Ok(stratus.initialised(state))
 }
@@ -191,33 +393,76 @@ fn on_text_message(
   connection: stratus.Connection,
   text_message: String,
 ) {
-  let message = case parse_message(text_message) {
-    Ok(message) -> message
-    Error(_) -> todo as "proper error handling"
-  }
-
-  case message.sequence {
-    None -> Nil
-    sequence -> sequence.set(state.sequence_holder, to: sequence)
-  }
-
-  case message.event {
-    Receive(Hello(event)) -> on_hello_event(event)
-    Send(_) -> {
-      let _ = stratus.close_unexpected_condition(connection, <<>>)
-      Nil
+  use message <-
+    fn(next) {
+      case parse_message(text_message) {
+        Ok(msg) -> next(msg)
+        Error(err) -> {
+          actor.send(state.actor, Errored(err))
+          stratus.continue(state)
+        }
+      }
     }
+
+  case message {
+    Hello(event) -> on_hello_event(state, connection, event)
+    HeartbeatAcknowledged -> on_heartbeat_acknowledged(state)
+    HeartbeatRequest -> on_heartbeat_request(state, connection)
   }
 
   stratus.continue(state)
 }
 
-fn on_hello_event(event: HelloEvent) {
-  start_heartbeats(event.heartbeat_interval)
+fn on_heartbeat_request(state: State, connection: stratus.Connection) -> Nil {
+  case send_heartbeat(state, connection) {
+    Ok(_) -> Nil
+    Error(err) -> {
+      state.actor
+      |> actor.send(Errored(err))
+    }
+  }
 }
 
-fn start_heartbeats(interval: Duration) {
-  let wait_duration =
+fn on_heartbeat_acknowledged(state: State) -> Nil {
+  state.heartbeat_counter
+  |> heartbeat.acknoweledged
+}
+
+fn on_hello_event(
+  state: State,
+  connection: stratus.Connection,
+  event: HelloMessage,
+) {
+  start_heartbeats(state, connection, event.heartbeat_interval)
+  send_identify(state, connection)
+}
+
+fn send_identify(state: State, connection: stratus.Connection) {
+  let result =
+    state.identify
+    |> identify_to_json
+    |> json.to_string
+    |> stratus.send_text_message(connection, _)
+    |> result.map_error(grom.CouldNotSendEvent)
+
+  case result {
+    Ok(_) -> Nil
+    Error(error) -> actor.send(state.actor, Errored(error))
+  }
+}
+
+fn start_heartbeats(
+  state: State,
+  connection: stratus.Connection,
+  interval: Duration,
+) {
+  let regular_wait_duration =
+    interval
+    |> duration.to_seconds
+    |> float.multiply(1000.0)
+    |> float.round
+
+  let initial_wait_duration =
     interval
     |> duration.to_seconds
     |> float.multiply(1000.0)
@@ -225,20 +470,56 @@ fn start_heartbeats(interval: Duration) {
     |> float.round
 
   process.spawn(fn() {
-    process.sleep(wait_duration)
-    //
+    process.sleep(initial_wait_duration)
+
+    use <-
+      fn(next) {
+        case
+          send_heartbeat(state, connection)
+          |> result.map_error(grom.CouldNotStartHeartbeatCycle)
+        {
+          Ok(_) -> next()
+          Error(error) -> actor.send(state.actor, Errored(error))
+        }
+      }
+
+    repeatedly.call(regular_wait_duration, Nil, fn(_state, _i) {
+      case send_heartbeat(state, connection) {
+        Ok(_) -> Nil
+        Error(error) -> actor.send(state.actor, Errored(error))
+      }
+    })
+    Nil
   })
   Nil
 }
 
-fn send_heartbeat(state: State, connection: stratus.Connection) {
+fn send_heartbeat(
+  state: State,
+  connection: stratus.Connection,
+) -> Result(Nil, grom.Error) {
   let last_sequence = sequence.get(state.sequence_holder)
 
-  last_sequence
-  |> HeartbeatEvent
+  let counter = heartbeat.get(state.heartbeat_counter)
+  use <- bool.guard(
+    when: counter.heartbeat != counter.heartbeat_ack,
+    return: stratus.close(connection, stratus.UnexpectedCondition(<<>>))
+      |> result.map_error(grom.CouldNotCloseWebsocketConnection),
+  )
+
+  use _nil <- result.try(
+    last_sequence
+    |> HeartbeatMessage
+    |> heartbeat_to_json
+    |> json.to_string
+    |> stratus.send_text_message(connection, _)
+    |> result.map_error(grom.CouldNotSendEvent),
+  )
+
+  Ok(heartbeat.sent(state.heartbeat_counter))
 }
 
-fn parse_message(text_message: String) -> Result(Message, grom.Error) {
+fn parse_message(text_message: String) -> Result(ReceivedMessage, grom.Error) {
   text_message
   |> json.parse(using: message_decoder())
   |> result.map_error(grom.CouldNotDecode)
@@ -251,8 +532,10 @@ fn jitter() -> Float {
   }
 }
 
-pub fn receive_opcode(event: ReceiveEvent) -> Int {
+pub fn receive_opcode(event: ReceivedMessage) -> Int {
   case event {
     Hello(..) -> 10
+    HeartbeatAcknowledged -> 11
+    HeartbeatRequest -> 1
   }
 }

@@ -18,6 +18,9 @@ pub type Error {
   InvalidGatewayUrl(String)
   CouldNotInitializeWebsocketConnection(stratus.InitializationError)
   CouldNotStartActor(actor.StartError)
+  CouldNotSendEvent(stratus.SocketReason)
+  CouldNotCloseWebsocketConnection(stratus.SocketReason)
+  CouldNotStartHeartbeatCycle(Error)
 }
 
 // FUNCTIONS -------------------------------------------------------------------
