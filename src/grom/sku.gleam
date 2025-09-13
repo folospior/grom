@@ -46,7 +46,7 @@ pub fn bits_flags() -> List(#(Int, Flag)) {
 // DECODERS --------------------------------------------------------------------
 
 @internal
-pub fn sku_decoder() -> decode.Decoder(Sku) {
+pub fn decoder() -> decode.Decoder(Sku) {
   use id <- decode.field("id", decode.string)
   use type_ <- decode.field("type", type_decoder())
   use application_id <- decode.field("application_id", decode.string)
