@@ -1,12 +1,19 @@
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
+import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
+import grom
 import grom/emoji.{type Emoji}
+import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
+import grom/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -57,6 +64,11 @@ pub type CreateQuestion {
 
 pub type CreateAnswer {
   CreateAnswer(media: Media)
+}
+
+pub type GetAnswerVotersQuery {
+  AfterUserId(String)
+  Limit(Int)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -197,4 +209,46 @@ pub fn layout_type_to_json(layout_type: LayoutType) -> Json {
     Default -> 1
   }
   |> json.int
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get_voters_for_answer(
+  client: grom.Client,
+  in channel_id: String,
+  on message_id: String,
+  regarding answer_id: String,
+  using query: List(GetAnswerVotersQuery),
+) -> Result(List(User), grom.Error) {
+  let query =
+    list.map(query, fn(single_query) {
+      case single_query {
+        AfterUserId(id) -> #("after", id)
+        Limit(limit) -> #("limit", int.to_string(limit))
+      }
+    })
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/channels/"
+        <> channel_id
+        <> "/polls/"
+        <> message_id
+        <> "/answers/"
+        <> answer_id,
+    )
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  let response_decoder = {
+    use users <- decode.field("users", decode.list(of: user.decoder()))
+    decode.success(users)
+  }
+
+  response.body
+  |> json.parse(using: response_decoder)
+  |> result.map_error(grom.CouldNotDecode)
 }
