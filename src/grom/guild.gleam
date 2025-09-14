@@ -22,6 +22,7 @@ import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/modification.{type Modification, Skip}
+import grom/soundboard
 import grom/sticker.{type Sticker}
 import grom/user.{type User}
 import grom/voice
@@ -284,6 +285,25 @@ pub type ModifyIncidentActions {
   ModifyIncidentActions(
     invites_disabled_until: Modification(Timestamp),
     dms_disabled_until: Modification(Timestamp),
+  )
+}
+
+pub type CreateSoundboardSound {
+  CreateSoundboardSound(
+    name: String,
+    sound: soundboard.Data,
+    volume: Option(Float),
+    emoji_id: Option(String),
+    emoji_name: Option(String),
+  )
+}
+
+pub type ModifySoundboardSound {
+  ModifySoundboardSound(
+    name: Option(String),
+    volume: Modification(Float),
+    emoji_id: Modification(String),
+    emoji_name: Modification(String),
   )
 }
 
@@ -1067,6 +1087,48 @@ pub fn modify_incident_actions_to_json(modify: ModifyIncidentActions) -> Json {
   )
 }
 
+@internal
+pub fn create_soundboard_sound_to_json(create: CreateSoundboardSound) -> Json {
+  let name = [#("name", json.string(create.name))]
+
+  let sound = [#("sound", soundboard.data_to_json(create.sound))]
+
+  let volume = case create.volume {
+    Some(volume) -> [#("volume", json.float(volume))]
+    None -> []
+  }
+
+  let emoji_id = case create.emoji_id {
+    Some(id) -> [#("emoji_id", json.string(id))]
+    None -> []
+  }
+
+  let emoji_name = case create.emoji_name {
+    Some(name) -> [#("emoji_name", json.string(name))]
+    None -> []
+  }
+
+  [name, sound, volume, emoji_id, emoji_name]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn modify_soundboard_sound_to_json(modify: ModifySoundboardSound) -> Json {
+  json.object(
+    [
+      case modify.name {
+        Some(name) -> [#("name", json.string(name))]
+        None -> []
+      },
+      modification.to_json(modify.volume, "volume", json.float),
+      modification.to_json(modify.emoji_id, "emoji_id", json.string),
+      modification.to_json(modify.emoji_name, "emoji_name", json.string),
+    ]
+    |> list.flatten,
+  )
+}
+
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
 /// `get_counts`: Whether to get the `approximate_member_count` and `approximate_presence_count`
@@ -1807,4 +1869,121 @@ pub fn modify_incident_actions(
   response.body
   |> json.parse(using: incidents_data_decoder())
   |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_soundboard_sounds(
+  client: grom.Client,
+  id guild_id: String,
+) -> Result(List(soundboard.Sound), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/guilds/" <> guild_id <> "/soundboard-sounds",
+    )
+    |> rest.execute,
+  )
+
+  let response_decoder = {
+    use sounds <- decode.field(
+      "items",
+      decode.list(of: soundboard.sound_decoder()),
+    )
+    decode.success(sounds)
+  }
+
+  response.body
+  |> json.parse(using: response_decoder)
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_soundboard_sound(
+  client: grom.Client,
+  in guild_id: String,
+  id sound_id: String,
+) -> Result(soundboard.Sound, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/guilds/" <> guild_id <> "/soundboard-sounds/" <> sound_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: soundboard.sound_decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn create_soundboard_sound(
+  client: grom.Client,
+  in guild_id: String,
+  using create: CreateSoundboardSound,
+  because reason: Option(String),
+) -> Result(soundboard.Sound, grom.Error) {
+  let json = create |> create_soundboard_sound_to_json |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Post,
+      "/guilds/" <> guild_id <> "/soundboard-sounds",
+    )
+    |> rest.with_reason(reason)
+    |> request.set_body(json)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: soundboard.sound_decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn new_create_soundboard_sound(
+  name: String,
+  sound: soundboard.Data,
+) -> CreateSoundboardSound {
+  CreateSoundboardSound(name, sound, None, None, None)
+}
+
+pub fn modify_soundboard_sound(
+  client: grom.Client,
+  in guild_id: String,
+  id sound_id: String,
+  using modify: ModifySoundboardSound,
+  because reason: Option(String),
+) -> Result(soundboard.Sound, grom.Error) {
+  let json = modify |> modify_soundboard_sound_to_json |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Patch,
+      "/guilds/" <> guild_id <> "/soundboard-sounds/" <> sound_id,
+    )
+    |> rest.with_reason(reason)
+    |> request.set_body(json)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: soundboard.sound_decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn delete_soundboard_sound(
+  client: grom.Client,
+  in guild_id: String,
+  id sound_id: String,
+  because reason: Option(String),
+) -> Result(Nil, grom.Error) {
+  client
+  |> rest.new_request(
+    http.Delete,
+    "/guilds/" <> guild_id <> "/soundboard-sounds/" <> sound_id,
+  )
+  |> rest.with_reason(reason)
+  |> rest.execute
+  |> result.replace(Nil)
 }

@@ -1,5 +1,13 @@
+import gleam/bit_array
 import gleam/dynamic/decode
-import gleam/option.{type Option, None}
+import gleam/http
+import gleam/http/request
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
+import gleam/result
+import grom
+import grom/internal/rest
 import grom/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
@@ -16,6 +24,15 @@ pub type Sound {
     is_available: Bool,
     creator: Option(User),
   )
+}
+
+pub opaque type Data {
+  Data(String)
+}
+
+pub type ContentType {
+  Mpeg
+  Ogg
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -44,4 +61,76 @@ pub fn sound_decoder() -> decode.Decoder(Sound) {
     is_available:,
     creator:,
   ))
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn send_sound(
+  client: grom.Client,
+  in channel_id: String,
+  id sound_id: String,
+  source_guild guild_id: Option(String),
+) -> Result(Nil, grom.Error) {
+  let json =
+    json.object(
+      [
+        [#("sound_id", json.string(sound_id))],
+        case guild_id {
+          Some(id) -> [#("source_guild_id", json.string(id))]
+          None -> []
+        },
+      ]
+      |> list.flatten,
+    )
+    |> json.to_string
+
+  client
+  |> rest.new_request(
+    http.Post,
+    "/channels/" <> channel_id <> "/send-soundboard-sound",
+  )
+  |> request.set_body(json)
+  |> rest.execute
+  |> result.replace(Nil)
+}
+
+pub fn get_default_sounds(
+  client: grom.Client,
+) -> Result(List(Sound), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/soundboard-default-sounds")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: sound_decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn data_from_bit_array(
+  bit_array: BitArray,
+  content_type: ContentType,
+) -> Data {
+  let content_type = case content_type {
+    Mpeg -> "audio/mpeg"
+    Ogg -> "audio/ogg"
+  }
+
+  let data = bit_array.base64_encode(bit_array, False)
+
+  Data("data:" <> content_type <> ";base64," <> data)
+}
+
+@internal
+pub fn data_to_base64(image: Data) -> String {
+  let Data(base64) = image
+  base64
+}
+
+@internal
+pub fn data_to_json(image: Data) -> Json {
+  image
+  |> data_to_base64
+  |> json.string
 }
