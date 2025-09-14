@@ -3,8 +3,16 @@
 //// For example, if you're offering a premium subscription for your bot, you must create an SKU.
 
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request
 import gleam/int
+import gleam/json
+import gleam/list
+import gleam/result
+import grom
 import grom/internal/flags
+import grom/internal/rest
+import grom/subscription.{type Subscription}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -30,6 +38,12 @@ pub type Flag {
   Available
   GuildSubscription
   UserSubscription
+}
+
+pub type GetSubscriptionsQuery {
+  AfterId(String)
+  BeforeId(String)
+  Limit(Int)
 }
 
 // FLAGS -----------------------------------------------------------------------
@@ -66,4 +80,54 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     6 -> decode.success(SubscriptionGroup)
     _ -> decode.failure(Durable, "Type")
   }
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get_subscriptions(
+  client: grom.Client,
+  sku sku_id: String,
+  for user_id: String,
+  using query: List(GetSubscriptionsQuery),
+) -> Result(List(Subscription), grom.Error) {
+  let query =
+    query
+    |> list.map(fn(single_query) {
+      case single_query {
+        AfterId(id) -> #("after", id)
+        BeforeId(id) -> #("before", id)
+        Limit(limit) -> #("limit", int.to_string(limit))
+      }
+    })
+    |> list.append([#("user_id", user_id)])
+
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/skus/" <> sku_id <> "/subscriptions")
+    |> request.set_query(query)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: subscription.decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_subscription(
+  client: grom.Client,
+  sku sku_id: String,
+  id subscription_id: String,
+) -> Result(Subscription, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/skus/" <> sku_id <> "/subscriptions/" <> subscription_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: subscription.decoder())
+  |> result.map_error(grom.CouldNotDecode)
 }
