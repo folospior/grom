@@ -83,7 +83,7 @@ type State {
 
 pub type ReceivedMessage {
   Hello(HelloMessage)
-  Dispatch(DispatchedMessage)
+  Dispatch(sequence: Int, message: DispatchedMessage)
   HeartbeatAcknowledged
   HeartbeatRequest
 }
@@ -95,7 +95,7 @@ pub type HelloMessage {
 // RECEIVED DISPATCH EVENTS ----------------------------------------------------
 
 pub type DispatchedMessage {
-  Ready(sequence: Int, data: ReadyMessage)
+  Ready(ReadyMessage)
 }
 
 pub type ReadyMessage {
@@ -191,47 +191,44 @@ pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
     0 -> {
       use sequence <- decode.field("s", decode.int)
       use type_ <- decode.field("t", decode.string)
-      use data <- decode.field("d", case type_ {
+      use message <- decode.field("d", case type_ {
         "READY" -> {
           use ready <- decode.then(ready_message_decoder())
-          decode.success(Ready(sequence, ready))
+          decode.success(Ready(ready))
         }
         _ ->
           decode.failure(
-            Ready(
-              0,
-              ReadyMessage(
-                api_version: 0,
-                user: User(
-                  "",
-                  "",
-                  "",
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                  None,
-                ),
-                guilds: [],
-                session_id: "",
-                resume_gateway_url: "",
-                shard: None,
-                application: ReadyApplication("", []),
+            Ready(ReadyMessage(
+              api_version: 0,
+              user: User(
+                "",
+                "",
+                "",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
               ),
-            ),
+              guilds: [],
+              session_id: "",
+              resume_gateway_url: "",
+              shard: None,
+              application: ReadyApplication("", []),
+            )),
             "DispatchedMessage",
           )
       })
-      decode.success(Dispatch(data))
+      decode.success(Dispatch(sequence:, message:))
     }
     1 -> decode.success(HeartbeatRequest)
     10 -> {
@@ -539,7 +536,7 @@ fn on_text_message(
 
   case message {
     Hello(event) -> on_hello_event(state, connection, event)
-    Dispatch(message) -> on_dispatch(state, message)
+    Dispatch(sequence, message) -> on_dispatch(state, sequence, message)
     HeartbeatAcknowledged -> on_heartbeat_acknowledged(state)
     HeartbeatRequest -> on_heartbeat_request(state, connection)
   }
@@ -547,12 +544,12 @@ fn on_text_message(
   stratus.continue(state)
 }
 
-fn on_dispatch(state: State, message: DispatchedMessage) {
+fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
   state.sequence_holder
-  |> sequence.set(to: Some(message.sequence))
+  |> sequence.set(to: Some(sequence))
 
   case message {
-    Ready(data:, ..) -> on_ready(state, data)
+    Ready(msg) -> on_ready(state, msg)
   }
 }
 
