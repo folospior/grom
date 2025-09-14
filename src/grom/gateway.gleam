@@ -217,6 +217,9 @@ pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
                   None,
                   None,
                   None,
+                  None,
+                  None,
+                  None,
                 ),
                 guilds: [],
                 session_id: "",
@@ -378,7 +381,7 @@ fn identify_to_json(msg: IdentifyMessage) -> Json {
     }
 
     let intents = [
-      #("intents", flags.encode(msg.intents, intent.bits_intents())),
+      #("intents", flags.to_json(msg.intents, intent.bits_intents())),
     ]
 
     [
