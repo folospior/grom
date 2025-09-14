@@ -1,5 +1,10 @@
 import gleam/dynamic/decode
+import gleam/http
+import gleam/json
 import gleam/option.{type Option, None}
+import gleam/result
+import grom
+import grom/internal/rest
 import grom/user.{type User}
 
 // TYPES ----------------------------------------------------------------------
@@ -12,7 +17,7 @@ pub type Sticker {
     description: Option(String),
     tags: String,
     type_: Type,
-    format_type: FormatType,
+    format_type: ContentType,
     is_available: Option(Bool),
     guild_id: Option(String),
     user: Option(User),
@@ -21,7 +26,19 @@ pub type Sticker {
 }
 
 pub type Item {
-  Item(id: String, name: String, format_type: FormatType)
+  Item(id: String, name: String, format_type: ContentType)
+}
+
+pub type Pack {
+  Pack(
+    id: String,
+    stickers: List(Sticker),
+    name: String,
+    sku_id: String,
+    cover_sticker_id: Option(String),
+    description: String,
+    banner_asset_id: Option(String),
+  )
 }
 
 pub type Type {
@@ -29,11 +46,15 @@ pub type Type {
   Guild
 }
 
-pub type FormatType {
+pub type ContentType {
   Png
   Apng
   Lottie
   Gif
+}
+
+pub type File {
+  File(name: String, content_type: ContentType, content: BitArray)
 }
 
 // DECODERS -------------------------------------------------------------------
@@ -49,7 +70,7 @@ pub fn type_decoder() -> decode.Decoder(Type) {
 }
 
 @internal
-pub fn format_type_decoder() -> decode.Decoder(FormatType) {
+pub fn format_type_decoder() -> decode.Decoder(ContentType) {
   use variant <- decode.then(decode.int)
   case variant {
     0 -> decode.success(Png)
@@ -101,9 +122,99 @@ pub fn decoder() -> decode.Decoder(Sticker) {
 }
 
 @internal
+pub fn pack_decoder() -> decode.Decoder(Pack) {
+  use id <- decode.field("id", decode.string)
+  use stickers <- decode.field("stickers", decode.list(of: decoder()))
+  use name <- decode.field("name", decode.string)
+  use sku_id <- decode.field("sku_id", decode.string)
+  use cover_sticker_id <- decode.optional_field(
+    "cover_sticker_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use description <- decode.field("description", decode.string)
+  use banner_asset_id <- decode.optional_field(
+    "banner_asset_id",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(Pack(
+    id:,
+    stickers:,
+    name:,
+    sku_id:,
+    cover_sticker_id:,
+    description:,
+    banner_asset_id:,
+  ))
+}
+
+@internal
 pub fn item_decoder() -> decode.Decoder(Item) {
   use id <- decode.field("id", decode.string)
   use name <- decode.field("name", decode.string)
   use format_type <- decode.field("format_type", format_type_decoder())
   decode.success(Item(id:, name:, format_type:))
+}
+
+// ENCODERS --------------------------------------------------------------------
+
+@internal
+pub fn content_type_to_string(content_type: ContentType) -> String {
+  case content_type {
+    Png -> "image/png"
+    Apng -> "image/apng"
+    Gif -> "image/gif"
+    Lottie -> "video/lottie+json"
+  }
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn get(
+  client: grom.Client,
+  id sticker_id: String,
+) -> Result(Sticker, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/stickers/" <> sticker_id)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_packs(client: grom.Client) -> Result(List(Pack), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/sticker-packs")
+    |> rest.execute,
+  )
+
+  let response_decoder = {
+    use packs <- decode.field("sticker_packs", decode.list(of: pack_decoder()))
+    decode.success(packs)
+  }
+
+  response.body
+  |> json.parse(using: response_decoder)
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_pack(
+  client: grom.Client,
+  id pack_id: String,
+) -> Result(Pack, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/sticker-packs/" <> pack_id)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: pack_decoder())
+  |> result.map_error(grom.CouldNotDecode)
 }

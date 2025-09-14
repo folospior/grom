@@ -26,6 +26,8 @@ import grom/soundboard
 import grom/sticker.{type Sticker}
 import grom/user.{type User}
 import grom/voice
+import multipart_form
+import multipart_form/field
 
 // TYPES ----------------------------------------------------------------------
 
@@ -308,6 +310,23 @@ pub type ModifySoundboardSound {
     volume: Modification(Float),
     emoji_id: Modification(String),
     emoji_name: Modification(String),
+  )
+}
+
+pub type CreateSticker {
+  CreateSticker(
+    name: String,
+    description: String,
+    tags: String,
+    file: sticker.File,
+  )
+}
+
+pub type ModifySticker {
+  ModifySticker(
+    name: Option(String),
+    description: Modification(String),
+    tags: Option(String),
   )
 }
 
@@ -1138,6 +1157,26 @@ pub fn modify_soundboard_sound_to_json(modify: ModifySoundboardSound) -> Json {
     ]
     |> list.flatten,
   )
+}
+
+@internal
+pub fn modify_sticker_to_json(modify: ModifySticker) -> Json {
+  let name = case modify.name {
+    Some(name) -> [#("name", json.string(name))]
+    None -> []
+  }
+
+  let description =
+    modification.to_json(modify.description, "description", json.string)
+
+  let tags = case modify.tags {
+    Some(tags) -> [#("tags", json.string(tags))]
+    None -> []
+  }
+
+  [name, description, tags]
+  |> list.flatten
+  |> json.object
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
@@ -1993,6 +2032,112 @@ pub fn delete_soundboard_sound(
   |> rest.new_request(
     http.Delete,
     "/guilds/" <> guild_id <> "/soundboard-sounds/" <> sound_id,
+  )
+  |> rest.with_reason(reason)
+  |> rest.execute
+  |> result.replace(Nil)
+}
+
+pub fn get_stickers(
+  client: grom.Client,
+  for guild_id: String,
+) -> Result(List(Sticker), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/stickers")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: sticker.decoder()))
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn get_sticker(
+  client: grom.Client,
+  from guild_id: String,
+  id sticker_id: String,
+) -> Result(Sticker, grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/guilds/" <> guild_id <> "/stickers/" <> sticker_id,
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: sticker.decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn create_sticker(
+  client: grom.Client,
+  in guild_id: String,
+  using create: CreateSticker,
+  because reason: Option(String),
+) -> Result(Sticker, grom.Error) {
+  let request =
+    client
+    |> rest.new_request(http.Post, "/guilds/" <> guild_id <> "/stickers")
+    |> rest.with_reason(reason)
+    |> multipart_form.to_request(form: [
+      #("name", field.String(create.name)),
+      #("description", field.String(create.description)),
+      #("tags", field.String(create.tags)),
+      #(
+        "file",
+        field.File(
+          create.file.name,
+          sticker.content_type_to_string(create.file.content_type),
+          create.file.content,
+        ),
+      ),
+    ])
+
+  use response <- result.try(rest.execute_multipart(request))
+
+  response.body
+  |> json.parse(using: sticker.decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn modify_sticker(
+  client: grom.Client,
+  in guild_id: String,
+  id sticker_id: String,
+  using modify: ModifySticker,
+  because reason: Option(String),
+) -> Result(Sticker, grom.Error) {
+  let json = modify |> modify_sticker_to_json |> json.to_string
+
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Patch,
+      "/guilds/" <> guild_id <> "/stickers/" <> sticker_id,
+    )
+    |> rest.with_reason(reason)
+    |> request.set_body(json)
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: sticker.decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn delete_sticker(
+  client: grom.Client,
+  from guild_id: String,
+  id sticker_id: String,
+  because reason: Option(String),
+) -> Result(Nil, grom.Error) {
+  client
+  |> rest.new_request(
+    http.Delete,
+    "/guilds/" <> guild_id <> "/stickers/" <> sticker_id,
   )
   |> rest.with_reason(reason)
   |> rest.execute
