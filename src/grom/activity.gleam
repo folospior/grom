@@ -186,7 +186,7 @@ pub fn to_json(activity: Activity) -> Json {
   }
 
   let flags = case activity.flags {
-    Some(flags) -> [#("flags", flags.encode(flags, bits_flags()))]
+    Some(flags) -> [#("flags", flags.to_json(flags, bits_flags()))]
     None -> []
   }
 
