@@ -8,6 +8,8 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
+import gleam/otp/static_supervisor
+import gleam/otp/supervision
 import gleam/result
 import gleam/string
 import gleam/time/duration.{type Duration}
@@ -24,7 +26,7 @@ import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_timestamp
-import grom/user.{type User, User}
+import grom/user.{type User}
 import operating_system
 import repeatedly
 import stratus
@@ -58,6 +60,7 @@ pub type PresenceStatus {
 pub type Event {
   ReadyEvent(ReadyMessage)
   ErrorEvent(grom.Error)
+  ResumedEvent
 }
 
 pub type SessionStartLimits {
@@ -79,6 +82,10 @@ type State {
   )
 }
 
+type UserMessage {
+  StartResume
+}
+
 // RECEIVE EVENTS --------------------------------------------------------------
 
 pub type ReceivedMessage {
@@ -96,6 +103,7 @@ pub type HelloMessage {
 
 pub type DispatchedMessage {
   Ready(ReadyMessage)
+  Resumed
 }
 
 pub type ReadyMessage {
@@ -116,6 +124,7 @@ pub type SentMessage {
   Heartbeat(HeartbeatMessage)
   Identify(IdentifyMessage)
   UpdatePresence(UpdatePresenceMessage)
+  Resume(ResumeMessage)
 }
 
 pub type HeartbeatMessage {
@@ -142,6 +151,10 @@ pub type UpdatePresenceMessage {
     status: PresenceStatus,
     is_afk: Bool,
   )
+}
+
+pub type ResumeMessage {
+  ResumeMessage(token: String, session_id: String, last_sequence: Int)
 }
 
 pub type IdentifyProperties {
@@ -196,37 +209,8 @@ pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
           use ready <- decode.then(ready_message_decoder())
           decode.success(Ready(ready))
         }
-        _ ->
-          decode.failure(
-            Ready(ReadyMessage(
-              api_version: 0,
-              user: User(
-                "",
-                "",
-                "",
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-              ),
-              guilds: [],
-              session_id: "",
-              resume_gateway_url: "",
-              shard: None,
-              application: ReadyApplication("", []),
-            )),
-            "DispatchedMessage",
-          )
+        "RESUMED" -> decode.success(Resumed)
+        _ -> decode.failure(Resumed, "DispatchedMessage")
       })
       decode.success(Dispatch(sequence:, message:))
     }
@@ -301,7 +285,22 @@ pub fn message_to_json(message: SentMessage) -> Json {
     Heartbeat(msg) -> heartbeat_to_json(msg)
     Identify(msg) -> identify_to_json(msg)
     UpdatePresence(msg) -> update_presence_to_json(msg, True)
+    Resume(msg) -> resume_to_json(msg)
   }
+}
+
+fn resume_to_json(message: ResumeMessage) -> Json {
+  json.object([
+    #("op", json.int(6)),
+    #(
+      "d",
+      json.object([
+        #("token", json.string(message.token)),
+        #("session_id", json.string(message.session_id)),
+        #("seq", json.int(message.last_sequence)),
+      ]),
+    ),
+  ])
 }
 
 fn update_presence_to_json(
@@ -432,26 +431,121 @@ pub fn start(
   identify: IdentifyMessage,
   notify actor: Subject(Event),
 ) {
-  use gateway_data <- result.try(
-    client
-    |> get_data,
-  )
-
-  let request_url =
-    string.replace(in: gateway_data.url, each: "wss://", with: "https://")
-    <> "?v=10&encoding=json"
-
-  use connection_request <- result.try(
-    request.to(request_url)
-    |> result.replace_error(grom.InvalidGatewayUrl(gateway_data.url)),
-  )
-
-  stratus.new_with_initialiser(connection_request, fn() {
+  use state <- result.try(
     init_state(actor, identify)
-  })
-  |> stratus.on_message(on_message)
-  |> stratus.start
-  |> result.map_error(grom.CouldNotInitializeWebsocketConnection)
+    |> result.replace_error(actor.InitFailed("couldn't init state")),
+  )
+
+  static_supervisor.new(static_supervisor.OneForOne)
+  |> static_supervisor.add(supervised(client, state))
+  |> static_supervisor.start
+}
+
+fn supervised(client: grom.Client, state: State) {
+  let start = case resuming.get_info(state.resuming_info_holder) {
+    Some(info) -> {
+      state.resuming_info_holder
+      |> resuming.set_info(to: Some(
+        resuming.Info(..info, connection_pid: Some(process.self())),
+      ))
+
+      case resuming.is_possible(info) {
+        True -> resume(client, state, info)
+        False -> new_connection(client, state)
+      }
+    }
+    None -> new_connection(client, state)
+  }
+
+  let restart = supervision.Permanent
+  let significant = False
+  let child_type = supervision.Supervisor
+
+  supervision.ChildSpecification(start:, restart:, significant:, child_type:)
+}
+
+fn new_connection(client: grom.Client, state: State) {
+  fn() {
+    use gateway_data <- result.try(
+      client
+      |> get_data
+      |> result.replace_error(actor.InitFailed("couldn't get gateway data")),
+    )
+
+    let request_url =
+      string.replace(in: gateway_data.url, each: "wss://", with: "https://")
+      <> "?v=10&encoding=json"
+
+    use connection_request <- result.try(
+      request.to(request_url)
+      |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
+    )
+
+    heartbeat.reset(state.heartbeat_counter)
+    sequence.reset(state.sequence_holder)
+    resuming.reset(state.resuming_info_holder)
+
+    use subject <- result.try(
+      stratus.new(connection_request, state)
+      |> stratus.on_message(fn(state, message, connection) {
+        on_message(client, state, message, connection)
+      })
+      |> stratus.on_close(on_close)
+      |> stratus.start
+      |> result.replace_error(actor.InitFailed(
+        "couldn't start websocket connection",
+      )),
+    )
+
+    process.send(subject.data, stratus.to_user_message(StartResume))
+
+    Ok(subject)
+  }
+}
+
+fn resume(client: grom.Client, state: State, info: resuming.Info) {
+  fn() {
+    use connection_request <- result.try(
+      request.to(info.resume_gateway_url)
+      |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
+    )
+
+    stratus.new(connection_request, state)
+    |> stratus.on_message(fn(state, message, connection) {
+      on_message(client, state, message, connection)
+    })
+    |> stratus.on_close(on_close)
+    |> stratus.start
+    |> result.replace_error(actor.InitFailed(
+      "couldn't start websocket connection",
+    ))
+  }
+}
+
+fn on_close(state: State, close_reason: stratus.CloseReason) {
+  let resuming_info = resuming.get_info(state.resuming_info_holder)
+  let new_resuming_info = case resuming_info {
+    Some(info) ->
+      Some(
+        resuming.Info(..info, last_received_close_reason: Some(close_reason)),
+      )
+    None -> None
+  }
+
+  state.resuming_info_holder
+  |> resuming.set_info(to: new_resuming_info)
+
+  // consult on if this is a bug, no idea tbh
+  // i think it's impossible state for the connection_pid to be none by the time this function gets called
+  // typing requires work, impossible states defined as possible values i think
+  case resuming_info {
+    Some(info) ->
+      case info.connection_pid {
+        Some(pid) -> process.kill(pid)
+        None -> Nil
+      }
+    None -> Nil
+  }
 }
 
 pub fn identify(client: grom.Client, intents: List(Intent)) -> IdentifyMessage {
@@ -503,17 +597,19 @@ fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
       identify:,
     )
 
-  Ok(stratus.initialised(state))
+  Ok(state)
 }
 
 fn on_message(
+  client: grom.Client,
   state: State,
-  message: stratus.Message(a),
+  message: stratus.Message(UserMessage),
   connection: stratus.Connection,
 ) {
   case message {
     stratus.Text(text_message) ->
       on_text_message(state, connection, text_message)
+    stratus.User(StartResume) -> start_resume(client, state, connection)
     _ -> stratus.continue(state)
   }
 }
@@ -544,22 +640,66 @@ fn on_text_message(
   stratus.continue(state)
 }
 
+fn start_resume(
+  client: grom.Client,
+  state: State,
+  connection: stratus.Connection,
+) {
+  let resuming_info = resuming.get_info(state.resuming_info_holder)
+  let last_sequence = sequence.get(state.sequence_holder)
+
+  let _ =
+    case resuming_info, last_sequence {
+      Some(info), Some(sequence) ->
+        ResumeMessage(client.token, info.session_id, sequence)
+      // unreachable - we need to have gotten the ready event otherwise we wouldn't even get here
+      // really reconsidering my typing choices
+      _, _ -> ResumeMessage("", "", 0)
+    }
+    |> resume_to_json
+    |> json.to_string
+    |> stratus.send_text_message(connection, _)
+    |> result.map_error(fn(error) {
+      actor.send(state.actor, ErrorEvent(grom.CouldNotSendEvent(error)))
+    })
+
+  let heartbeat_counter = heartbeat.get(state.heartbeat_counter)
+
+  process.link(start_heartbeats(state, connection, heartbeat_counter.interval))
+
+  stratus.continue(state)
+}
+
 fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
   state.sequence_holder
   |> sequence.set(to: Some(sequence))
 
   case message {
     Ready(msg) -> on_ready(state, msg)
+    Resumed -> actor.send(state.actor, ResumedEvent)
   }
 }
 
 fn on_ready(state: State, message: ReadyMessage) {
+  let info =
+    state.resuming_info_holder
+    |> resuming.get_info
+
+  let #(is_resumed, connection_pid) = case info {
+    Some(info) -> #(info.is_resumed, info.connection_pid)
+    None -> #(False, None)
+  }
+
   state.resuming_info_holder
-  |> resuming.set_info(to: resuming.Info(
-    session_id: message.session_id,
-    resume_gateway_url: message.resume_gateway_url,
-    last_received_close_reason: None,
-  ))
+  |> resuming.set_info(
+    to: Some(resuming.Info(
+      session_id: message.session_id,
+      resume_gateway_url: message.resume_gateway_url,
+      last_received_close_reason: None,
+      connection_pid:,
+      is_resumed:,
+    )),
+  )
 
   state.actor
   |> actor.send(ReadyEvent(message))
@@ -585,7 +725,10 @@ fn on_hello_event(
   connection: stratus.Connection,
   event: HelloMessage,
 ) {
-  start_heartbeats(state, connection, event.heartbeat_interval)
+  // starts heartbeats & makes sure we don't send heartbeats to a dead connection
+  // possible bug: links to the stratus.Connection and not to my supervised pid
+  // not sure if it matters though, both die
+  process.link(start_heartbeats(state, connection, event.heartbeat_interval))
   send_identify(state, connection)
 }
 
@@ -603,11 +746,15 @@ fn send_identify(state: State, connection: stratus.Connection) {
   }
 }
 
+/// returns the pid of the process taking care of the heartbeat loop
 fn start_heartbeats(
   state: State,
   connection: stratus.Connection,
   interval: Duration,
 ) {
+  state.heartbeat_counter
+  |> heartbeat.interval(interval)
+
   let regular_wait_duration =
     interval
     |> duration.to_seconds
@@ -643,7 +790,6 @@ fn start_heartbeats(
     })
     Nil
   })
-  Nil
 }
 
 fn send_heartbeat(

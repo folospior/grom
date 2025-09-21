@@ -7,6 +7,7 @@ import grom
 pub opaque type Message {
   Set(to: Option(Int))
   Get(reply_recipient: Subject(Option(Int)))
+  Reset
 }
 
 pub fn holder_start() {
@@ -24,6 +25,10 @@ pub fn get(actor: Subject(Message)) -> Option(Int) {
   actor.call(actor, 10, Get)
 }
 
+pub fn reset(actor: Subject(Message)) -> Nil {
+  actor.send(actor, Reset)
+}
+
 fn on_message(current: Option(Int), message: Message) {
   case message {
     Set(to: new) -> actor.continue(new)
@@ -31,5 +36,6 @@ fn on_message(current: Option(Int), message: Message) {
       actor.send(reply_recipient, current)
       actor.continue(current)
     }
+    Reset -> actor.continue(None)
   }
 }
