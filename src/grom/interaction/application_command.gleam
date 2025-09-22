@@ -4,7 +4,7 @@ import gleam/option.{type Option, None}
 import grom/application
 import grom/interaction/application_command/command_option.{type CommandOption}
 import grom/interaction/context_type.{type ContextType}
-import grom/permission.{type Permission}
+import grom/permission
 
 // TYPES -----------------------------------------------------------------------
 
@@ -19,7 +19,7 @@ pub type ApplicationCommand {
     description: String,
     description_localizations: Option(Dict(String, String)),
     options: Option(List(CommandOption)),
-    default_member_permissions: Option(List(Permission)),
+    default_member_permissions: Option(List(permission.Permission)),
     is_nsfw: Option(Bool),
     installation_contexts: Option(List(application.InstallationContext)),
     contexts: Option(List(ContextType)),
@@ -31,6 +31,25 @@ pub type Type {
   ChatInput
   User
   Message
+}
+
+pub type Permissions {
+  Permissions(
+    id: String,
+    application_id: String,
+    guild_id: String,
+    permissions: List(Permission),
+  )
+}
+
+pub type Permission {
+  Permission(id: String, type_: PermissionType, is_allowed: Bool)
+}
+
+pub type PermissionType {
+  RolePermission
+  UserPermission
+  ChannelPermission
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -111,5 +130,36 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     2 -> decode.success(User)
     3 -> decode.success(Message)
     _ -> decode.failure(ChatInput, "Type")
+  }
+}
+
+@internal
+pub fn permissions_decoder() -> decode.Decoder(Permissions) {
+  use id <- decode.field("id", decode.string)
+  use application_id <- decode.field("application_id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use permissions <- decode.field(
+    "permissions",
+    decode.list(permission_decoder()),
+  )
+  decode.success(Permissions(id:, application_id:, guild_id:, permissions:))
+}
+
+@internal
+pub fn permission_decoder() -> decode.Decoder(Permission) {
+  use id <- decode.field("id", decode.string)
+  use type_ <- decode.field("type", permission_type_decoder())
+  use is_allowed <- decode.field("permission", decode.bool)
+  decode.success(Permission(id:, type_:, is_allowed:))
+}
+
+@internal
+pub fn permission_type_decoder() -> decode.Decoder(PermissionType) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    1 -> decode.success(RolePermission)
+    2 -> decode.success(UserPermission)
+    3 -> decode.success(ChannelPermission)
+    _ -> decode.failure(RolePermission, "PermissionType")
   }
 }

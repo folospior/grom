@@ -15,6 +15,8 @@ import gleam/string
 import gleam/time/duration.{type Duration}
 import grom
 import grom/application
+import grom/channel.{type Channel}
+import grom/channel/thread.{type Thread}
 import grom/gateway/connection_pid
 import grom/gateway/heartbeat
 import grom/gateway/intent.{type Intent}
@@ -25,6 +27,8 @@ import grom/gateway/user_message.{
   type UpdateVoiceStateMessage, type UserMessage,
 }
 import grom/guild
+import grom/guild/auto_moderation
+import grom/interaction/application_command
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
@@ -56,6 +60,17 @@ pub type Event {
   ErrorEvent(grom.Error)
   ResumedEvent
   RateLimitedEvent(RateLimitedMessage)
+  ApplicationCommandPermissionsUpdatedEvent(application_command.Permissions)
+  AutoModerationRuleCreatedEvent(auto_moderation.Rule)
+  AutoModerationRuleUpdatedEvent(auto_moderation.Rule)
+  AutoModerationRuleDeletedEvent(auto_moderation.Rule)
+  AutoModerationActionExecutedEvent(AutoModerationActionExecutedMessage)
+  ChannelCreatedEvent(Channel)
+  ChannelUpdatedEvent(Channel)
+  ChannelDeletedEvent(Channel)
+  ThreadCreatedEvent(ThreadCreatedMessage)
+  ThreadUpdatedEvent(Thread)
+  ThreadDeletedEvent(ThreadDeletedMessage)
 }
 
 pub type SessionStartLimits {
@@ -100,6 +115,17 @@ pub type DispatchedMessage {
   Ready(ReadyMessage)
   Resumed
   RateLimited(RateLimitedMessage)
+  ApplicationCommandPermissionsUpdated(application_command.Permissions)
+  AutoModerationRuleCreated(auto_moderation.Rule)
+  AutoModerationRuleUpdated(auto_moderation.Rule)
+  AutoModerationRuleDeleted(auto_moderation.Rule)
+  AutoModerationActionExecuted(AutoModerationActionExecutedMessage)
+  ChannelCreated(Channel)
+  ChannelUpdated(Channel)
+  ChannelDeleted(Channel)
+  ThreadCreated(ThreadCreatedMessage)
+  ThreadUpdated(Thread)
+  ThreadDeleted(ThreadDeletedMessage)
 }
 
 pub type ReadyMessage {
@@ -124,6 +150,35 @@ pub type RateLimitedMessage {
 
 pub type RateLimitedMetadata {
   RequestGuildMembersRateLimited(guild_id: String, nonce: Option(String))
+}
+
+pub type AutoModerationActionExecutedMessage {
+  AutoModerationActionExecutedMessage(
+    guild_id: String,
+    action: auto_moderation.Action,
+    rule_id: String,
+    rule_trigger_type: auto_moderation.TriggerType,
+    user_id: String,
+    channel_id: Option(String),
+    message_id: Option(String),
+    alert_system_message_id: Option(String),
+    content: Option(String),
+    matched_keyword: Option(String),
+    matched_content: Option(String),
+  )
+}
+
+pub type ThreadCreatedMessage {
+  ThreadCreatedMessage(thread: Thread, is_newly_created: Bool)
+}
+
+pub type ThreadDeletedMessage {
+  ThreadDeletedMessage(
+    id: String,
+    guild_id: String,
+    parent_id: String,
+    type_: thread.Type,
+  )
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -201,18 +256,7 @@ pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
     0 -> {
       use sequence <- decode.field("s", decode.int)
       use type_ <- decode.field("t", decode.string)
-      use message <- decode.field("d", case type_ {
-        "READY" -> {
-          use ready <- decode.then(ready_message_decoder())
-          decode.success(Ready(ready))
-        }
-        "RESUMED" -> decode.success(Resumed)
-        "RATE_LIMITED" -> {
-          use rate_limited <- decode.then(rate_limited_message_decoder())
-          decode.success(RateLimited(rate_limited))
-        }
-        _ -> decode.failure(Resumed, "DispatchedMessage")
-      })
+      use message <- decode.field("d", dispatched_message_decoder(type_))
       decode.success(Dispatch(sequence:, message:))
     }
     1 -> decode.success(HeartbeatRequest)
@@ -229,6 +273,147 @@ pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
     _ ->
       decode.failure(Hello(HelloMessage(duration.seconds(0))), "ReceivedEvent")
   }
+}
+
+@internal
+pub fn dispatched_message_decoder(
+  type_: String,
+) -> decode.Decoder(DispatchedMessage) {
+  case type_ {
+    "READY" -> {
+      use ready <- decode.then(ready_message_decoder())
+      decode.success(Ready(ready))
+    }
+    "RESUMED" -> decode.success(Resumed)
+    "RATE_LIMITED" -> {
+      use rate_limited <- decode.then(rate_limited_message_decoder())
+      decode.success(RateLimited(rate_limited))
+    }
+    "APPLICATION_COMMAND_PERMISSIONS_UPDATE" -> {
+      use perms <- decode.then(application_command.permissions_decoder())
+      decode.success(ApplicationCommandPermissionsUpdated(perms))
+    }
+    "AUTO_MODERATION_RULE_CREATE" -> {
+      use rule <- decode.then(auto_moderation.rule_decoder())
+      decode.success(AutoModerationRuleCreated(rule))
+    }
+    "AUTO_MODERATION_RULE_UPDATE" -> {
+      use rule <- decode.then(auto_moderation.rule_decoder())
+      decode.success(AutoModerationRuleUpdated(rule))
+    }
+    "AUTO_MODERATION_RULE_DELETE" -> {
+      use rule <- decode.then(auto_moderation.rule_decoder())
+      decode.success(AutoModerationRuleDeleted(rule))
+    }
+    "AUTO_MODERATION_ACTION_EXECUTION" -> {
+      use msg <- decode.then(auto_moderation_action_executed_message_decoder())
+      decode.success(AutoModerationActionExecuted(msg))
+    }
+    "CHANNEL_CREATE" -> {
+      use channel <- decode.then(channel.decoder())
+      decode.success(ChannelCreated(channel))
+    }
+    "CHANNEL_UPDATE" -> {
+      use channel <- decode.then(channel.decoder())
+      decode.success(ChannelUpdated(channel))
+    }
+    "CHANNEL_DELETE" -> {
+      use channel <- decode.then(channel.decoder())
+      decode.success(ChannelDeleted(channel))
+    }
+    "THREAD_CREATE" -> {
+      use msg <- decode.then(thread_created_message_decoder())
+      decode.success(ThreadCreated(msg))
+    }
+    "THREAD_UPDATE" -> {
+      use thread <- decode.then(thread.decoder())
+      decode.success(ThreadUpdated(thread))
+    }
+    "THREAD_DELETE" -> {
+      use msg <- decode.then(thread_deleted_message_decoder())
+      decode.success(ThreadDeleted(msg))
+    }
+    _ -> decode.failure(Resumed, "DispatchedMessage")
+  }
+}
+
+@internal
+pub fn auto_moderation_action_executed_message_decoder() -> decode.Decoder(
+  AutoModerationActionExecutedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use action <- decode.field("action", auto_moderation.action_decoder())
+  use rule_id <- decode.field("rule_id", decode.string)
+  use rule_trigger_type <- decode.field(
+    "rule_trigger_type",
+    auto_moderation.trigger_type_decoder(),
+  )
+  use user_id <- decode.field("user_id", decode.string)
+  use channel_id <- decode.optional_field(
+    "channel_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use message_id <- decode.optional_field(
+    "message_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use alert_system_message_id <- decode.optional_field(
+    "alert_system_message_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use content <- decode.optional_field(
+    "content",
+    None,
+    decode.optional(decode.string),
+  )
+  use matched_keyword <- decode.field(
+    "matched_keyword",
+    decode.optional(decode.string),
+  )
+  use matched_content <- decode.optional_field(
+    "matched_content",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(AutoModerationActionExecutedMessage(
+    guild_id:,
+    action:,
+    rule_id:,
+    rule_trigger_type:,
+    user_id:,
+    channel_id:,
+    message_id:,
+    alert_system_message_id:,
+    content:,
+    matched_keyword:,
+    matched_content:,
+  ))
+}
+
+@internal
+pub fn thread_created_message_decoder() -> decode.Decoder(ThreadCreatedMessage) {
+  use thread <- decode.then(thread.decoder())
+  use is_newly_created <- decode.optional_field(
+    "newly_created",
+    False,
+    decode.bool,
+  )
+
+  decode.success(ThreadCreatedMessage(thread:, is_newly_created:))
+}
+
+@internal
+pub fn thread_deleted_message_decoder() -> decode.Decoder(ThreadDeletedMessage) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use parent_id <- decode.field("parent_id", decode.string)
+  use type_ <- decode.field("type", thread.type_decoder())
+
+  decode.success(ThreadDeletedMessage(id:, guild_id:, parent_id:, type_:))
 }
 
 @internal
@@ -900,6 +1085,25 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     Ready(msg) -> on_ready(state, msg)
     Resumed -> actor.send(state.actor, ResumedEvent)
     RateLimited(msg) -> actor.send(state.actor, RateLimitedEvent(msg))
+    ApplicationCommandPermissionsUpdated(perms) ->
+      actor.send(state.actor, ApplicationCommandPermissionsUpdatedEvent(perms))
+    AutoModerationRuleCreated(rule) ->
+      actor.send(state.actor, AutoModerationRuleCreatedEvent(rule))
+    AutoModerationRuleUpdated(rule) ->
+      actor.send(state.actor, AutoModerationRuleUpdatedEvent(rule))
+    AutoModerationRuleDeleted(rule) ->
+      actor.send(state.actor, AutoModerationRuleDeletedEvent(rule))
+    AutoModerationActionExecuted(msg) ->
+      actor.send(state.actor, AutoModerationActionExecutedEvent(msg))
+    ChannelCreated(channel) ->
+      actor.send(state.actor, ChannelCreatedEvent(channel))
+    ChannelUpdated(channel) ->
+      actor.send(state.actor, ChannelUpdatedEvent(channel))
+    ChannelDeleted(channel) ->
+      actor.send(state.actor, ChannelDeletedEvent(channel))
+    ThreadCreated(msg) -> actor.send(state.actor, ThreadCreatedEvent(msg))
+    ThreadUpdated(thread) -> actor.send(state.actor, ThreadUpdatedEvent(thread))
+    ThreadDeleted(msg) -> actor.send(state.actor, ThreadDeletedEvent(msg))
   }
 }
 

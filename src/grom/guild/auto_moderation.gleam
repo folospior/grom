@@ -26,6 +26,14 @@ pub type Rule {
   )
 }
 
+pub type TriggerType {
+  Keyword
+  Spam
+  KeywordPreset
+  MentionSpam
+  MemberProfile
+}
+
 pub type Trigger {
   KeywordTrigger(
     keyword_filter: List(String),
@@ -167,6 +175,19 @@ pub fn trigger_decoder(trigger_type: Int) -> decode.Decoder(Trigger) {
       ))
     }
     _ -> decode.failure(SpamTrigger, "Trigger")
+  }
+}
+
+@internal
+pub fn trigger_type_decoder() -> decode.Decoder(TriggerType) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    1 -> decode.success(Keyword)
+    3 -> decode.success(Spam)
+    4 -> decode.success(KeywordPreset)
+    5 -> decode.success(MentionSpam)
+    6 -> decode.success(MemberProfile)
+    _ -> decode.failure(Keyword, "TriggerType")
   }
 }
 
