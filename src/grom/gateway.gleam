@@ -55,6 +55,7 @@ pub type Event {
   ReadyEvent(ReadyMessage)
   ErrorEvent(grom.Error)
   ResumedEvent
+  RateLimitedEvent(RateLimitedMessage)
 }
 
 pub type SessionStartLimits {
@@ -86,6 +87,7 @@ pub type ReceivedMessage {
   HeartbeatAcknowledged
   HeartbeatRequest
   ReconnectRequest
+  InvalidSession(can_reconnect: Bool)
 }
 
 pub type HelloMessage {
@@ -97,6 +99,7 @@ pub type HelloMessage {
 pub type DispatchedMessage {
   Ready(ReadyMessage)
   Resumed
+  RateLimited(RateLimitedMessage)
 }
 
 pub type ReadyMessage {
@@ -109,6 +112,18 @@ pub type ReadyMessage {
     shard: Option(Shard),
     application: ReadyApplication,
   )
+}
+
+pub type RateLimitedMessage {
+  RateLimitedMessage(
+    limited_opcode: Int,
+    retry_after: Duration,
+    metadata: RateLimitedMetadata,
+  )
+}
+
+pub type RateLimitedMetadata {
+  RequestGuildMembersRateLimited(guild_id: String, nonce: Option(String))
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -192,12 +207,20 @@ pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
           decode.success(Ready(ready))
         }
         "RESUMED" -> decode.success(Resumed)
+        "RATE_LIMITED" -> {
+          use rate_limited <- decode.then(rate_limited_message_decoder())
+          decode.success(RateLimited(rate_limited))
+        }
         _ -> decode.failure(Resumed, "DispatchedMessage")
       })
       decode.success(Dispatch(sequence:, message:))
     }
     1 -> decode.success(HeartbeatRequest)
     7 -> decode.success(ReconnectRequest)
+    9 -> {
+      use can_reconnect <- decode.then(decode.bool)
+      decode.success(InvalidSession(can_reconnect:))
+    }
     10 -> {
       use msg <- decode.field("d", hello_event_decoder())
       decode.success(Hello(msg))
@@ -206,6 +229,39 @@ pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
     _ ->
       decode.failure(Hello(HelloMessage(duration.seconds(0))), "ReceivedEvent")
   }
+}
+
+@internal
+pub fn rate_limited_message_decoder() -> decode.Decoder(RateLimitedMessage) {
+  use limited_opcode <- decode.field("opcode", decode.int)
+  use retry_after <- decode.field(
+    "retry_after",
+    time_duration.from_float_seconds_decoder(),
+  )
+  use metadata <- decode.field("meta", case limited_opcode {
+    8 -> request_guild_members_rate_limited_decoder()
+    _ ->
+      decode.failure(
+        RequestGuildMembersRateLimited("", None),
+        "RateLimitedMetadata",
+      )
+  })
+
+  decode.success(RateLimitedMessage(limited_opcode:, retry_after:, metadata:))
+}
+
+@internal
+pub fn request_guild_members_rate_limited_decoder() -> decode.Decoder(
+  RateLimitedMetadata,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use nonce <- decode.optional_field(
+    "nonce",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(RequestGuildMembersRateLimited(guild_id:, nonce:))
 }
 
 @internal
@@ -740,9 +796,45 @@ fn on_text_message(
     HeartbeatAcknowledged -> on_heartbeat_acknowledged(state)
     HeartbeatRequest -> on_heartbeat_request(state, connection)
     ReconnectRequest -> on_reconnect_request(state, connection)
+    InvalidSession(can_reconnect) ->
+      on_invalid_session(state, connection, can_reconnect)
   }
 
   stratus.continue(state)
+}
+
+fn on_invalid_session(
+  state: State,
+  connection: stratus.Connection,
+  can_reconnect: Bool,
+) -> Nil {
+  let _ = stratus.close(connection, because: stratus.NotProvided)
+
+  let resuming_info = resuming.get_info(state.resuming_info_holder)
+
+  case resuming_info, can_reconnect {
+    Some(info), True ->
+      resuming.set_info(
+        state.resuming_info_holder,
+        to: Some(
+          resuming.Info(
+            ..info,
+            last_received_close_reason: Some(stratus.NotProvided),
+          ),
+        ),
+      )
+    Some(info), False ->
+      resuming.set_info(
+        state.resuming_info_holder,
+        to: Some(resuming.Info(..info, last_received_close_reason: None)),
+      )
+    _, _ -> Nil
+  }
+
+  case connection_pid.get(state.connection_pid_holder) {
+    Some(pid) -> process.kill(pid)
+    None -> Nil
+  }
 }
 
 fn on_reconnect_request(state: State, connection: stratus.Connection) -> Nil {
@@ -807,6 +899,7 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
   case message {
     Ready(msg) -> on_ready(state, msg)
     Resumed -> actor.send(state.actor, ResumedEvent)
+    RateLimited(msg) -> actor.send(state.actor, RateLimitedEvent(msg))
   }
 }
 
@@ -953,5 +1046,6 @@ pub fn receive_opcode(event: ReceivedMessage) -> Int {
     HeartbeatAcknowledged -> 11
     HeartbeatRequest -> 1
     ReconnectRequest -> 7
+    InvalidSession(..) -> 9
   }
 }
