@@ -19,6 +19,7 @@ import grom/activity
 import grom/application
 import grom/channel.{type Channel}
 import grom/channel/thread.{type Thread}
+import grom/emoji.{type Emoji}
 import grom/entitlement.{type Entitlement}
 import grom/gateway/connection_pid
 import grom/gateway/heartbeat
@@ -97,6 +98,7 @@ pub type Event {
   AuditLogEntryCreatedEvent(AuditLogEntryCreatedMessage)
   GuildBanCreatedEvent(GuildBanMessage)
   GuildBanDeletedEvent(GuildBanMessage)
+  GuildEmojisUpdatedEvent(GuildEmojisUpdatedMessage)
 }
 
 pub type SessionStartLimits {
@@ -198,6 +200,7 @@ pub type DispatchedMessage {
   AuditLogEntryCreated(AuditLogEntryCreatedMessage)
   GuildBanCreated(GuildBanMessage)
   GuildBanDeleted(GuildBanMessage)
+  GuildEmojisUpdated(GuildEmojisUpdatedMessage)
 }
 
 pub type ReadyMessage {
@@ -324,6 +327,10 @@ pub type AuditLogEntryCreatedMessage {
 
 pub type GuildBanMessage {
   GuildBanMessage(guild_id: String, user: User)
+}
+
+pub type GuildEmojisUpdatedMessage {
+  GuildEmojisUpdatedMessage(guild_id: String, emojis: List(Emoji))
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -533,6 +540,10 @@ pub fn dispatched_message_decoder(
     "GUILD_BAN_REMOVE" -> {
       use msg <- decode.then(guild_ban_message_decoder())
       decode.success(GuildBanDeleted(msg))
+    }
+    "GUILD_EMOJIS_UPDATE" -> {
+      use msg <- decode.then(guild_emojis_updated_message_decoder())
+      decode.success(GuildEmojisUpdated(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -999,6 +1010,15 @@ pub fn guild_ban_message_decoder() -> decode.Decoder(GuildBanMessage) {
   use user <- decode.field("user", user.decoder())
 
   decode.success(GuildBanMessage(guild_id:, user:))
+}
+
+@internal
+pub fn guild_emojis_updated_message_decoder() -> decode.Decoder(
+  GuildEmojisUpdatedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use emojis <- decode.field("emojis", decode.list(emoji.decoder()))
+  decode.success(GuildEmojisUpdatedMessage(guild_id:, emojis:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1625,6 +1645,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, AuditLogEntryCreatedEvent(msg))
     GuildBanCreated(msg) -> actor.send(state.actor, GuildBanCreatedEvent(msg))
     GuildBanDeleted(msg) -> actor.send(state.actor, GuildBanDeletedEvent(msg))
+    GuildEmojisUpdated(msg) ->
+      actor.send(state.actor, GuildEmojisUpdatedEvent(msg))
   }
 }
 
