@@ -13,7 +13,7 @@ import gleam/otp/supervision
 import gleam/result
 import gleam/string
 import gleam/time/duration.{type Duration}
-import gleam/time/timestamp
+import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/activity
 import grom/application
@@ -34,6 +34,7 @@ import grom/interaction/application_command
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
+import grom/internal/time_rfc3339
 import grom/internal/time_timestamp
 import grom/user.{type User}
 import operating_system
@@ -78,6 +79,7 @@ pub type Event {
   ThreadMemberUpdatedEvent(ThreadMemberUpdatedMessage)
   PresenceUpdatedEvent(PresenceUpdatedMessage)
   ThreadMembersUpdatedEvent(ThreadMembersUpdatedMessage)
+  ChannelPinsUpdatedEvent(ChannelPinsUpdatedMessage)
 }
 
 pub type SessionStartLimits {
@@ -114,7 +116,7 @@ pub type ReceivedActivity {
     name: String,
     type_: activity.Type,
     url: Option(String),
-    created_at: timestamp.Timestamp,
+    created_at: Timestamp,
     timestamps: Option(activity.Timestamps),
     application_id: Option(String),
     status_display_type: Option(activity.DisplayType),
@@ -169,6 +171,7 @@ pub type DispatchedMessage {
   ThreadMemberUpdated(ThreadMemberUpdatedMessage)
   PresenceUpdated(PresenceUpdatedMessage)
   ThreadMembersUpdated(ThreadMembersUpdatedMessage)
+  ChannelPinsUpdated(ChannelPinsUpdatedMessage)
 }
 
 pub type ReadyMessage {
@@ -258,6 +261,14 @@ pub type ThreadMembersUpdatedMessage {
       List(#(thread.Member, Option(PresenceUpdatedMessage))),
     ),
     removed_member_ids: Option(List(String)),
+  )
+}
+
+pub type ChannelPinsUpdatedMessage {
+  ChannelPinsUpdatedMessage(
+    guild_id: Option(String),
+    channel_id: String,
+    last_pin_timestamp: Option(Timestamp),
   )
 }
 
@@ -428,6 +439,10 @@ pub fn dispatched_message_decoder(
     "THREAD_MEMBERS_UPDATE" -> {
       use msg <- decode.then(thread_members_updated_message_decoder())
       decode.success(ThreadMembersUpdated(msg))
+    }
+    "CHANNEL_PINS_UPDATE" -> {
+      use msg <- decode.then(channel_pins_updated_message_decoder())
+      decode.success(ChannelPinsUpdated(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -797,6 +812,29 @@ pub fn thread_members_updated_message_decoder() -> decode.Decoder(
     member_count:,
     added_members:,
     removed_member_ids:,
+  ))
+}
+
+@internal
+pub fn channel_pins_updated_message_decoder() -> decode.Decoder(
+  ChannelPinsUpdatedMessage,
+) {
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use channel_id <- decode.field("channel_id", decode.string)
+  use last_pin_timestamp <- decode.optional_field(
+    "last_pin_timestamp",
+    None,
+    decode.optional(time_rfc3339.decoder()),
+  )
+
+  decode.success(ChannelPinsUpdatedMessage(
+    guild_id:,
+    channel_id:,
+    last_pin_timestamp:,
   ))
 }
 
@@ -1407,6 +1445,10 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     ThreadMemberUpdated(msg) ->
       actor.send(state.actor, ThreadMemberUpdatedEvent(msg))
     PresenceUpdated(msg) -> actor.send(state.actor, PresenceUpdatedEvent(msg))
+    ThreadMembersUpdated(msg) ->
+      actor.send(state.actor, ThreadMembersUpdatedEvent(msg))
+    ChannelPinsUpdated(msg) ->
+      actor.send(state.actor, ChannelPinsUpdatedEvent(msg))
   }
 }
 
