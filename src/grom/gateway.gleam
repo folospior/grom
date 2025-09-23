@@ -29,15 +29,20 @@ import grom/gateway/user_message.{
   type RequestGuildMembersMessage, type UpdatePresenceMessage,
   type UpdateVoiceStateMessage, type UserMessage,
 }
-import grom/guild
+import grom/guild.{type Guild}
 import grom/guild/auto_moderation
+import grom/guild/scheduled_event.{type ScheduledEvent}
+import grom/guild_member.{type GuildMember}
 import grom/interaction/application_command
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/internal/time_timestamp
+import grom/soundboard
+import grom/stage_instance.{type StageInstance}
 import grom/user.{type User}
+import grom/voice
 import operating_system
 import repeatedly
 import stratus
@@ -84,6 +89,10 @@ pub type Event {
   EntitlementCreatedEvent(Entitlement)
   EntitlementUpdatedEvent(Entitlement)
   EntitlementDeletedEvent(Entitlement)
+  GuildCreatedEvent(GuildCreatedMessage)
+  GuildUpdatedEvent(Guild)
+  /// If `!guild.unavailable`, then the user was removed from the guild.
+  GuildDeletedEvent(guild.UnavailableGuild)
 }
 
 pub type SessionStartLimits {
@@ -179,6 +188,9 @@ pub type DispatchedMessage {
   EntitlementCreated(Entitlement)
   EntitlementUpdated(Entitlement)
   EntitlementDeleted(Entitlement)
+  GuildCreated(GuildCreatedMessage)
+  GuildUpdated(Guild)
+  GuildDeleted(guild.UnavailableGuild)
 }
 
 pub type ReadyMessage {
@@ -277,6 +289,26 @@ pub type ChannelPinsUpdatedMessage {
     channel_id: String,
     last_pin_timestamp: Option(Timestamp),
   )
+}
+
+pub type GuildCreatedMessage {
+  GuildCreatedMessage(
+    guild: Guild,
+    joined_at: Timestamp,
+    is_large: Bool,
+    member_count: Int,
+    voice_states: List(voice.State),
+    /// If the guild has over 75k members, this will be only your bot and users in voice channels.
+    members: List(GuildMember),
+    channels: List(Channel),
+    threads: List(Thread),
+    /// If you don't have the `GuildPresences` intent enabled, or if the guild has over 75k members, this will only have presences for your bot and users in voice channels.
+    presences: List(PresenceUpdatedMessage),
+    stage_instances: List(StageInstance),
+    scheduled_events: List(ScheduledEvent),
+    soundboard_sounds: List(soundboard.Sound),
+  )
+  UnavailableGuildCreatedMessage(guild.UnavailableGuild)
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -462,6 +494,18 @@ pub fn dispatched_message_decoder(
     "ENTITLEMENT_DELETE" -> {
       use entitlement <- decode.then(entitlement.decoder())
       decode.success(EntitlementDeleted(entitlement))
+    }
+    "GUILD_CREATE" -> {
+      use msg <- decode.then(guild_created_message_decoder())
+      decode.success(GuildCreated(msg))
+    }
+    "GUILD_UPDATE" -> {
+      use guild <- decode.then(guild.decoder())
+      decode.success(GuildUpdated(guild))
+    }
+    "GUILD_DELETE" -> {
+      use guild <- decode.then(guild.unavailable_guild_decoder())
+      decode.success(GuildDeleted(guild))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -855,6 +899,61 @@ pub fn channel_pins_updated_message_decoder() -> decode.Decoder(
     channel_id:,
     last_pin_timestamp:,
   ))
+}
+
+@internal
+pub fn guild_created_message_decoder() -> decode.Decoder(GuildCreatedMessage) {
+  let unavailable_guild_decoder = {
+    use unavailable_guild <- decode.then(guild.unavailable_guild_decoder())
+    decode.success(UnavailableGuildCreatedMessage(unavailable_guild))
+  }
+
+  let available_guild_decoder = {
+    use guild <- decode.then(guild.decoder())
+    use joined_at <- decode.field("joined_at", time_rfc3339.decoder())
+    use is_large <- decode.field("large", decode.bool)
+    use member_count <- decode.field("member_count", decode.int)
+    use voice_states <- decode.field(
+      "voice_states",
+      decode.list(voice.state_decoder()),
+    )
+    use members <- decode.field("members", decode.list(guild_member.decoder()))
+    use channels <- decode.field("channels", decode.list(channel.decoder()))
+    use threads <- decode.field("threads", decode.list(thread.decoder()))
+    use presences <- decode.field(
+      "presences",
+      decode.list(presence_updated_message_decoder()),
+    )
+    use stage_instances <- decode.field(
+      "stage_instances",
+      decode.list(stage_instance.decoder()),
+    )
+    use scheduled_events <- decode.field(
+      "guild_scheduled_events",
+      decode.list(scheduled_event.decoder()),
+    )
+    use soundboard_sounds <- decode.field(
+      "soundboard_sounds",
+      decode.list(soundboard.sound_decoder()),
+    )
+
+    decode.success(GuildCreatedMessage(
+      guild:,
+      joined_at:,
+      is_large:,
+      member_count:,
+      voice_states:,
+      members:,
+      channels:,
+      threads:,
+      presences:,
+      stage_instances:,
+      scheduled_events:,
+      soundboard_sounds:,
+    ))
+  }
+
+  decode.one_of(available_guild_decoder, or: [unavailable_guild_decoder])
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1474,6 +1573,9 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, EntitlementUpdatedEvent(entitlement))
     EntitlementDeleted(entitlement) ->
       actor.send(state.actor, EntitlementDeletedEvent(entitlement))
+    GuildCreated(msg) -> actor.send(state.actor, GuildCreatedEvent(msg))
+    GuildUpdated(guild) -> actor.send(state.actor, GuildUpdatedEvent(guild))
+    GuildDeleted(guild) -> actor.send(state.actor, GuildDeletedEvent(guild))
   }
 }
 
