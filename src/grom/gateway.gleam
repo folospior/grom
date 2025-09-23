@@ -19,6 +19,7 @@ import grom/activity
 import grom/application
 import grom/channel.{type Channel}
 import grom/channel/thread.{type Thread}
+import grom/entitlement.{type Entitlement}
 import grom/gateway/connection_pid
 import grom/gateway/heartbeat
 import grom/gateway/intent.{type Intent}
@@ -80,6 +81,9 @@ pub type Event {
   PresenceUpdatedEvent(PresenceUpdatedMessage)
   ThreadMembersUpdatedEvent(ThreadMembersUpdatedMessage)
   ChannelPinsUpdatedEvent(ChannelPinsUpdatedMessage)
+  EntitlementCreatedEvent(Entitlement)
+  EntitlementUpdatedEvent(Entitlement)
+  EntitlementDeletedEvent(Entitlement)
 }
 
 pub type SessionStartLimits {
@@ -172,6 +176,9 @@ pub type DispatchedMessage {
   PresenceUpdated(PresenceUpdatedMessage)
   ThreadMembersUpdated(ThreadMembersUpdatedMessage)
   ChannelPinsUpdated(ChannelPinsUpdatedMessage)
+  EntitlementCreated(Entitlement)
+  EntitlementUpdated(Entitlement)
+  EntitlementDeleted(Entitlement)
 }
 
 pub type ReadyMessage {
@@ -443,6 +450,18 @@ pub fn dispatched_message_decoder(
     "CHANNEL_PINS_UPDATE" -> {
       use msg <- decode.then(channel_pins_updated_message_decoder())
       decode.success(ChannelPinsUpdated(msg))
+    }
+    "ENTITLEMENT_CREATE" -> {
+      use entitlement <- decode.then(entitlement.decoder())
+      decode.success(EntitlementCreated(entitlement))
+    }
+    "ENTITLEMENT_UPDATE" -> {
+      use entitlement <- decode.then(entitlement.decoder())
+      decode.success(EntitlementUpdated(entitlement))
+    }
+    "ENTITLEMENT_DELETE" -> {
+      use entitlement <- decode.then(entitlement.decoder())
+      decode.success(EntitlementDeleted(entitlement))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1449,6 +1468,12 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, ThreadMembersUpdatedEvent(msg))
     ChannelPinsUpdated(msg) ->
       actor.send(state.actor, ChannelPinsUpdatedEvent(msg))
+    EntitlementCreated(entitlement) ->
+      actor.send(state.actor, EntitlementCreatedEvent(entitlement))
+    EntitlementUpdated(entitlement) ->
+      actor.send(state.actor, EntitlementUpdatedEvent(entitlement))
+    EntitlementDeleted(entitlement) ->
+      actor.send(state.actor, EntitlementDeletedEvent(entitlement))
   }
 }
 
