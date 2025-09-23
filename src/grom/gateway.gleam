@@ -41,6 +41,7 @@ import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/internal/time_timestamp
+import grom/modification.{type Modification}
 import grom/soundboard
 import grom/stage_instance.{type StageInstance}
 import grom/sticker.{type Sticker}
@@ -102,6 +103,9 @@ pub type Event {
   GuildEmojisUpdatedEvent(GuildEmojisUpdatedMessage)
   GuildStickersUpdatedEvent(GuildStickersUpdatedMessage)
   GuildIntegrationsUpdatedEvent(GuildIntegrationsUpdatedMessage)
+  GuildMemberCreatedEvent(GuildMemberCreatedMessage)
+  GuildMemberDeletedEvent(GuildMemberDeletedMessage)
+  GuildMemberUpdatedEvent(GuildMemberUpdatedMessage)
 }
 
 pub type SessionStartLimits {
@@ -206,6 +210,9 @@ pub type DispatchedMessage {
   GuildEmojisUpdated(GuildEmojisUpdatedMessage)
   GuildStickersUpdated(GuildStickersUpdatedMessage)
   GuildIntegrationsUpdated(GuildIntegrationsUpdatedMessage)
+  GuildMemberCreated(GuildMemberCreatedMessage)
+  GuildMemberDeleted(GuildMemberDeletedMessage)
+  GuildMemberUpdated(GuildMemberUpdatedMessage)
 }
 
 pub type ReadyMessage {
@@ -344,6 +351,33 @@ pub type GuildStickersUpdatedMessage {
 
 pub type GuildIntegrationsUpdatedMessage {
   GuildIntegrationsUpdatedMessage(guild_id: String)
+}
+
+pub type GuildMemberCreatedMessage {
+  GuildMemberCreatedMessage(guild_id: String, guild_member: GuildMember)
+}
+
+pub type GuildMemberDeletedMessage {
+  GuildMemberDeletedMessage(guild_id: String, user: User)
+}
+
+pub type GuildMemberUpdatedMessage {
+  GuildMemberUpdatedMessage(
+    guild_id: String,
+    role_ids: List(String),
+    user: User,
+    nick: Modification(String),
+    avatar_hash: Option(String),
+    banner_hash: Option(String),
+    joined_at: Option(Timestamp),
+    premium_since: Option(Timestamp),
+    is_deaf: Option(Bool),
+    is_mute: Option(Bool),
+    is_pending: Option(Bool),
+    communication_disabled_until: Modification(Timestamp),
+    flags: Option(List(guild_member.Flag)),
+    avatar_decoration_data: Modification(user.AvatarDecorationData),
+  )
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -565,6 +599,18 @@ pub fn dispatched_message_decoder(
     "GUILD_INTEGRATIONS_UPDATE" -> {
       use msg <- decode.then(guild_integrations_updated_message_decoder())
       decode.success(GuildIntegrationsUpdated(msg))
+    }
+    "GUILD_MEMBER_ADD" -> {
+      use msg <- decode.then(guild_member_created_message_decoder())
+      decode.success(GuildMemberCreated(msg))
+    }
+    "GUILD_MEMBER_REMOVE" -> {
+      use msg <- decode.then(guild_member_deleted_message_decoder())
+      decode.success(GuildMemberDeleted(msg))
+    }
+    "GUILD_MEMBER_UPDATE" -> {
+      use msg <- decode.then(guild_member_updated_message_decoder())
+      decode.success(GuildMemberUpdated(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1057,6 +1103,75 @@ pub fn guild_integrations_updated_message_decoder() -> decode.Decoder(
 ) {
   use guild_id <- decode.field("guild_id", decode.string)
   decode.success(GuildIntegrationsUpdatedMessage(guild_id:))
+}
+
+@internal
+pub fn guild_member_created_message_decoder() -> decode.Decoder(
+  GuildMemberCreatedMessage,
+) {
+  use guild_member <- decode.then(guild_member.decoder())
+  use guild_id <- decode.field("guild_id", decode.string)
+  decode.success(GuildMemberCreatedMessage(guild_id:, guild_member:))
+}
+
+@internal
+pub fn guild_member_deleted_message_decoder() -> decode.Decoder(
+  GuildMemberDeletedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use user <- decode.field("user", user.decoder())
+  decode.success(GuildMemberDeletedMessage(guild_id:, user:))
+}
+
+@internal
+pub fn guild_member_updated_message_decoder() -> decode.Decoder(
+  GuildMemberUpdatedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use role_ids <- decode.field("roles", decode.list(decode.string))
+  use user <- decode.field("user", user.decoder())
+  use nick <- decode.field("nick", modification.decoder(decode.string))
+  use avatar_hash <- decode.field("avatar", decode.optional(decode.string))
+  use banner_hash <- decode.field("banner", decode.optional(decode.string))
+  use joined_at <- decode.field(
+    "joined_at",
+    decode.optional(time_rfc3339.decoder()),
+  )
+  use premium_since <- decode.field(
+    "premium_since",
+    decode.optional(time_rfc3339.decoder()),
+  )
+  use is_deaf <- decode.field("deaf", decode.optional(decode.bool))
+  use is_mute <- decode.field("mute", decode.optional(decode.bool))
+  use is_pending <- decode.field("pending", decode.optional(decode.bool))
+  use communication_disabled_until <- decode.field(
+    "communication_disabled_until",
+    modification.decoder(time_rfc3339.decoder()),
+  )
+  use flags <- decode.field(
+    "flags",
+    decode.optional(flags.decoder(guild_member.bits_member_flags())),
+  )
+  use avatar_decoration_data <- decode.field(
+    "avatar_decoration_data",
+    modification.decoder(user.avatar_decoration_data_decoder()),
+  )
+  decode.success(GuildMemberUpdatedMessage(
+    guild_id:,
+    role_ids:,
+    user:,
+    nick:,
+    avatar_hash:,
+    banner_hash:,
+    joined_at:,
+    premium_since:,
+    is_deaf:,
+    is_mute:,
+    is_pending:,
+    communication_disabled_until:,
+    flags:,
+    avatar_decoration_data:,
+  ))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1689,6 +1804,12 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, GuildStickersUpdatedEvent(msg))
     GuildIntegrationsUpdated(msg) ->
       actor.send(state.actor, GuildIntegrationsUpdatedEvent(msg))
+    GuildMemberCreated(msg) ->
+      actor.send(state.actor, GuildMemberCreatedEvent(msg))
+    GuildMemberDeleted(msg) ->
+      actor.send(state.actor, GuildMemberDeletedEvent(msg))
+    GuildMemberUpdated(msg) ->
+      actor.send(state.actor, GuildMemberUpdatedEvent(msg))
   }
 }
 
