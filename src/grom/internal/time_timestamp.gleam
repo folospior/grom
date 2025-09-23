@@ -1,5 +1,12 @@
+import gleam/dynamic/decode
 import gleam/float
 import gleam/time/timestamp.{type Timestamp}
+
+@internal
+pub fn from_unix_milliseconds_decoder() -> decode.Decoder(Timestamp) {
+  use milliseconds <- decode.then(decode.int)
+  decode.success(timestamp.from_unix_seconds(milliseconds / 1000))
+}
 
 @internal
 pub fn to_unix_milliseconds(timestamp: Timestamp) -> Int {

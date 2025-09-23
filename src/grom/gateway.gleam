@@ -13,7 +13,9 @@ import gleam/otp/supervision
 import gleam/result
 import gleam/string
 import gleam/time/duration.{type Duration}
+import gleam/time/timestamp
 import grom
+import grom/activity
 import grom/application
 import grom/channel.{type Channel}
 import grom/channel/thread.{type Thread}
@@ -32,6 +34,7 @@ import grom/interaction/application_command
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
+import grom/internal/time_timestamp
 import grom/user.{type User}
 import operating_system
 import repeatedly
@@ -71,6 +74,10 @@ pub type Event {
   ThreadCreatedEvent(ThreadCreatedMessage)
   ThreadUpdatedEvent(Thread)
   ThreadDeletedEvent(ThreadDeletedMessage)
+  ThreadListSyncedEvent(ThreadListSyncedMessage)
+  ThreadMemberUpdatedEvent(ThreadMemberUpdatedMessage)
+  PresenceUpdatedEvent(PresenceUpdatedMessage)
+  ThreadMembersUpdatedEvent(ThreadMembersUpdatedMessage)
 }
 
 pub type SessionStartLimits {
@@ -91,6 +98,37 @@ pub opaque type State {
     connection_pid_holder: Subject(connection_pid.Message),
     identify: IdentifyMessage,
     user_message_subject_holder: Subject(user_message.Message),
+  )
+}
+
+pub type ClientStatus {
+  ClientStatus(
+    desktop: Option(String),
+    mobile: Option(String),
+    web: Option(String),
+  )
+}
+
+pub type ReceivedActivity {
+  ReceivedActivity(
+    name: String,
+    type_: activity.Type,
+    url: Option(String),
+    created_at: timestamp.Timestamp,
+    timestamps: Option(activity.Timestamps),
+    application_id: Option(String),
+    status_display_type: Option(activity.DisplayType),
+    details: Option(String),
+    details_url: Option(String),
+    state: Option(String),
+    state_url: Option(String),
+    emoji: Option(activity.Emoji),
+    party: Option(activity.Party),
+    assets: Option(activity.Assets),
+    secrets: Option(activity.Secrets),
+    is_instance: Option(Bool),
+    flags: Option(List(activity.Flag)),
+    button_labels: Option(List(String)),
   )
 }
 
@@ -126,6 +164,11 @@ pub type DispatchedMessage {
   ThreadCreated(ThreadCreatedMessage)
   ThreadUpdated(Thread)
   ThreadDeleted(ThreadDeletedMessage)
+  ThreadListSynced(ThreadListSyncedMessage)
+  /// Fired if the current user's thread member gets updated.
+  ThreadMemberUpdated(ThreadMemberUpdatedMessage)
+  PresenceUpdated(PresenceUpdatedMessage)
+  ThreadMembersUpdated(ThreadMembersUpdatedMessage)
 }
 
 pub type ReadyMessage {
@@ -178,6 +221,43 @@ pub type ThreadDeletedMessage {
     guild_id: String,
     parent_id: String,
     type_: thread.Type,
+  )
+}
+
+pub type ThreadListSyncedMessage {
+  ThreadListSyncedMessage(
+    guild_id: String,
+    /// If `None`, then threads are synced for the entire guild.
+    channel_ids: Option(List(String)),
+    threads: List(Thread),
+    /// A list of thread members for the current user.
+    members: List(thread.Member),
+  )
+}
+
+pub type ThreadMemberUpdatedMessage {
+  ThreadMemberUpdatedMessage(thread_member: thread.Member, guild_id: String)
+}
+
+pub type PresenceUpdatedMessage {
+  PresenceUpdatedMessage(
+    user_id: String,
+    guild_id: String,
+    status: String,
+    activities: List(ReceivedActivity),
+    client_status: ClientStatus,
+  )
+}
+
+pub type ThreadMembersUpdatedMessage {
+  ThreadMembersUpdatedMessage(
+    id: String,
+    guild_id: String,
+    member_count: Int,
+    added_members: Option(
+      List(#(thread.Member, Option(PresenceUpdatedMessage))),
+    ),
+    removed_member_ids: Option(List(String)),
   )
 }
 
@@ -333,6 +413,22 @@ pub fn dispatched_message_decoder(
       use msg <- decode.then(thread_deleted_message_decoder())
       decode.success(ThreadDeleted(msg))
     }
+    "THREAD_LIST_SYNC" -> {
+      use msg <- decode.then(thread_list_synced_message_decoder())
+      decode.success(ThreadListSynced(msg))
+    }
+    "THREAD_MEMBER_UPDATE" -> {
+      use msg <- decode.then(thread_member_updated_message_decoder())
+      decode.success(ThreadMemberUpdated(msg))
+    }
+    "PRESENCE_UPDATE" -> {
+      use msg <- decode.then(presence_updated_message_decoder())
+      decode.success(PresenceUpdated(msg))
+    }
+    "THREAD_MEMBERS_UPDATE" -> {
+      use msg <- decode.then(thread_members_updated_message_decoder())
+      decode.success(ThreadMembersUpdated(msg))
+    }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -414,6 +510,37 @@ pub fn thread_deleted_message_decoder() -> decode.Decoder(ThreadDeletedMessage) 
   use type_ <- decode.field("type", thread.type_decoder())
 
   decode.success(ThreadDeletedMessage(id:, guild_id:, parent_id:, type_:))
+}
+
+@internal
+pub fn thread_list_synced_message_decoder() -> decode.Decoder(
+  ThreadListSyncedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use channel_ids <- decode.optional_field(
+    "channel_ids",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+  use threads <- decode.field("threads", decode.list(thread.decoder()))
+  use members <- decode.field("members", decode.list(thread.member_decoder()))
+
+  decode.success(ThreadListSyncedMessage(
+    guild_id:,
+    channel_ids:,
+    threads:,
+    members:,
+  ))
+}
+
+@internal
+pub fn thread_member_updated_message_decoder() -> decode.Decoder(
+  ThreadMemberUpdatedMessage,
+) {
+  use thread_member <- decode.then(thread.member_decoder())
+  use guild_id <- decode.field("guild_id", decode.string)
+
+  decode.success(ThreadMemberUpdatedMessage(thread_member:, guild_id:))
 }
 
 @internal
@@ -499,6 +626,178 @@ pub fn ready_application_decoder() -> decode.Decoder(ReadyApplication) {
   use id <- decode.field("id", decode.string)
   use flags <- decode.field("flags", flags.decoder(application.bits_flags()))
   decode.success(ReadyApplication(id:, flags:))
+}
+
+@internal
+pub fn presence_updated_message_decoder() -> decode.Decoder(
+  PresenceUpdatedMessage,
+) {
+  use user_id <- decode.field("user_id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use status <- decode.field("status", decode.string)
+  use activities <- decode.field(
+    "activities",
+    decode.list(received_activity_decoder()),
+  )
+  use client_status <- decode.field("client_status", client_status_decoder())
+  decode.success(PresenceUpdatedMessage(
+    user_id:,
+    guild_id:,
+    status:,
+    activities:,
+    client_status:,
+  ))
+}
+
+pub fn received_activity_decoder() -> decode.Decoder(ReceivedActivity) {
+  use name <- decode.field("name", decode.string)
+  use type_ <- decode.field("type", activity.type_decoder())
+  use url <- decode.optional_field("url", None, decode.optional(decode.string))
+  use created_at <- decode.field(
+    "created_at",
+    time_timestamp.from_unix_milliseconds_decoder(),
+  )
+  use timestamps <- decode.optional_field(
+    "timestamps",
+    None,
+    decode.optional(activity.timestamps_decoder()),
+  )
+  use application_id <- decode.optional_field(
+    "application_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use status_display_type <- decode.optional_field(
+    "status_display_type",
+    None,
+    decode.optional(activity.display_type_decoder()),
+  )
+  use details <- decode.optional_field(
+    "details",
+    None,
+    decode.optional(decode.string),
+  )
+  use details_url <- decode.optional_field(
+    "details_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use state <- decode.optional_field(
+    "state",
+    None,
+    decode.optional(decode.string),
+  )
+  use state_url <- decode.optional_field(
+    "state_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use emoji <- decode.optional_field(
+    "emoji",
+    None,
+    decode.optional(activity.emoji_decoder()),
+  )
+  use party <- decode.optional_field(
+    "party",
+    None,
+    decode.optional(activity.party_decoder()),
+  )
+  use assets <- decode.optional_field(
+    "assets",
+    None,
+    decode.optional(activity.assets_decoder()),
+  )
+  use secrets <- decode.optional_field(
+    "secrets",
+    None,
+    decode.optional(activity.secrets_decoder()),
+  )
+  use is_instance <- decode.field("instance", decode.optional(decode.bool))
+  use flags <- decode.optional_field(
+    "flags",
+    None,
+    decode.optional(flags.decoder(activity.bits_flags())),
+  )
+  use button_labels <- decode.optional_field(
+    "buttons",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+
+  decode.success(ReceivedActivity(
+    name:,
+    type_:,
+    url:,
+    created_at:,
+    timestamps:,
+    application_id:,
+    status_display_type:,
+    details:,
+    details_url:,
+    state:,
+    state_url:,
+    emoji:,
+    party:,
+    assets:,
+    secrets:,
+    is_instance:,
+    flags:,
+    button_labels:,
+  ))
+}
+
+@internal
+pub fn client_status_decoder() -> decode.Decoder(ClientStatus) {
+  use desktop <- decode.optional_field(
+    "desktop",
+    None,
+    decode.optional(decode.string),
+  )
+  use mobile <- decode.optional_field(
+    "mobile",
+    None,
+    decode.optional(decode.string),
+  )
+  use web <- decode.optional_field("web", None, decode.optional(decode.string))
+
+  decode.success(ClientStatus(desktop:, mobile:, web:))
+}
+
+@internal
+pub fn thread_members_updated_message_decoder() -> decode.Decoder(
+  ThreadMembersUpdatedMessage,
+) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use member_count <- decode.field("member_count", decode.int)
+  use added_members <- decode.optional_field(
+    "added_members",
+    None,
+    decode.optional(
+      decode.list({
+        use thread_member <- decode.then(thread.member_decoder())
+        use presence <- decode.field(
+          "presence",
+          decode.optional(presence_updated_message_decoder()),
+        )
+
+        decode.success(#(thread_member, presence))
+      }),
+    ),
+  )
+  use removed_member_ids <- decode.optional_field(
+    "removed_member_ids",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+
+  decode.success(ThreadMembersUpdatedMessage(
+    id:,
+    guild_id:,
+    member_count:,
+    added_members:,
+    removed_member_ids:,
+  ))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1104,6 +1403,10 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     ThreadCreated(msg) -> actor.send(state.actor, ThreadCreatedEvent(msg))
     ThreadUpdated(thread) -> actor.send(state.actor, ThreadUpdatedEvent(thread))
     ThreadDeleted(msg) -> actor.send(state.actor, ThreadDeletedEvent(msg))
+    ThreadListSynced(msg) -> actor.send(state.actor, ThreadListSyncedEvent(msg))
+    ThreadMemberUpdated(msg) ->
+      actor.send(state.actor, ThreadMemberUpdatedEvent(msg))
+    PresenceUpdated(msg) -> actor.send(state.actor, PresenceUpdatedEvent(msg))
   }
 }
 

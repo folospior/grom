@@ -1,3 +1,4 @@
+import gleam/dynamic/decode
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -55,7 +56,11 @@ pub type Emoji {
 }
 
 pub type Party {
-  Party(id: Option(String), current_size: Option(Int), max_size: Option(Int))
+  Party(id: Option(String), size: Option(PartySize))
+}
+
+pub type PartySize {
+  PartySize(current_size: Int, max_size: Int)
 }
 
 pub type Assets {
@@ -91,7 +96,8 @@ pub type Button {
 
 // FLAGS -----------------------------------------------------------------------
 
-fn bits_flags() -> List(#(Int, Flag)) {
+@internal
+pub fn bits_flags() -> List(#(Int, Flag)) {
   [
     #(int.bitwise_shift_left(1, 0), Instance),
     #(int.bitwise_shift_left(1, 1), Join),
@@ -103,6 +109,146 @@ fn bits_flags() -> List(#(Int, Flag)) {
     #(int.bitwise_shift_left(1, 7), PartyPrivacyVoiceChannel),
     #(int.bitwise_shift_left(1, 8), Embedded),
   ]
+}
+
+// DECODERS --------------------------------------------------------------------
+
+@internal
+pub fn type_decoder() -> decode.Decoder(Type) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(Playing)
+    1 -> decode.success(Streaming)
+    2 -> decode.success(Listening)
+    3 -> decode.success(Watching)
+    4 -> decode.success(Custom)
+    5 -> decode.success(Competing)
+    _ -> decode.failure(Playing, "Type")
+  }
+}
+
+@internal
+pub fn timestamps_decoder() -> decode.Decoder(Timestamps) {
+  use start <- decode.optional_field(
+    "start",
+    None,
+    decode.optional(time_timestamp.from_unix_milliseconds_decoder()),
+  )
+  use end <- decode.optional_field(
+    "end",
+    None,
+    decode.optional(time_timestamp.from_unix_milliseconds_decoder()),
+  )
+
+  decode.success(Timestamps(start:, end:))
+}
+
+@internal
+pub fn display_type_decoder() -> decode.Decoder(DisplayType) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(DisplayName)
+    1 -> decode.success(DisplayState)
+    2 -> decode.success(DisplayDetails)
+    _ -> decode.failure(DisplayName, "DisplayType")
+  }
+}
+
+@internal
+pub fn emoji_decoder() -> decode.Decoder(Emoji) {
+  use name <- decode.field("name", decode.string)
+  use id <- decode.optional_field("id", None, decode.optional(decode.string))
+  use is_animated <- decode.optional_field(
+    "animated",
+    None,
+    decode.optional(decode.bool),
+  )
+
+  decode.success(Emoji(name:, id:, is_animated:))
+}
+
+@internal
+pub fn party_decoder() -> decode.Decoder(Party) {
+  use id <- decode.optional_field("id", None, decode.optional(decode.string))
+  use size <- decode.optional_field(
+    "size",
+    None,
+    decode.optional(party_size_decoder()),
+  )
+
+  decode.success(Party(id:, size:))
+}
+
+@internal
+pub fn party_size_decoder() -> decode.Decoder(PartySize) {
+  use current_size <- decode.field(0, decode.int)
+  use max_size <- decode.field(1, decode.int)
+
+  decode.success(PartySize(current_size:, max_size:))
+}
+
+@internal
+pub fn assets_decoder() -> decode.Decoder(Assets) {
+  use large_image <- decode.optional_field(
+    "large_image",
+    None,
+    decode.optional(decode.string),
+  )
+  use large_text <- decode.optional_field(
+    "large_text",
+    None,
+    decode.optional(decode.string),
+  )
+  use large_url <- decode.optional_field(
+    "large_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use small_image <- decode.optional_field(
+    "small_image",
+    None,
+    decode.optional(decode.string),
+  )
+  use small_text <- decode.optional_field(
+    "small_text",
+    None,
+    decode.optional(decode.string),
+  )
+  use small_url <- decode.optional_field(
+    "small_url",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(Assets(
+    large_image:,
+    large_text:,
+    large_url:,
+    small_image:,
+    small_text:,
+    small_url:,
+  ))
+}
+
+@internal
+pub fn secrets_decoder() -> decode.Decoder(Secrets) {
+  use join <- decode.optional_field(
+    "join",
+    None,
+    decode.optional(decode.string),
+  )
+  use spectate <- decode.optional_field(
+    "spectate",
+    None,
+    decode.optional(decode.string),
+  )
+  use match <- decode.optional_field(
+    "match",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(Secrets(join:, spectate:, match:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -287,16 +433,19 @@ pub fn party_to_json(party: Party) -> Json {
     None -> []
   }
 
-  let size = case party.current_size, party.max_size {
-    Some(current), Some(max) -> [
-      #("size", json.array([current, max], json.int)),
-    ]
-    _, _ -> []
+  let size = case party.size {
+    Some(size) -> [#("size", party_size_to_json(size))]
+    _ -> []
   }
 
   [id, size]
   |> list.flatten
   |> json.object
+}
+
+@internal
+pub fn party_size_to_json(party_size: PartySize) -> Json {
+  json.array([party_size.current_size, party_size.max_size], json.int)
 }
 
 @internal
