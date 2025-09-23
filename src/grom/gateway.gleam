@@ -43,6 +43,7 @@ import grom/internal/time_rfc3339
 import grom/internal/time_timestamp
 import grom/soundboard
 import grom/stage_instance.{type StageInstance}
+import grom/sticker.{type Sticker}
 import grom/user.{type User}
 import grom/voice
 import operating_system
@@ -99,6 +100,7 @@ pub type Event {
   GuildBanCreatedEvent(GuildBanMessage)
   GuildBanDeletedEvent(GuildBanMessage)
   GuildEmojisUpdatedEvent(GuildEmojisUpdatedMessage)
+  GuildStickersUpdatedEvent(GuildStickersUpdatedMessage)
 }
 
 pub type SessionStartLimits {
@@ -201,6 +203,7 @@ pub type DispatchedMessage {
   GuildBanCreated(GuildBanMessage)
   GuildBanDeleted(GuildBanMessage)
   GuildEmojisUpdated(GuildEmojisUpdatedMessage)
+  GuildStickersUpdated(GuildStickersUpdatedMessage)
 }
 
 pub type ReadyMessage {
@@ -331,6 +334,10 @@ pub type GuildBanMessage {
 
 pub type GuildEmojisUpdatedMessage {
   GuildEmojisUpdatedMessage(guild_id: String, emojis: List(Emoji))
+}
+
+pub type GuildStickersUpdatedMessage {
+  GuildStickersUpdatedMessage(guild_id: String, stickers: List(Sticker))
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -544,6 +551,10 @@ pub fn dispatched_message_decoder(
     "GUILD_EMOJIS_UPDATE" -> {
       use msg <- decode.then(guild_emojis_updated_message_decoder())
       decode.success(GuildEmojisUpdated(msg))
+    }
+    "GUILD_STICKERS_UPDATE" -> {
+      use msg <- decode.then(guild_stickers_updated_message_decoder())
+      decode.success(GuildStickersUpdated(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1019,6 +1030,15 @@ pub fn guild_emojis_updated_message_decoder() -> decode.Decoder(
   use guild_id <- decode.field("guild_id", decode.string)
   use emojis <- decode.field("emojis", decode.list(emoji.decoder()))
   decode.success(GuildEmojisUpdatedMessage(guild_id:, emojis:))
+}
+
+@internal
+pub fn guild_stickers_updated_message_decoder() -> decode.Decoder(
+  GuildStickersUpdatedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use stickers <- decode.field("stickers", decode.list(sticker.decoder()))
+  decode.success(GuildStickersUpdatedMessage(guild_id:, stickers:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1647,6 +1667,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     GuildBanDeleted(msg) -> actor.send(state.actor, GuildBanDeletedEvent(msg))
     GuildEmojisUpdated(msg) ->
       actor.send(state.actor, GuildEmojisUpdatedEvent(msg))
+    GuildStickersUpdated(msg) ->
+      actor.send(state.actor, GuildStickersUpdatedEvent(msg))
   }
 }
 
