@@ -95,6 +95,8 @@ pub type Event {
   /// If `!guild.unavailable`, then the user was removed from the guild.
   GuildDeletedEvent(guild.UnavailableGuild)
   AuditLogEntryCreatedEvent(AuditLogEntryCreatedMessage)
+  GuildBanCreatedEvent(GuildBanMessage)
+  GuildBanDeletedEvent(GuildBanMessage)
 }
 
 pub type SessionStartLimits {
@@ -194,6 +196,8 @@ pub type DispatchedMessage {
   GuildUpdated(Guild)
   GuildDeleted(guild.UnavailableGuild)
   AuditLogEntryCreated(AuditLogEntryCreatedMessage)
+  GuildBanCreated(GuildBanMessage)
+  GuildBanDeleted(GuildBanMessage)
 }
 
 pub type ReadyMessage {
@@ -316,6 +320,10 @@ pub type GuildCreatedMessage {
 
 pub type AuditLogEntryCreatedMessage {
   AuditLogEntryCreatedMessage(entry: audit_log.Entry, guild_id: String)
+}
+
+pub type GuildBanMessage {
+  GuildBanMessage(guild_id: String, user: User)
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -513,6 +521,18 @@ pub fn dispatched_message_decoder(
     "GUILD_DELETE" -> {
       use guild <- decode.then(guild.unavailable_guild_decoder())
       decode.success(GuildDeleted(guild))
+    }
+    "GUILD_AUDIT_LOG_ENTRY_CREATE" -> {
+      use msg <- decode.then(audit_log_entry_created_message_decoder())
+      decode.success(AuditLogEntryCreated(msg))
+    }
+    "GUILD_BAN_ADD" -> {
+      use msg <- decode.then(guild_ban_message_decoder())
+      decode.success(GuildBanCreated(msg))
+    }
+    "GUILD_BAN_REMOVE" -> {
+      use msg <- decode.then(guild_ban_message_decoder())
+      decode.success(GuildBanDeleted(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -971,6 +991,14 @@ pub fn audit_log_entry_created_message_decoder() -> decode.Decoder(
   use guild_id <- decode.field("guild_id", decode.string)
 
   decode.success(AuditLogEntryCreatedMessage(entry:, guild_id:))
+}
+
+@internal
+pub fn guild_ban_message_decoder() -> decode.Decoder(GuildBanMessage) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use user <- decode.field("user", user.decoder())
+
+  decode.success(GuildBanMessage(guild_id:, user:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1595,6 +1623,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     GuildDeleted(guild) -> actor.send(state.actor, GuildDeletedEvent(guild))
     AuditLogEntryCreated(msg) ->
       actor.send(state.actor, AuditLogEntryCreatedEvent(msg))
+    GuildBanCreated(msg) -> actor.send(state.actor, GuildBanCreatedEvent(msg))
+    GuildBanDeleted(msg) -> actor.send(state.actor, GuildBanDeletedEvent(msg))
   }
 }
 
