@@ -30,6 +30,7 @@ import grom/gateway/user_message.{
   type UpdateVoiceStateMessage, type UserMessage,
 }
 import grom/guild.{type Guild}
+import grom/guild/audit_log
 import grom/guild/auto_moderation
 import grom/guild/scheduled_event.{type ScheduledEvent}
 import grom/guild_member.{type GuildMember}
@@ -93,6 +94,7 @@ pub type Event {
   GuildUpdatedEvent(Guild)
   /// If `!guild.unavailable`, then the user was removed from the guild.
   GuildDeletedEvent(guild.UnavailableGuild)
+  AuditLogEntryCreatedEvent(AuditLogEntryCreatedMessage)
 }
 
 pub type SessionStartLimits {
@@ -191,6 +193,7 @@ pub type DispatchedMessage {
   GuildCreated(GuildCreatedMessage)
   GuildUpdated(Guild)
   GuildDeleted(guild.UnavailableGuild)
+  AuditLogEntryCreated(AuditLogEntryCreatedMessage)
 }
 
 pub type ReadyMessage {
@@ -309,6 +312,10 @@ pub type GuildCreatedMessage {
     soundboard_sounds: List(soundboard.Sound),
   )
   UnavailableGuildCreatedMessage(guild.UnavailableGuild)
+}
+
+pub type AuditLogEntryCreatedMessage {
+  AuditLogEntryCreatedMessage(entry: audit_log.Entry, guild_id: String)
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -956,6 +963,16 @@ pub fn guild_created_message_decoder() -> decode.Decoder(GuildCreatedMessage) {
   decode.one_of(available_guild_decoder, or: [unavailable_guild_decoder])
 }
 
+@internal
+pub fn audit_log_entry_created_message_decoder() -> decode.Decoder(
+  AuditLogEntryCreatedMessage,
+) {
+  use entry <- decode.then(audit_log.entry_decoder())
+  use guild_id <- decode.field("guild_id", decode.string)
+
+  decode.success(AuditLogEntryCreatedMessage(entry:, guild_id:))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -1576,6 +1593,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     GuildCreated(msg) -> actor.send(state.actor, GuildCreatedEvent(msg))
     GuildUpdated(guild) -> actor.send(state.actor, GuildUpdatedEvent(guild))
     GuildDeleted(guild) -> actor.send(state.actor, GuildDeletedEvent(guild))
+    AuditLogEntryCreated(msg) ->
+      actor.send(state.actor, AuditLogEntryCreatedEvent(msg))
   }
 }
 
