@@ -101,6 +101,7 @@ pub type Event {
   GuildBanDeletedEvent(GuildBanMessage)
   GuildEmojisUpdatedEvent(GuildEmojisUpdatedMessage)
   GuildStickersUpdatedEvent(GuildStickersUpdatedMessage)
+  GuildIntegrationsUpdatedEvent(GuildIntegrationsUpdatedMessage)
 }
 
 pub type SessionStartLimits {
@@ -204,6 +205,7 @@ pub type DispatchedMessage {
   GuildBanDeleted(GuildBanMessage)
   GuildEmojisUpdated(GuildEmojisUpdatedMessage)
   GuildStickersUpdated(GuildStickersUpdatedMessage)
+  GuildIntegrationsUpdated(GuildIntegrationsUpdatedMessage)
 }
 
 pub type ReadyMessage {
@@ -338,6 +340,10 @@ pub type GuildEmojisUpdatedMessage {
 
 pub type GuildStickersUpdatedMessage {
   GuildStickersUpdatedMessage(guild_id: String, stickers: List(Sticker))
+}
+
+pub type GuildIntegrationsUpdatedMessage {
+  GuildIntegrationsUpdatedMessage(guild_id: String)
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -555,6 +561,10 @@ pub fn dispatched_message_decoder(
     "GUILD_STICKERS_UPDATE" -> {
       use msg <- decode.then(guild_stickers_updated_message_decoder())
       decode.success(GuildStickersUpdated(msg))
+    }
+    "GUILD_INTEGRATIONS_UPDATE" -> {
+      use msg <- decode.then(guild_integrations_updated_message_decoder())
+      decode.success(GuildIntegrationsUpdated(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1039,6 +1049,14 @@ pub fn guild_stickers_updated_message_decoder() -> decode.Decoder(
   use guild_id <- decode.field("guild_id", decode.string)
   use stickers <- decode.field("stickers", decode.list(sticker.decoder()))
   decode.success(GuildStickersUpdatedMessage(guild_id:, stickers:))
+}
+
+@internal
+pub fn guild_integrations_updated_message_decoder() -> decode.Decoder(
+  GuildIntegrationsUpdatedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  decode.success(GuildIntegrationsUpdatedMessage(guild_id:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1669,6 +1687,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, GuildEmojisUpdatedEvent(msg))
     GuildStickersUpdated(msg) ->
       actor.send(state.actor, GuildStickersUpdatedEvent(msg))
+    GuildIntegrationsUpdated(msg) ->
+      actor.send(state.actor, GuildIntegrationsUpdatedEvent(msg))
   }
 }
 
