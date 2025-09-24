@@ -116,6 +116,12 @@ pub type Event {
   ScheduledEventDeletedEvent(ScheduledEvent)
   ScheduledEventUserCreatedEvent(ScheduledEventUserMessage)
   ScheduledEventUserDeletedEvent(ScheduledEventUserMessage)
+  GuildSoundboardSoundCreatedEvent(soundboard.Sound)
+  GuildSoundboardSoundUpdatedEvent(soundboard.Sound)
+  GuildSoundboardSoundDeletedEvent(GuildSoundboardSoundDeletedMessage)
+  GuildSoundboardSoundsUpdatedEvent(GuildSoundboardSoundsUpdatedMessage)
+  /// Sent in response to [`request_soundboard_sounds`](#request_soundboard_sounds).
+  SoundboardSoundsEvent(SoundboardSoundsMessage)
 }
 
 pub type SessionStartLimits {
@@ -232,6 +238,11 @@ pub type DispatchedMessage {
   ScheduledEventDeleted(ScheduledEvent)
   ScheduledEventUserCreated(ScheduledEventUserMessage)
   ScheduledEventUserDeleted(ScheduledEventUserMessage)
+  GuildSoundboardSoundCreated(soundboard.Sound)
+  GuildSoundboardSoundUpdated(soundboard.Sound)
+  GuildSoundboardSoundDeleted(GuildSoundboardSoundDeletedMessage)
+  GuildSoundboardSoundsUpdated(GuildSoundboardSoundsUpdatedMessage)
+  SoundboardSounds(SoundboardSoundsMessage)
 }
 
 pub type ReadyMessage {
@@ -427,6 +438,24 @@ pub type ScheduledEventUserMessage {
   ScheduledEventUserMessage(
     scheduled_event_id: String,
     user_id: String,
+    guild_id: String,
+  )
+}
+
+pub type GuildSoundboardSoundDeletedMessage {
+  GuildSoundboardSoundDeletedMessage(sound_id: String, guild_id: String)
+}
+
+pub type GuildSoundboardSoundsUpdatedMessage {
+  GuildSoundboardSoundsUpdatedMessage(
+    soundboard_sounds: List(soundboard.Sound),
+    guild_id: String,
+  )
+}
+
+pub type SoundboardSoundsMessage {
+  SoundboardSoundsMessage(
+    soundboard_sounds: List(soundboard.Sound),
     guild_id: String,
   )
 }
@@ -698,6 +727,26 @@ pub fn dispatched_message_decoder(
     "GUILD_SCHEDULED_EVENT_USER_REMOVE" -> {
       use msg <- decode.then(scheduled_event_user_message_decoder())
       decode.success(ScheduledEventUserDeleted(msg))
+    }
+    "GUILD_SOUNDBOARD_SOUND_CREATE" -> {
+      use sound <- decode.then(soundboard.sound_decoder())
+      decode.success(GuildSoundboardSoundCreated(sound))
+    }
+    "GUILD_SOUNDBOARD_SOUND_UPDATE" -> {
+      use sound <- decode.then(soundboard.sound_decoder())
+      decode.success(GuildSoundboardSoundUpdated(sound))
+    }
+    "GUILD_SOUNDBOARD_SOUND_DELETE" -> {
+      use msg <- decode.then(guild_soundboard_sound_deleted_message_decoder())
+      decode.success(GuildSoundboardSoundDeleted(msg))
+    }
+    "GUILD_SOUNDBOARD_SOUNDS_UPDATE" -> {
+      use msg <- decode.then(guild_soundboard_sounds_updated_message_decoder())
+      decode.success(GuildSoundboardSoundsUpdated(msg))
+    }
+    "SOUNDBOARD_SOUNDS" -> {
+      use msg <- decode.then(soundboard_sounds_message_decoder())
+      decode.success(SoundboardSounds(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1327,6 +1376,41 @@ pub fn scheduled_event_user_message_decoder() -> decode.Decoder(
     user_id:,
     guild_id:,
   ))
+}
+
+@internal
+pub fn guild_soundboard_sound_deleted_message_decoder() -> decode.Decoder(
+  GuildSoundboardSoundDeletedMessage,
+) {
+  use sound_id <- decode.field("sound_id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  decode.success(GuildSoundboardSoundDeletedMessage(sound_id:, guild_id:))
+}
+
+@internal
+pub fn guild_soundboard_sounds_updated_message_decoder() -> decode.Decoder(
+  GuildSoundboardSoundsUpdatedMessage,
+) {
+  use soundboard_sounds <- decode.field(
+    "soundboard_sounds",
+    decode.list(soundboard.sound_decoder()),
+  )
+  use guild_id <- decode.field("guild_id", decode.string)
+  decode.success(GuildSoundboardSoundsUpdatedMessage(
+    soundboard_sounds:,
+    guild_id:,
+  ))
+}
+
+pub fn soundboard_sounds_message_decoder() -> decode.Decoder(
+  SoundboardSoundsMessage,
+) {
+  use soundboard_sounds <- decode.field(
+    "soundboard_sounds",
+    decode.list(soundboard.sound_decoder()),
+  )
+  use guild_id <- decode.field("guild_id", decode.string)
+  decode.success(SoundboardSoundsMessage(soundboard_sounds:, guild_id:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1980,6 +2064,15 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, ScheduledEventUserCreatedEvent(msg))
     ScheduledEventUserDeleted(msg) ->
       actor.send(state.actor, ScheduledEventUserDeletedEvent(msg))
+    GuildSoundboardSoundCreated(sound) ->
+      actor.send(state.actor, GuildSoundboardSoundCreatedEvent(sound))
+    GuildSoundboardSoundUpdated(sound) ->
+      actor.send(state.actor, GuildSoundboardSoundUpdatedEvent(sound))
+    GuildSoundboardSoundDeleted(msg) ->
+      actor.send(state.actor, GuildSoundboardSoundDeletedEvent(msg))
+    GuildSoundboardSoundsUpdated(msg) ->
+      actor.send(state.actor, GuildSoundboardSoundsUpdatedEvent(msg))
+    SoundboardSounds(msg) -> actor.send(state.actor, SoundboardSoundsEvent(msg))
   }
 }
 
