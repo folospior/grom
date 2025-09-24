@@ -108,9 +108,9 @@ pub type Event {
   GuildMemberDeletedEvent(GuildMemberDeletedMessage)
   GuildMemberUpdatedEvent(GuildMemberUpdatedMessage)
   GuildMembersChunkEvent(GuildMembersChunkMessage)
-  GuildRoleCreatedEvent(GuildRoleCreatedMessage)
-  GuildRoleUpdatedEvent(GuildRoleUpdatedMessage)
-  GuildRoleDeletedEvent(GuildRoleDeletedMessage)
+  RoleCreatedEvent(RoleCreatedMessage)
+  RoleUpdatedEvent(RoleUpdatedMessage)
+  RoleDeletedEvent(RoleDeletedMessage)
 }
 
 pub type SessionStartLimits {
@@ -219,9 +219,9 @@ pub type DispatchedMessage {
   GuildMemberDeleted(GuildMemberDeletedMessage)
   GuildMemberUpdated(GuildMemberUpdatedMessage)
   GuildMembersChunk(GuildMembersChunkMessage)
-  GuildRoleCreated(GuildRoleCreatedMessage)
-  GuildRoleUpdated(GuildRoleUpdatedMessage)
-  GuildRoleDeleted(GuildRoleDeletedMessage)
+  RoleCreated(RoleCreatedMessage)
+  RoleUpdated(RoleUpdatedMessage)
+  RoleDeleted(RoleDeletedMessage)
 }
 
 pub type ReadyMessage {
@@ -401,16 +401,16 @@ pub type GuildMembersChunkMessage {
   )
 }
 
-pub type GuildRoleCreatedMessage {
-  GuildRoleCreatedMessage(guild_id: String, role: Role)
+pub type RoleCreatedMessage {
+  RoleCreatedMessage(guild_id: String, role: Role)
 }
 
-pub type GuildRoleUpdatedMessage {
-  GuildRoleUpdatedMessage(guild_id: String, role: Role)
+pub type RoleUpdatedMessage {
+  RoleUpdatedMessage(guild_id: String, role: Role)
 }
 
-pub type GuildRoleDeletedMessage {
-  GuildRoleDeletedMessage(guild_id: String, role_id: String)
+pub type RoleDeletedMessage {
+  RoleDeletedMessage(guild_id: String, role_id: String)
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -650,16 +650,16 @@ pub fn dispatched_message_decoder(
       decode.success(GuildMembersChunk(msg))
     }
     "GUILD_ROLE_CREATE" -> {
-      use msg <- decode.then(guild_role_created_message_decoder())
-      decode.success(GuildRoleCreated(msg))
+      use msg <- decode.then(role_created_message_decoder())
+      decode.success(RoleCreated(msg))
     }
     "GUILD_ROLE_UPDATE" -> {
-      use msg <- decode.then(guild_role_updated_message_decoder())
-      decode.success(GuildRoleUpdated(msg))
+      use msg <- decode.then(role_updated_message_decoder())
+      decode.success(RoleUpdated(msg))
     }
     "GUILD_ROLE_DELETE" -> {
-      use msg <- decode.then(guild_role_deleted_message_decoder())
-      decode.success(GuildRoleDeleted(msg))
+      use msg <- decode.then(role_deleted_message_decoder())
+      decode.success(RoleDeleted(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1254,30 +1254,24 @@ pub fn guild_members_chunk_message_decoder() -> decode.Decoder(
 }
 
 @internal
-pub fn guild_role_created_message_decoder() -> decode.Decoder(
-  GuildRoleCreatedMessage,
-) {
+pub fn role_created_message_decoder() -> decode.Decoder(RoleCreatedMessage) {
   use guild_id <- decode.field("guild_id", decode.string)
   use role <- decode.field("role", role.decoder())
-  decode.success(GuildRoleCreatedMessage(guild_id:, role:))
+  decode.success(RoleCreatedMessage(guild_id:, role:))
 }
 
 @internal
-pub fn guild_role_updated_message_decoder() -> decode.Decoder(
-  GuildRoleUpdatedMessage,
-) {
+pub fn role_updated_message_decoder() -> decode.Decoder(RoleUpdatedMessage) {
   use guild_id <- decode.field("guild_id", decode.string)
   use role <- decode.field("role", role.decoder())
-  decode.success(GuildRoleUpdatedMessage(guild_id:, role:))
+  decode.success(RoleUpdatedMessage(guild_id:, role:))
 }
 
 @internal
-pub fn guild_role_deleted_message_decoder() -> decode.Decoder(
-  GuildRoleDeletedMessage,
-) {
+pub fn role_deleted_message_decoder() -> decode.Decoder(RoleDeletedMessage) {
   use guild_id <- decode.field("guild_id", decode.string)
   use role_id <- decode.field("role_id", decode.string)
-  decode.success(GuildRoleDeletedMessage(guild_id:, role_id:))
+  decode.success(RoleDeletedMessage(guild_id:, role_id:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1918,9 +1912,9 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, GuildMemberUpdatedEvent(msg))
     GuildMembersChunk(msg) ->
       actor.send(state.actor, GuildMembersChunkEvent(msg))
-    GuildRoleCreated(msg) -> actor.send(state.actor, GuildRoleCreatedEvent(msg))
-    GuildRoleUpdated(msg) -> actor.send(state.actor, GuildRoleUpdatedEvent(msg))
-    GuildRoleDeleted(msg) -> actor.send(state.actor, GuildRoleDeletedEvent(msg))
+    RoleCreated(msg) -> actor.send(state.actor, RoleCreatedEvent(msg))
+    RoleUpdated(msg) -> actor.send(state.actor, RoleUpdatedEvent(msg))
+    RoleDeleted(msg) -> actor.send(state.actor, RoleDeletedEvent(msg))
   }
 }
 
