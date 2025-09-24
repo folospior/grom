@@ -106,6 +106,7 @@ pub type Event {
   GuildMemberCreatedEvent(GuildMemberCreatedMessage)
   GuildMemberDeletedEvent(GuildMemberDeletedMessage)
   GuildMemberUpdatedEvent(GuildMemberUpdatedMessage)
+  GuildMembersChunkEvent(GuildMembersChunkMessage)
 }
 
 pub type SessionStartLimits {
@@ -213,6 +214,7 @@ pub type DispatchedMessage {
   GuildMemberCreated(GuildMemberCreatedMessage)
   GuildMemberDeleted(GuildMemberDeletedMessage)
   GuildMemberUpdated(GuildMemberUpdatedMessage)
+  GuildMembersChunk(GuildMembersChunkMessage)
 }
 
 pub type ReadyMessage {
@@ -377,6 +379,18 @@ pub type GuildMemberUpdatedMessage {
     communication_disabled_until: Modification(Timestamp),
     flags: Option(List(guild_member.Flag)),
     avatar_decoration_data: Modification(user.AvatarDecorationData),
+  )
+}
+
+pub type GuildMembersChunkMessage {
+  GuildMembersChunkMessage(
+    guild_id: String,
+    members: List(GuildMember),
+    chunk_index: Int,
+    chunk_count: Int,
+    not_found_ids: Option(List(String)),
+    presences: Option(List(PresenceUpdatedMessage)),
+    nonce: Option(String),
   )
 }
 
@@ -611,6 +625,10 @@ pub fn dispatched_message_decoder(
     "GUILD_MEMBER_UPDATE" -> {
       use msg <- decode.then(guild_member_updated_message_decoder())
       decode.success(GuildMemberUpdated(msg))
+    }
+    "GUILD_MEMBERS_CHUNK" -> {
+      use msg <- decode.then(guild_members_chunk_message_decoder())
+      decode.success(GuildMembersChunk(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1171,6 +1189,36 @@ pub fn guild_member_updated_message_decoder() -> decode.Decoder(
     communication_disabled_until:,
     flags:,
     avatar_decoration_data:,
+  ))
+}
+
+@internal
+pub fn guild_members_chunk_message_decoder() -> decode.Decoder(
+  GuildMembersChunkMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use members <- decode.field("members", decode.list(guild_member.decoder()))
+  use chunk_index <- decode.field("chunk_index", decode.int)
+  use chunk_count <- decode.field("chunk_count", decode.int)
+  use not_found_ids <- decode.optional_field(
+    "not_found",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+  use presences <- decode.optional_field(
+    "presences",
+    None,
+    decode.optional(decode.list(presence_updated_message_decoder())),
+  )
+  use nonce <- decode.field("nonce", decode.optional(decode.string))
+  decode.success(GuildMembersChunkMessage(
+    guild_id:,
+    members:,
+    chunk_index:,
+    chunk_count:,
+    not_found_ids:,
+    presences:,
+    nonce:,
   ))
 }
 
@@ -1810,6 +1858,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, GuildMemberDeletedEvent(msg))
     GuildMemberUpdated(msg) ->
       actor.send(state.actor, GuildMemberUpdatedEvent(msg))
+    GuildMembersChunk(msg) ->
+      actor.send(state.actor, GuildMembersChunkEvent(msg))
   }
 }
 
