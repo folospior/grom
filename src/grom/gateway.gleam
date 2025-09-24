@@ -33,6 +33,7 @@ import grom/gateway/user_message.{
 import grom/guild.{type Guild}
 import grom/guild/audit_log
 import grom/guild/auto_moderation
+import grom/guild/role.{type Role}
 import grom/guild/scheduled_event.{type ScheduledEvent}
 import grom/guild_member.{type GuildMember}
 import grom/interaction/application_command
@@ -107,6 +108,9 @@ pub type Event {
   GuildMemberDeletedEvent(GuildMemberDeletedMessage)
   GuildMemberUpdatedEvent(GuildMemberUpdatedMessage)
   GuildMembersChunkEvent(GuildMembersChunkMessage)
+  GuildRoleCreatedEvent(GuildRoleCreatedMessage)
+  GuildRoleUpdatedEvent(GuildRoleUpdatedMessage)
+  GuildRoleDeletedEvent(GuildRoleDeletedMessage)
 }
 
 pub type SessionStartLimits {
@@ -215,6 +219,9 @@ pub type DispatchedMessage {
   GuildMemberDeleted(GuildMemberDeletedMessage)
   GuildMemberUpdated(GuildMemberUpdatedMessage)
   GuildMembersChunk(GuildMembersChunkMessage)
+  GuildRoleCreated(GuildRoleCreatedMessage)
+  GuildRoleUpdated(GuildRoleUpdatedMessage)
+  GuildRoleDeleted(GuildRoleDeletedMessage)
 }
 
 pub type ReadyMessage {
@@ -392,6 +399,18 @@ pub type GuildMembersChunkMessage {
     presences: Option(List(PresenceUpdatedMessage)),
     nonce: Option(String),
   )
+}
+
+pub type GuildRoleCreatedMessage {
+  GuildRoleCreatedMessage(guild_id: String, role: Role)
+}
+
+pub type GuildRoleUpdatedMessage {
+  GuildRoleUpdatedMessage(guild_id: String, role: Role)
+}
+
+pub type GuildRoleDeletedMessage {
+  GuildRoleDeletedMessage(guild_id: String, role_id: String)
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -629,6 +648,18 @@ pub fn dispatched_message_decoder(
     "GUILD_MEMBERS_CHUNK" -> {
       use msg <- decode.then(guild_members_chunk_message_decoder())
       decode.success(GuildMembersChunk(msg))
+    }
+    "GUILD_ROLE_CREATE" -> {
+      use msg <- decode.then(guild_role_created_message_decoder())
+      decode.success(GuildRoleCreated(msg))
+    }
+    "GUILD_ROLE_UPDATE" -> {
+      use msg <- decode.then(guild_role_updated_message_decoder())
+      decode.success(GuildRoleUpdated(msg))
+    }
+    "GUILD_ROLE_DELETE" -> {
+      use msg <- decode.then(guild_role_deleted_message_decoder())
+      decode.success(GuildRoleDeleted(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1220,6 +1251,33 @@ pub fn guild_members_chunk_message_decoder() -> decode.Decoder(
     presences:,
     nonce:,
   ))
+}
+
+@internal
+pub fn guild_role_created_message_decoder() -> decode.Decoder(
+  GuildRoleCreatedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use role <- decode.field("role", role.decoder())
+  decode.success(GuildRoleCreatedMessage(guild_id:, role:))
+}
+
+@internal
+pub fn guild_role_updated_message_decoder() -> decode.Decoder(
+  GuildRoleUpdatedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use role <- decode.field("role", role.decoder())
+  decode.success(GuildRoleUpdatedMessage(guild_id:, role:))
+}
+
+@internal
+pub fn guild_role_deleted_message_decoder() -> decode.Decoder(
+  GuildRoleDeletedMessage,
+) {
+  use guild_id <- decode.field("guild_id", decode.string)
+  use role_id <- decode.field("role_id", decode.string)
+  decode.success(GuildRoleDeletedMessage(guild_id:, role_id:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1860,6 +1918,9 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, GuildMemberUpdatedEvent(msg))
     GuildMembersChunk(msg) ->
       actor.send(state.actor, GuildMembersChunkEvent(msg))
+    GuildRoleCreated(msg) -> actor.send(state.actor, GuildRoleCreatedEvent(msg))
+    GuildRoleUpdated(msg) -> actor.send(state.actor, GuildRoleUpdatedEvent(msg))
+    GuildRoleDeleted(msg) -> actor.send(state.actor, GuildRoleDeletedEvent(msg))
   }
 }
 
