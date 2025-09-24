@@ -111,6 +111,11 @@ pub type Event {
   RoleCreatedEvent(RoleCreatedMessage)
   RoleUpdatedEvent(RoleUpdatedMessage)
   RoleDeletedEvent(RoleDeletedMessage)
+  ScheduledEventCreatedEvent(ScheduledEvent)
+  ScheduledEventUpdatedEvent(ScheduledEvent)
+  ScheduledEventDeletedEvent(ScheduledEvent)
+  ScheduledEventUserCreatedEvent(ScheduledEventUserMessage)
+  ScheduledEventUserDeletedEvent(ScheduledEventUserMessage)
 }
 
 pub type SessionStartLimits {
@@ -222,6 +227,11 @@ pub type DispatchedMessage {
   RoleCreated(RoleCreatedMessage)
   RoleUpdated(RoleUpdatedMessage)
   RoleDeleted(RoleDeletedMessage)
+  ScheduledEventCreated(ScheduledEvent)
+  ScheduledEventUpdated(ScheduledEvent)
+  ScheduledEventDeleted(ScheduledEvent)
+  ScheduledEventUserCreated(ScheduledEventUserMessage)
+  ScheduledEventUserDeleted(ScheduledEventUserMessage)
 }
 
 pub type ReadyMessage {
@@ -411,6 +421,14 @@ pub type RoleUpdatedMessage {
 
 pub type RoleDeletedMessage {
   RoleDeletedMessage(guild_id: String, role_id: String)
+}
+
+pub type ScheduledEventUserMessage {
+  ScheduledEventUserMessage(
+    scheduled_event_id: String,
+    user_id: String,
+    guild_id: String,
+  )
 }
 
 // SEND EVENTS -----------------------------------------------------------------
@@ -660,6 +678,26 @@ pub fn dispatched_message_decoder(
     "GUILD_ROLE_DELETE" -> {
       use msg <- decode.then(role_deleted_message_decoder())
       decode.success(RoleDeleted(msg))
+    }
+    "GUILD_SCHEDULED_EVENT_CREATE" -> {
+      use event <- decode.then(scheduled_event.decoder())
+      decode.success(ScheduledEventCreated(event))
+    }
+    "GUILD_SCHEDULED_EVENT_UPDATE" -> {
+      use event <- decode.then(scheduled_event.decoder())
+      decode.success(ScheduledEventUpdated(event))
+    }
+    "GUILD_SCHEDULED_EVENT_DELETE" -> {
+      use event <- decode.then(scheduled_event.decoder())
+      decode.success(ScheduledEventDeleted(event))
+    }
+    "GUILD_SCHEDULED_EVENT_USER_ADD" -> {
+      use msg <- decode.then(scheduled_event_user_message_decoder())
+      decode.success(ScheduledEventUserCreated(msg))
+    }
+    "GUILD_SCHEDULED_EVENT_USER_REMOVE" -> {
+      use msg <- decode.then(scheduled_event_user_message_decoder())
+      decode.success(ScheduledEventUserDeleted(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1272,6 +1310,23 @@ pub fn role_deleted_message_decoder() -> decode.Decoder(RoleDeletedMessage) {
   use guild_id <- decode.field("guild_id", decode.string)
   use role_id <- decode.field("role_id", decode.string)
   decode.success(RoleDeletedMessage(guild_id:, role_id:))
+}
+
+@internal
+pub fn scheduled_event_user_message_decoder() -> decode.Decoder(
+  ScheduledEventUserMessage,
+) {
+  use scheduled_event_id <- decode.field(
+    "guild_scheduled_event_id",
+    decode.string,
+  )
+  use user_id <- decode.field("user_id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  decode.success(ScheduledEventUserMessage(
+    scheduled_event_id:,
+    user_id:,
+    guild_id:,
+  ))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -1915,6 +1970,16 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     RoleCreated(msg) -> actor.send(state.actor, RoleCreatedEvent(msg))
     RoleUpdated(msg) -> actor.send(state.actor, RoleUpdatedEvent(msg))
     RoleDeleted(msg) -> actor.send(state.actor, RoleDeletedEvent(msg))
+    ScheduledEventCreated(event) ->
+      actor.send(state.actor, ScheduledEventCreatedEvent(event))
+    ScheduledEventUpdated(event) ->
+      actor.send(state.actor, ScheduledEventUpdatedEvent(event))
+    ScheduledEventDeleted(event) ->
+      actor.send(state.actor, ScheduledEventDeletedEvent(event))
+    ScheduledEventUserCreated(msg) ->
+      actor.send(state.actor, ScheduledEventUserCreatedEvent(msg))
+    ScheduledEventUserDeleted(msg) ->
+      actor.send(state.actor, ScheduledEventUserDeletedEvent(msg))
   }
 }
 
