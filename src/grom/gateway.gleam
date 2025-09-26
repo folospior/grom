@@ -656,211 +656,124 @@ pub fn dispatched_message_decoder(
   type_: String,
 ) -> decode.Decoder(DispatchedMessage) {
   case type_ {
-    "READY" -> {
-      use ready <- decode.then(ready_message_decoder())
-      decode.success(Ready(ready))
-    }
+    "READY" -> decode.map(ready_message_decoder(), Ready)
     "RESUMED" -> decode.success(Resumed)
-    "RATE_LIMITED" -> {
-      use rate_limited <- decode.then(rate_limited_message_decoder())
-      decode.success(RateLimited(rate_limited))
-    }
-    "APPLICATION_COMMAND_PERMISSIONS_UPDATE" -> {
-      use perms <- decode.then(application_command.permissions_decoder())
-      decode.success(ApplicationCommandPermissionsUpdated(perms))
-    }
-    "AUTO_MODERATION_RULE_CREATE" -> {
-      use rule <- decode.then(auto_moderation.rule_decoder())
-      decode.success(AutoModerationRuleCreated(rule))
-    }
-    "AUTO_MODERATION_RULE_UPDATE" -> {
-      use rule <- decode.then(auto_moderation.rule_decoder())
-      decode.success(AutoModerationRuleUpdated(rule))
-    }
-    "AUTO_MODERATION_RULE_DELETE" -> {
-      use rule <- decode.then(auto_moderation.rule_decoder())
-      decode.success(AutoModerationRuleDeleted(rule))
-    }
-    "AUTO_MODERATION_ACTION_EXECUTION" -> {
-      use msg <- decode.then(auto_moderation_action_executed_message_decoder())
-      decode.success(AutoModerationActionExecuted(msg))
-    }
-    "CHANNEL_CREATE" -> {
-      use channel <- decode.then(channel.decoder())
-      decode.success(ChannelCreated(channel))
-    }
-    "CHANNEL_UPDATE" -> {
-      use channel <- decode.then(channel.decoder())
-      decode.success(ChannelUpdated(channel))
-    }
-    "CHANNEL_DELETE" -> {
-      use channel <- decode.then(channel.decoder())
-      decode.success(ChannelDeleted(channel))
-    }
-    "THREAD_CREATE" -> {
-      use msg <- decode.then(thread_created_message_decoder())
-      decode.success(ThreadCreated(msg))
-    }
-    "THREAD_UPDATE" -> {
-      use thread <- decode.then(thread.decoder())
-      decode.success(ThreadUpdated(thread))
-    }
-    "THREAD_DELETE" -> {
-      use msg <- decode.then(thread_deleted_message_decoder())
-      decode.success(ThreadDeleted(msg))
-    }
-    "THREAD_LIST_SYNC" -> {
-      use msg <- decode.then(thread_list_synced_message_decoder())
-      decode.success(ThreadListSynced(msg))
-    }
-    "THREAD_MEMBER_UPDATE" -> {
-      use msg <- decode.then(thread_member_updated_message_decoder())
-      decode.success(ThreadMemberUpdated(msg))
-    }
-    "PRESENCE_UPDATE" -> {
-      use msg <- decode.then(presence_updated_message_decoder())
-      decode.success(PresenceUpdated(msg))
-    }
-    "THREAD_MEMBERS_UPDATE" -> {
-      use msg <- decode.then(thread_members_updated_message_decoder())
-      decode.success(ThreadMembersUpdated(msg))
-    }
-    "CHANNEL_PINS_UPDATE" -> {
-      use msg <- decode.then(channel_pins_updated_message_decoder())
-      decode.success(ChannelPinsUpdated(msg))
-    }
-    "ENTITLEMENT_CREATE" -> {
-      use entitlement <- decode.then(entitlement.decoder())
-      decode.success(EntitlementCreated(entitlement))
-    }
-    "ENTITLEMENT_UPDATE" -> {
-      use entitlement <- decode.then(entitlement.decoder())
-      decode.success(EntitlementUpdated(entitlement))
-    }
-    "ENTITLEMENT_DELETE" -> {
-      use entitlement <- decode.then(entitlement.decoder())
-      decode.success(EntitlementDeleted(entitlement))
-    }
-    "GUILD_CREATE" -> {
-      use msg <- decode.then(guild_created_message_decoder())
-      decode.success(GuildCreated(msg))
-    }
-    "GUILD_UPDATE" -> {
-      use guild <- decode.then(guild.decoder())
-      decode.success(GuildUpdated(guild))
-    }
-    "GUILD_DELETE" -> {
-      use guild <- decode.then(guild.unavailable_guild_decoder())
-      decode.success(GuildDeleted(guild))
-    }
-    "GUILD_AUDIT_LOG_ENTRY_CREATE" -> {
-      use msg <- decode.then(audit_log_entry_created_message_decoder())
-      decode.success(AuditLogEntryCreated(msg))
-    }
-    "GUILD_BAN_ADD" -> {
-      use msg <- decode.then(guild_ban_message_decoder())
-      decode.success(GuildBanCreated(msg))
-    }
-    "GUILD_BAN_REMOVE" -> {
-      use msg <- decode.then(guild_ban_message_decoder())
-      decode.success(GuildBanDeleted(msg))
-    }
-    "GUILD_EMOJIS_UPDATE" -> {
-      use msg <- decode.then(guild_emojis_updated_message_decoder())
-      decode.success(GuildEmojisUpdated(msg))
-    }
-    "GUILD_STICKERS_UPDATE" -> {
-      use msg <- decode.then(guild_stickers_updated_message_decoder())
-      decode.success(GuildStickersUpdated(msg))
-    }
-    "GUILD_INTEGRATIONS_UPDATE" -> {
-      use msg <- decode.then(guild_integrations_updated_message_decoder())
-      decode.success(GuildIntegrationsUpdated(msg))
-    }
-    "GUILD_MEMBER_ADD" -> {
-      use msg <- decode.then(guild_member_created_message_decoder())
-      decode.success(GuildMemberCreated(msg))
-    }
-    "GUILD_MEMBER_REMOVE" -> {
-      use msg <- decode.then(guild_member_deleted_message_decoder())
-      decode.success(GuildMemberDeleted(msg))
-    }
-    "GUILD_MEMBER_UPDATE" -> {
-      use msg <- decode.then(guild_member_updated_message_decoder())
-      decode.success(GuildMemberUpdated(msg))
-    }
-    "GUILD_MEMBERS_CHUNK" -> {
-      use msg <- decode.then(guild_members_chunk_message_decoder())
-      decode.success(GuildMembersChunk(msg))
-    }
-    "GUILD_ROLE_CREATE" -> {
-      use msg <- decode.then(role_created_message_decoder())
-      decode.success(RoleCreated(msg))
-    }
-    "GUILD_ROLE_UPDATE" -> {
-      use msg <- decode.then(role_updated_message_decoder())
-      decode.success(RoleUpdated(msg))
-    }
-    "GUILD_ROLE_DELETE" -> {
-      use msg <- decode.then(role_deleted_message_decoder())
-      decode.success(RoleDeleted(msg))
-    }
-    "GUILD_SCHEDULED_EVENT_CREATE" -> {
-      use event <- decode.then(scheduled_event.decoder())
-      decode.success(ScheduledEventCreated(event))
-    }
-    "GUILD_SCHEDULED_EVENT_UPDATE" -> {
-      use event <- decode.then(scheduled_event.decoder())
-      decode.success(ScheduledEventUpdated(event))
-    }
-    "GUILD_SCHEDULED_EVENT_DELETE" -> {
-      use event <- decode.then(scheduled_event.decoder())
-      decode.success(ScheduledEventDeleted(event))
-    }
-    "GUILD_SCHEDULED_EVENT_USER_ADD" -> {
-      use msg <- decode.then(scheduled_event_user_message_decoder())
-      decode.success(ScheduledEventUserCreated(msg))
-    }
-    "GUILD_SCHEDULED_EVENT_USER_REMOVE" -> {
-      use msg <- decode.then(scheduled_event_user_message_decoder())
-      decode.success(ScheduledEventUserDeleted(msg))
-    }
-    "GUILD_SOUNDBOARD_SOUND_CREATE" -> {
-      use sound <- decode.then(soundboard.sound_decoder())
-      decode.success(GuildSoundboardSoundCreated(sound))
-    }
-    "GUILD_SOUNDBOARD_SOUND_UPDATE" -> {
-      use sound <- decode.then(soundboard.sound_decoder())
-      decode.success(GuildSoundboardSoundUpdated(sound))
-    }
-    "GUILD_SOUNDBOARD_SOUND_DELETE" -> {
-      use msg <- decode.then(guild_soundboard_sound_deleted_message_decoder())
-      decode.success(GuildSoundboardSoundDeleted(msg))
-    }
-    "GUILD_SOUNDBOARD_SOUNDS_UPDATE" -> {
-      use msg <- decode.then(guild_soundboard_sounds_updated_message_decoder())
-      decode.success(GuildSoundboardSoundsUpdated(msg))
-    }
-    "SOUNDBOARD_SOUNDS" -> {
-      use msg <- decode.then(soundboard_sounds_message_decoder())
-      decode.success(SoundboardSounds(msg))
-    }
-    "INTEGRATION_CREATE" -> {
-      use msg <- decode.then(integration_created_message_decoder())
-      decode.success(IntegrationCreated(msg))
-    }
-    "INTEGRATION_UPDATE" -> {
-      use msg <- decode.then(integration_updated_message_decoder())
-      decode.success(IntegrationUpdated(msg))
-    }
-    "INTEGRATION_DELETE" -> {
-      use msg <- decode.then(integration_deleted_message_decoder())
-      decode.success(IntegrationDeleted(msg))
-    }
-    "INVITE_CREATE" -> {
-      use msg <- decode.then(invite_created_message_decoder())
-      decode.success(InviteCreated(msg))
-    }
+    "RATE_LIMITED" -> decode.map(rate_limited_message_decoder(), RateLimited)
+    "APPLICATION_COMMAND_PERMISSIONS_UPDATE" ->
+      decode.map(
+        application_command.permissions_decoder(),
+        ApplicationCommandPermissionsUpdated,
+      )
+    "AUTO_MODERATION_RULE_CREATE" ->
+      decode.map(auto_moderation.rule_decoder(), AutoModerationRuleCreated)
+    "AUTO_MODERATION_RULE_UPDATE" ->
+      decode.map(auto_moderation.rule_decoder(), AutoModerationRuleUpdated)
+    "AUTO_MODERATION_RULE_DELETE" ->
+      decode.map(auto_moderation.rule_decoder(), AutoModerationRuleDeleted)
+    "AUTO_MODERATION_ACTION_EXECUTION" ->
+      decode.map(
+        auto_moderation_action_executed_message_decoder(),
+        AutoModerationActionExecuted,
+      )
+    "CHANNEL_CREATE" -> decode.map(channel.decoder(), ChannelCreated)
+    "CHANNEL_UPDATE" -> decode.map(channel.decoder(), ChannelUpdated)
+    "CHANNEL_DELETE" -> decode.map(channel.decoder(), ChannelDeleted)
+    "THREAD_CREATE" ->
+      decode.map(thread_created_message_decoder(), ThreadCreated)
+    "THREAD_UPDATE" -> decode.map(thread.decoder(), ThreadUpdated)
+    "THREAD_DELETE" ->
+      decode.map(thread_deleted_message_decoder(), ThreadDeleted)
+    "THREAD_LIST_SYNC" ->
+      decode.map(thread_list_synced_message_decoder(), ThreadListSynced)
+    "THREAD_MEMBER_UPDATE" ->
+      decode.map(thread_member_updated_message_decoder(), ThreadMemberUpdated)
+    "PRESENCE_UPDATE" ->
+      decode.map(presence_updated_message_decoder(), PresenceUpdated)
+    "THREAD_MEMBERS_UPDATE" ->
+      decode.map(thread_members_updated_message_decoder(), ThreadMembersUpdated)
+    "CHANNEL_PINS_UPDATE" ->
+      decode.map(channel_pins_updated_message_decoder(), ChannelPinsUpdated)
+    "ENTITLEMENT_CREATE" ->
+      decode.map(entitlement.decoder(), EntitlementCreated)
+    "ENTITLEMENT_UPDATE" ->
+      decode.map(entitlement.decoder(), EntitlementUpdated)
+    "ENTITLEMENT_DELETE" ->
+      decode.map(entitlement.decoder(), EntitlementDeleted)
+    "GUILD_CREATE" -> decode.map(guild_created_message_decoder(), GuildCreated)
+    "GUILD_UPDATE" -> decode.map(guild.decoder(), GuildUpdated)
+    "GUILD_DELETE" ->
+      decode.map(guild.unavailable_guild_decoder(), GuildDeleted)
+    "GUILD_AUDIT_LOG_ENTRY_CREATE" ->
+      decode.map(
+        audit_log_entry_created_message_decoder(),
+        AuditLogEntryCreated,
+      )
+    "GUILD_BAN_ADD" -> decode.map(guild_ban_message_decoder(), GuildBanCreated)
+    "GUILD_BAN_REMOVE" ->
+      decode.map(guild_ban_message_decoder(), GuildBanDeleted)
+    "GUILD_EMOJIS_UPDATE" ->
+      decode.map(guild_emojis_updated_message_decoder(), GuildEmojisUpdated)
+    "GUILD_STICKERS_UPDATE" ->
+      decode.map(guild_stickers_updated_message_decoder(), GuildStickersUpdated)
+    "GUILD_INTEGRATIONS_UPDATE" ->
+      decode.map(
+        guild_integrations_updated_message_decoder(),
+        GuildIntegrationsUpdated,
+      )
+    "GUILD_MEMBER_ADD" ->
+      decode.map(guild_member_created_message_decoder(), GuildMemberCreated)
+    "GUILD_MEMBER_REMOVE" ->
+      decode.map(guild_member_deleted_message_decoder(), GuildMemberDeleted)
+    "GUILD_MEMBER_UPDATE" ->
+      decode.map(guild_member_updated_message_decoder(), GuildMemberUpdated)
+    "GUILD_MEMBERS_CHUNK" ->
+      decode.map(guild_members_chunk_message_decoder(), GuildMembersChunk)
+    "GUILD_ROLE_CREATE" ->
+      decode.map(role_created_message_decoder(), RoleCreated)
+    "GUILD_ROLE_UPDATE" ->
+      decode.map(role_updated_message_decoder(), RoleUpdated)
+    "GUILD_ROLE_DELETE" ->
+      decode.map(role_deleted_message_decoder(), RoleDeleted)
+    "GUILD_SCHEDULED_EVENT_CREATE" ->
+      decode.map(scheduled_event.decoder(), ScheduledEventCreated)
+    "GUILD_SCHEDULED_EVENT_UPDATE" ->
+      decode.map(scheduled_event.decoder(), ScheduledEventUpdated)
+    "GUILD_SCHEDULED_EVENT_DELETE" ->
+      decode.map(scheduled_event.decoder(), ScheduledEventDeleted)
+    "GUILD_SCHEDULED_EVENT_USER_ADD" ->
+      decode.map(
+        scheduled_event_user_message_decoder(),
+        ScheduledEventUserCreated,
+      )
+    "GUILD_SCHEDULED_EVENT_USER_REMOVE" ->
+      decode.map(
+        scheduled_event_user_message_decoder(),
+        ScheduledEventUserDeleted,
+      )
+    "GUILD_SOUNDBOARD_SOUND_CREATE" ->
+      decode.map(soundboard.sound_decoder(), GuildSoundboardSoundCreated)
+    "GUILD_SOUNDBOARD_SOUND_UPDATE" ->
+      decode.map(soundboard.sound_decoder(), GuildSoundboardSoundUpdated)
+    "GUILD_SOUNDBOARD_SOUND_DELETE" ->
+      decode.map(
+        guild_soundboard_sound_deleted_message_decoder(),
+        GuildSoundboardSoundDeleted,
+      )
+    "GUILD_SOUNDBOARD_SOUNDS_UPDATE" ->
+      decode.map(
+        guild_soundboard_sounds_updated_message_decoder(),
+        GuildSoundboardSoundsUpdated,
+      )
+    "SOUNDBOARD_SOUNDS" ->
+      decode.map(soundboard_sounds_message_decoder(), SoundboardSounds)
+    "INTEGRATION_CREATE" ->
+      decode.map(integration_created_message_decoder(), IntegrationCreated)
+    "INTEGRATION_UPDATE" ->
+      decode.map(integration_updated_message_decoder(), IntegrationUpdated)
+    "INTEGRATION_DELETE" ->
+      decode.map(integration_deleted_message_decoder(), IntegrationDeleted)
+    "INVITE_CREATE" ->
+      decode.map(invite_created_message_decoder(), InviteCreated)
     "INVITE_DELETE" ->
       decode.map(invite_deleted_message_decoder(), InviteDeleted)
     "MESSAGE_CREATE" ->
