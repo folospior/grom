@@ -44,6 +44,7 @@ import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/internal/time_timestamp
 import grom/invite
+import grom/message.{type Message}
 import grom/modification.{type Modification}
 import grom/soundboard
 import grom/stage_instance.{type StageInstance}
@@ -129,6 +130,10 @@ pub type Event {
   IntegrationDeletedEvent(IntegrationDeletedMessage)
   InviteCreatedEvent(InviteCreatedMessage)
   InviteDeletedEvent(InviteDeletedMessage)
+  MessageCreatedEvent(MessageCreatedMessage)
+  MessageUpdatedEvent(MessageUpdatedMessage)
+  MessageDeletedEvent(MessageDeletedMessage)
+  MessagesBulkDeletedEvent(MessagesBulkDeletedMessage)
 }
 
 pub type SessionStartLimits {
@@ -255,6 +260,10 @@ pub type DispatchedMessage {
   IntegrationDeleted(IntegrationDeletedMessage)
   InviteCreated(InviteCreatedMessage)
   InviteDeleted(InviteDeletedMessage)
+  MessageCreated(MessageCreatedMessage)
+  MessageUpdated(MessageUpdatedMessage)
+  MessageDeleted(MessageDeletedMessage)
+  MessagesBulkDeleted(MessagesBulkDeletedMessage)
 }
 
 pub type ReadyMessage {
@@ -511,6 +520,40 @@ pub type InviteDeletedMessage {
     channel_id: String,
     guild_id: Option(String),
     code: String,
+  )
+}
+
+pub type MessageCreatedMessage {
+  MessageCreatedMessage(
+    message: Message,
+    guild_id: Option(String),
+    member: Option(GuildMember),
+    mentions: List(User),
+  )
+}
+
+pub type MessageUpdatedMessage {
+  MessageUpdatedMessage(
+    message: Message,
+    guild_id: Option(String),
+    member: Option(GuildMember),
+    mentions: List(User),
+  )
+}
+
+pub type MessageDeletedMessage {
+  MessageDeletedMessage(
+    id: String,
+    channel_id: String,
+    guild_id: Option(String),
+  )
+}
+
+pub type MessagesBulkDeletedMessage {
+  MessagesBulkDeletedMessage(
+    ids: List(String),
+    channel_id: String,
+    guild_id: Option(String),
   )
 }
 
@@ -818,6 +861,16 @@ pub fn dispatched_message_decoder(
       use msg <- decode.then(invite_created_message_decoder())
       decode.success(InviteCreated(msg))
     }
+    "INVITE_DELETE" ->
+      decode.map(invite_deleted_message_decoder(), InviteDeleted)
+    "MESSAGE_CREATE" ->
+      decode.map(message_created_message_decoder(), MessageCreated)
+    "MESSAGE_UPDATE" ->
+      decode.map(message_updated_message_decoder(), MessageUpdated)
+    "MESSAGE_DELETE" ->
+      decode.map(message_deleted_message_decoder(), MessageDeleted)
+    "MESSAGE_DELETE_BULK" ->
+      decode.map(messages_bulk_deleted_message_decoder(), MessagesBulkDeleted)
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -1588,6 +1641,76 @@ pub fn invite_deleted_message_decoder() -> decode.Decoder(InviteDeletedMessage) 
   decode.success(InviteDeletedMessage(channel_id:, guild_id:, code:))
 }
 
+@internal
+pub fn message_created_message_decoder() -> decode.Decoder(
+  MessageCreatedMessage,
+) {
+  use message <- decode.then(message.decoder())
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use member <- decode.optional_field(
+    "member",
+    None,
+    decode.optional(guild_member.decoder()),
+  )
+  use mentions <- decode.field("mentions", decode.list(user.decoder()))
+
+  decode.success(MessageCreatedMessage(message:, guild_id:, member:, mentions:))
+}
+
+@internal
+pub fn message_updated_message_decoder() -> decode.Decoder(
+  MessageUpdatedMessage,
+) {
+  use message <- decode.then(message.decoder())
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use member <- decode.optional_field(
+    "member",
+    None,
+    decode.optional(guild_member.decoder()),
+  )
+  use mentions <- decode.field("mentions", decode.list(user.decoder()))
+
+  decode.success(MessageUpdatedMessage(message:, guild_id:, member:, mentions:))
+}
+
+@internal
+pub fn message_deleted_message_decoder() -> decode.Decoder(
+  MessageDeletedMessage,
+) {
+  use id <- decode.field("id", decode.string)
+  use channel_id <- decode.field("channel_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(MessageDeletedMessage(id:, channel_id:, guild_id:))
+}
+
+@internal
+pub fn messages_bulk_deleted_message_decoder() -> decode.Decoder(
+  MessagesBulkDeletedMessage,
+) {
+  use ids <- decode.field("ids", decode.list(decode.string))
+  use channel_id <- decode.field("channel_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(MessagesBulkDeletedMessage(ids:, channel_id:, guild_id:))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -2256,6 +2379,11 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, IntegrationDeletedEvent(msg))
     InviteCreated(msg) -> actor.send(state.actor, InviteCreatedEvent(msg))
     InviteDeleted(msg) -> actor.send(state.actor, InviteDeletedEvent(msg))
+    MessageCreated(msg) -> actor.send(state.actor, MessageCreatedEvent(msg))
+    MessageUpdated(msg) -> actor.send(state.actor, MessageUpdatedEvent(msg))
+    MessageDeleted(msg) -> actor.send(state.actor, MessageDeletedEvent(msg))
+    MessagesBulkDeleted(msg) ->
+      actor.send(state.actor, MessagesBulkDeletedEvent(msg))
   }
 }
 
