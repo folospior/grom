@@ -16,7 +16,7 @@ import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/activity
-import grom/application
+import grom/application.{type Application}
 import grom/channel.{type Channel}
 import grom/channel/thread.{type Thread}
 import grom/emoji.{type Emoji}
@@ -43,6 +43,7 @@ import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/internal/time_timestamp
+import grom/invite
 import grom/modification.{type Modification}
 import grom/soundboard
 import grom/stage_instance.{type StageInstance}
@@ -126,6 +127,8 @@ pub type Event {
   IntegrationCreatedEvent(IntegrationCreatedMessage)
   IntegrationUpdatedEvent(IntegrationUpdatedMessage)
   IntegrationDeletedEvent(IntegrationDeletedMessage)
+  InviteCreatedEvent(InviteCreatedMessage)
+  InviteDeletedEvent(InviteDeletedMessage)
 }
 
 pub type SessionStartLimits {
@@ -250,6 +253,8 @@ pub type DispatchedMessage {
   IntegrationCreated(IntegrationCreatedMessage)
   IntegrationUpdated(IntegrationUpdatedMessage)
   IntegrationDeleted(IntegrationDeletedMessage)
+  InviteCreated(InviteCreatedMessage)
+  InviteDeleted(InviteDeletedMessage)
 }
 
 pub type ReadyMessage {
@@ -480,6 +485,32 @@ pub type IntegrationDeletedMessage {
     id: String,
     guild_id: String,
     application_id: Option(String),
+  )
+}
+
+pub type InviteCreatedMessage {
+  InviteCreatedMessage(
+    channel_id: String,
+    code: String,
+    created_at: Timestamp,
+    guild_id: Option(String),
+    inviter: Option(User),
+    max_age: Duration,
+    max_uses: Int,
+    target_type: Option(invite.TargetType),
+    target_user: Option(User),
+    target_application: Option(Application),
+    is_temporary: Bool,
+    uses: Int,
+    expires_at: Option(Timestamp),
+  )
+}
+
+pub type InviteDeletedMessage {
+  InviteDeletedMessage(
+    channel_id: String,
+    guild_id: Option(String),
+    code: String,
   )
 }
 
@@ -782,6 +813,10 @@ pub fn dispatched_message_decoder(
     "INTEGRATION_DELETE" -> {
       use msg <- decode.then(integration_deleted_message_decoder())
       decode.success(IntegrationDeleted(msg))
+    }
+    "INVITE_CREATE" -> {
+      use msg <- decode.then(invite_created_message_decoder())
+      decode.success(InviteCreated(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1437,6 +1472,7 @@ pub fn guild_soundboard_sounds_updated_message_decoder() -> decode.Decoder(
   ))
 }
 
+@internal
 pub fn soundboard_sounds_message_decoder() -> decode.Decoder(
   SoundboardSoundsMessage,
 ) {
@@ -1448,6 +1484,7 @@ pub fn soundboard_sounds_message_decoder() -> decode.Decoder(
   decode.success(SoundboardSoundsMessage(soundboard_sounds:, guild_id:))
 }
 
+@internal
 pub fn integration_created_message_decoder() -> decode.Decoder(
   IntegrationCreatedMessage,
 ) {
@@ -1456,6 +1493,7 @@ pub fn integration_created_message_decoder() -> decode.Decoder(
   decode.success(IntegrationCreatedMessage(integration:, guild_id:))
 }
 
+@internal
 pub fn integration_updated_message_decoder() -> decode.Decoder(
   IntegrationUpdatedMessage,
 ) {
@@ -1464,6 +1502,7 @@ pub fn integration_updated_message_decoder() -> decode.Decoder(
   decode.success(IntegrationUpdatedMessage(integration:, guild_id:))
 }
 
+@internal
 pub fn integration_deleted_message_decoder() -> decode.Decoder(
   IntegrationDeletedMessage,
 ) {
@@ -1476,6 +1515,77 @@ pub fn integration_deleted_message_decoder() -> decode.Decoder(
   )
 
   decode.success(IntegrationDeletedMessage(id:, guild_id:, application_id:))
+}
+
+@internal
+pub fn invite_created_message_decoder() -> decode.Decoder(InviteCreatedMessage) {
+  use channel_id <- decode.field("channel_id", decode.string)
+  use code <- decode.field("code", decode.string)
+  use created_at <- decode.field("created_at", time_rfc3339.decoder())
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use inviter <- decode.optional_field(
+    "inviter",
+    None,
+    decode.optional(user.decoder()),
+  )
+  use max_age <- decode.field(
+    "max_age",
+    time_duration.from_int_seconds_decoder(),
+  )
+  use max_uses <- decode.field("max_uses", decode.int)
+  use target_type <- decode.optional_field(
+    "target_type",
+    None,
+    decode.optional(invite.target_type_decoder()),
+  )
+  use target_user <- decode.optional_field(
+    "target_user",
+    None,
+    decode.optional(user.decoder()),
+  )
+  use target_application <- decode.optional_field(
+    "target_application",
+    None,
+    decode.optional(application.decoder()),
+  )
+  use is_temporary <- decode.field("temporary", decode.bool)
+  use uses <- decode.field("uses", decode.int)
+  use expires_at <- decode.field(
+    "expires_at",
+    decode.optional(time_rfc3339.decoder()),
+  )
+  decode.success(InviteCreatedMessage(
+    channel_id:,
+    code:,
+    created_at:,
+    guild_id:,
+    inviter:,
+    max_age:,
+    max_uses:,
+    target_type:,
+    target_user:,
+    target_application:,
+    is_temporary:,
+    uses:,
+    expires_at:,
+  ))
+}
+
+@internal
+pub fn invite_deleted_message_decoder() -> decode.Decoder(InviteDeletedMessage) {
+  use channel_id <- decode.field("channel_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use code <- decode.field("code", decode.string)
+
+  decode.success(InviteDeletedMessage(channel_id:, guild_id:, code:))
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -2144,6 +2254,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, IntegrationUpdatedEvent(msg))
     IntegrationDeleted(msg) ->
       actor.send(state.actor, IntegrationDeletedEvent(msg))
+    InviteCreated(msg) -> actor.send(state.actor, InviteCreatedEvent(msg))
+    InviteDeleted(msg) -> actor.send(state.actor, InviteDeletedEvent(msg))
   }
 }
 
