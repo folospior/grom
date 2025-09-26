@@ -33,6 +33,7 @@ import grom/gateway/user_message.{
 import grom/guild.{type Guild}
 import grom/guild/audit_log
 import grom/guild/auto_moderation
+import grom/guild/integration.{type Integration}
 import grom/guild/role.{type Role}
 import grom/guild/scheduled_event.{type ScheduledEvent}
 import grom/guild_member.{type GuildMember}
@@ -122,6 +123,9 @@ pub type Event {
   GuildSoundboardSoundsUpdatedEvent(GuildSoundboardSoundsUpdatedMessage)
   /// Sent in response to [`request_soundboard_sounds`](#request_soundboard_sounds).
   SoundboardSoundsEvent(SoundboardSoundsMessage)
+  IntegrationCreatedEvent(IntegrationCreatedMessage)
+  IntegrationUpdatedEvent(IntegrationUpdatedMessage)
+  IntegrationDeletedEvent(IntegrationDeletedMessage)
 }
 
 pub type SessionStartLimits {
@@ -243,6 +247,9 @@ pub type DispatchedMessage {
   GuildSoundboardSoundDeleted(GuildSoundboardSoundDeletedMessage)
   GuildSoundboardSoundsUpdated(GuildSoundboardSoundsUpdatedMessage)
   SoundboardSounds(SoundboardSoundsMessage)
+  IntegrationCreated(IntegrationCreatedMessage)
+  IntegrationUpdated(IntegrationUpdatedMessage)
+  IntegrationDeleted(IntegrationDeletedMessage)
 }
 
 pub type ReadyMessage {
@@ -457,6 +464,22 @@ pub type SoundboardSoundsMessage {
   SoundboardSoundsMessage(
     soundboard_sounds: List(soundboard.Sound),
     guild_id: String,
+  )
+}
+
+pub type IntegrationCreatedMessage {
+  IntegrationCreatedMessage(integration: Integration, guild_id: String)
+}
+
+pub type IntegrationUpdatedMessage {
+  IntegrationUpdatedMessage(integration: Integration, guild_id: String)
+}
+
+pub type IntegrationDeletedMessage {
+  IntegrationDeletedMessage(
+    id: String,
+    guild_id: String,
+    application_id: Option(String),
   )
 }
 
@@ -747,6 +770,18 @@ pub fn dispatched_message_decoder(
     "SOUNDBOARD_SOUNDS" -> {
       use msg <- decode.then(soundboard_sounds_message_decoder())
       decode.success(SoundboardSounds(msg))
+    }
+    "INTEGRATION_CREATE" -> {
+      use msg <- decode.then(integration_created_message_decoder())
+      decode.success(IntegrationCreated(msg))
+    }
+    "INTEGRATION_UPDATE" -> {
+      use msg <- decode.then(integration_updated_message_decoder())
+      decode.success(IntegrationUpdated(msg))
+    }
+    "INTEGRATION_DELETE" -> {
+      use msg <- decode.then(integration_deleted_message_decoder())
+      decode.success(IntegrationDeleted(msg))
     }
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
@@ -1413,6 +1448,36 @@ pub fn soundboard_sounds_message_decoder() -> decode.Decoder(
   decode.success(SoundboardSoundsMessage(soundboard_sounds:, guild_id:))
 }
 
+pub fn integration_created_message_decoder() -> decode.Decoder(
+  IntegrationCreatedMessage,
+) {
+  use integration <- decode.then(integration.decoder())
+  use guild_id <- decode.field("guild_id", decode.string)
+  decode.success(IntegrationCreatedMessage(integration:, guild_id:))
+}
+
+pub fn integration_updated_message_decoder() -> decode.Decoder(
+  IntegrationUpdatedMessage,
+) {
+  use integration <- decode.then(integration.decoder())
+  use guild_id <- decode.field("guild_id", decode.string)
+  decode.success(IntegrationUpdatedMessage(integration:, guild_id:))
+}
+
+pub fn integration_deleted_message_decoder() -> decode.Decoder(
+  IntegrationDeletedMessage,
+) {
+  use id <- decode.field("id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use application_id <- decode.optional_field(
+    "application_id",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(IntegrationDeletedMessage(id:, guild_id:, application_id:))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -2073,6 +2138,12 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     GuildSoundboardSoundsUpdated(msg) ->
       actor.send(state.actor, GuildSoundboardSoundsUpdatedEvent(msg))
     SoundboardSounds(msg) -> actor.send(state.actor, SoundboardSoundsEvent(msg))
+    IntegrationCreated(msg) ->
+      actor.send(state.actor, IntegrationCreatedEvent(msg))
+    IntegrationUpdated(msg) ->
+      actor.send(state.actor, IntegrationUpdatedEvent(msg))
+    IntegrationDeleted(msg) ->
+      actor.send(state.actor, IntegrationDeletedEvent(msg))
   }
 }
 
