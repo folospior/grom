@@ -35,6 +35,11 @@ pub type ContentType {
   Ogg
 }
 
+pub type SoundId {
+  StringId(String)
+  IntId(Int)
+}
+
 // DECODERS --------------------------------------------------------------------
 
 @internal
@@ -61,6 +66,13 @@ pub fn sound_decoder() -> decode.Decoder(Sound) {
     is_available:,
     creator:,
   ))
+}
+
+@internal
+pub fn sound_id_decoder() -> decode.Decoder(SoundId) {
+  let string_decoder = decode.map(decode.string, StringId)
+  let int_decoder = decode.map(decode.int, IntId)
+  decode.one_of(string_decoder, or: [int_decoder])
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------

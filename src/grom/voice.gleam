@@ -84,3 +84,18 @@ pub fn region_decoder() -> decode.Decoder(Region) {
   use is_custom <- decode.field("custom", decode.bool)
   decode.success(Region(id:, name:, is_optimal:, is_deprecated:, is_custom:))
 }
+
+pub type AnimationType {
+  PremiumAnimation
+  BasicAnimation
+}
+
+@internal
+pub fn animation_type_decoder() -> decode.Decoder(AnimationType) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(PremiumAnimation)
+    1 -> decode.success(BasicAnimation)
+    _ -> decode.failure(PremiumAnimation, "AnimationType")
+  }
+}

@@ -141,6 +141,9 @@ pub type Event {
   MessageEmojiReactionsDeletedEvent(MessageEmojiReactionsDeletedMessage)
   TypingStartedEvent(TypingStartedMessage)
   CurrentUserUpdatedEvent(User)
+  VoiceChannelEffectSentEvent(VoiceChannelEffectSentMessage)
+  VoiceStateUpdatedEvent(voice.State)
+  VoiceServerUpdatedEvent(VoiceServerUpdatedMessage)
 }
 
 pub type SessionStartLimits {
@@ -277,6 +280,9 @@ pub type DispatchedMessage {
   MessageEmojiReactionsDeleted(MessageEmojiReactionsDeletedMessage)
   TypingStarted(TypingStartedMessage)
   CurrentUserUpdated(User)
+  VoiceChannelEffectSent(VoiceChannelEffectSentMessage)
+  VoiceStateUpdated(voice.State)
+  VoiceServerUpdated(VoiceServerUpdatedMessage)
 }
 
 pub type ReadyMessage {
@@ -624,6 +630,27 @@ pub type TypingStartedMessage {
   )
 }
 
+pub type VoiceChannelEffectSentMessage {
+  VoiceChannelEffectSentMessage(
+    channel_id: String,
+    guild_id: String,
+    user_id: String,
+    emoji: Option(Emoji),
+    animation_type: Option(voice.AnimationType),
+    animation_id: Option(Int),
+    sound_id: Option(soundboard.SoundId),
+    sound_volume: Option(Float),
+  )
+}
+
+pub type VoiceServerUpdatedMessage {
+  VoiceServerUpdatedMessage(
+    token: String,
+    guild_id: String,
+    endpoint: Option(String),
+  )
+}
+
 // SEND EVENTS -----------------------------------------------------------------
 
 pub type SentMessage {
@@ -874,6 +901,14 @@ pub fn dispatched_message_decoder(
     "TYPING_START" ->
       decode.map(typing_started_message_decoder(), TypingStarted)
     "USER_UPDATE" -> decode.map(user.decoder(), CurrentUserUpdated)
+    "VOICE_CHANNEL_EFFECT_SEND" ->
+      decode.map(
+        voice_channel_effect_sent_message_decoder(),
+        VoiceChannelEffectSent,
+      )
+    "VOICE_STATE_UPDATE" -> decode.map(voice.state_decoder(), VoiceStateUpdated)
+    "VOICE_SERVER_UPDATE" ->
+      decode.map(voice_server_updated_message_decoder(), VoiceServerUpdated)
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -1852,6 +1887,64 @@ pub fn typing_started_message_decoder() -> decode.Decoder(TypingStartedMessage) 
   ))
 }
 
+@internal
+pub fn voice_channel_effect_sent_message_decoder() -> decode.Decoder(
+  VoiceChannelEffectSentMessage,
+) {
+  use channel_id <- decode.field("channel_id", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use user_id <- decode.field("user_id", decode.string)
+  use emoji <- decode.optional_field(
+    "emoji",
+    None,
+    decode.optional(emoji.decoder()),
+  )
+  use animation_type <- decode.optional_field(
+    "animation_type",
+    None,
+    decode.optional(voice.animation_type_decoder()),
+  )
+  use animation_id <- decode.optional_field(
+    "animation_id",
+    None,
+    decode.optional(decode.int),
+  )
+  use sound_id <- decode.optional_field(
+    "sound_id",
+    None,
+    decode.optional(soundboard.sound_id_decoder()),
+  )
+  use sound_volume <- decode.optional_field(
+    "sound_volume",
+    None,
+    decode.optional(decode.float),
+  )
+  decode.success(VoiceChannelEffectSentMessage(
+    channel_id:,
+    guild_id:,
+    user_id:,
+    emoji:,
+    animation_type:,
+    animation_id:,
+    sound_id:,
+    sound_volume:,
+  ))
+}
+
+@internal
+pub fn voice_server_updated_message_decoder() -> decode.Decoder(
+  VoiceServerUpdatedMessage,
+) {
+  use token <- decode.field("token", decode.string)
+  use guild_id <- decode.field("guild_id", decode.string)
+  use endpoint <- decode.optional_field(
+    "endpoint",
+    None,
+    decode.optional(decode.string),
+  )
+  decode.success(VoiceServerUpdatedMessage(token:, guild_id:, endpoint:))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -2536,6 +2629,12 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     TypingStarted(msg) -> actor.send(state.actor, TypingStartedEvent(msg))
     CurrentUserUpdated(user) ->
       actor.send(state.actor, CurrentUserUpdatedEvent(user))
+    VoiceChannelEffectSent(msg) ->
+      actor.send(state.actor, VoiceChannelEffectSentEvent(msg))
+    VoiceStateUpdated(voice_state) ->
+      actor.send(state.actor, VoiceStateUpdatedEvent(voice_state))
+    VoiceServerUpdated(msg) ->
+      actor.send(state.actor, VoiceServerUpdatedEvent(msg))
   }
 }
 
