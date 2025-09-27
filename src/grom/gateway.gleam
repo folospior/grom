@@ -140,6 +140,7 @@ pub type Event {
   MessageAllReactionsDeletedEvent(MessageAllReactionsDeletedMessage)
   MessageEmojiReactionsDeletedEvent(MessageEmojiReactionsDeletedMessage)
   TypingStartedEvent(TypingStartedMessage)
+  CurrentUserUpdatedEvent(User)
 }
 
 pub type SessionStartLimits {
@@ -275,6 +276,7 @@ pub type DispatchedMessage {
   MessageAllReactionsDeleted(MessageAllReactionsDeletedMessage)
   MessageEmojiReactionsDeleted(MessageEmojiReactionsDeletedMessage)
   TypingStarted(TypingStartedMessage)
+  CurrentUserUpdated(User)
 }
 
 pub type ReadyMessage {
@@ -871,6 +873,7 @@ pub fn dispatched_message_decoder(
       )
     "TYPING_START" ->
       decode.map(typing_started_message_decoder(), TypingStarted)
+    "USER_UPDATE" -> decode.map(user.decoder(), CurrentUserUpdated)
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -2531,6 +2534,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     MessageEmojiReactionsDeleted(msg) ->
       actor.send(state.actor, MessageEmojiReactionsDeletedEvent(msg))
     TypingStarted(msg) -> actor.send(state.actor, TypingStartedEvent(msg))
+    CurrentUserUpdated(user) ->
+      actor.send(state.actor, CurrentUserUpdatedEvent(user))
   }
 }
 
