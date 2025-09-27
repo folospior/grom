@@ -139,6 +139,7 @@ pub type Event {
   MessageReactionDeletedEvent(MessageReactionDeletedMessage)
   MessageAllReactionsDeletedEvent(MessageAllReactionsDeletedMessage)
   MessageEmojiReactionsDeletedEvent(MessageEmojiReactionsDeletedMessage)
+  TypingStartedEvent(TypingStartedMessage)
 }
 
 pub type SessionStartLimits {
@@ -273,6 +274,7 @@ pub type DispatchedMessage {
   MessageReactionDeleted(MessageReactionDeletedMessage)
   MessageAllReactionsDeleted(MessageAllReactionsDeletedMessage)
   MessageEmojiReactionsDeleted(MessageEmojiReactionsDeletedMessage)
+  TypingStarted(TypingStartedMessage)
 }
 
 pub type ReadyMessage {
@@ -610,6 +612,16 @@ pub type MessageEmojiReactionsDeletedMessage {
   )
 }
 
+pub type TypingStartedMessage {
+  TypingStartedMessage(
+    channel_id: String,
+    guild_id: Option(String),
+    user_id: String,
+    timestamp: Timestamp,
+    member: Option(GuildMember),
+  )
+}
+
 // SEND EVENTS -----------------------------------------------------------------
 
 pub type SentMessage {
@@ -857,6 +869,8 @@ pub fn dispatched_message_decoder(
         message_emoji_reactions_deleted_message_decoder(),
         MessageEmojiReactionsDeleted,
       )
+    "TYPING_START" ->
+      decode.map(typing_started_message_decoder(), TypingStarted)
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -1807,6 +1821,34 @@ pub fn message_emoji_reactions_deleted_message_decoder() -> decode.Decoder(
   ))
 }
 
+@internal
+pub fn typing_started_message_decoder() -> decode.Decoder(TypingStartedMessage) {
+  use channel_id <- decode.field("channel_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use user_id <- decode.field("user_id", decode.string)
+  use timestamp <- decode.field(
+    "timestamp",
+    time_timestamp.from_unix_seconds_decoder(),
+  )
+  use member <- decode.optional_field(
+    "member",
+    None,
+    decode.optional(guild_member.decoder()),
+  )
+
+  decode.success(TypingStartedMessage(
+    channel_id:,
+    guild_id:,
+    user_id:,
+    timestamp:,
+    member:,
+  ))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -2488,6 +2530,7 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, MessageAllReactionsDeletedEvent(msg))
     MessageEmojiReactionsDeleted(msg) ->
       actor.send(state.actor, MessageEmojiReactionsDeletedEvent(msg))
+    TypingStarted(msg) -> actor.send(state.actor, TypingStartedEvent(msg))
   }
 }
 
