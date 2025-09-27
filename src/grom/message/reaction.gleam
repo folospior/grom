@@ -55,6 +55,16 @@ pub fn count_details_decoder() -> decode.Decoder(CountDetails) {
   decode.success(CountDetails(burst:, normal:))
 }
 
+@internal
+pub fn type_decoder() -> decode.Decoder(Type) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(Normal)
+    1 -> decode.success(Burst)
+    _ -> decode.failure(Normal, "Type")
+  }
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal

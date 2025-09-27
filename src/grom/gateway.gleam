@@ -45,6 +45,7 @@ import grom/internal/time_rfc3339
 import grom/internal/time_timestamp
 import grom/invite
 import grom/message.{type Message}
+import grom/message/reaction
 import grom/modification.{type Modification}
 import grom/soundboard
 import grom/stage_instance.{type StageInstance}
@@ -134,6 +135,10 @@ pub type Event {
   MessageUpdatedEvent(MessageUpdatedMessage)
   MessageDeletedEvent(MessageDeletedMessage)
   MessagesBulkDeletedEvent(MessagesBulkDeletedMessage)
+  MessageReactionCreatedEvent(MessageReactionCreatedMessage)
+  MessageReactionDeletedEvent(MessageReactionDeletedMessage)
+  MessageAllReactionsDeletedEvent(MessageAllReactionsDeletedMessage)
+  MessageEmojiReactionsDeletedEvent(MessageEmojiReactionsDeletedMessage)
 }
 
 pub type SessionStartLimits {
@@ -264,6 +269,10 @@ pub type DispatchedMessage {
   MessageUpdated(MessageUpdatedMessage)
   MessageDeleted(MessageDeletedMessage)
   MessagesBulkDeleted(MessagesBulkDeletedMessage)
+  MessageReactionCreated(MessageReactionCreatedMessage)
+  MessageReactionDeleted(MessageReactionDeletedMessage)
+  MessageAllReactionsDeleted(MessageAllReactionsDeletedMessage)
+  MessageEmojiReactionsDeleted(MessageEmojiReactionsDeletedMessage)
 }
 
 pub type ReadyMessage {
@@ -557,6 +566,50 @@ pub type MessagesBulkDeletedMessage {
   )
 }
 
+pub type MessageReactionCreatedMessage {
+  MessageReactionCreatedMessage(
+    user_id: String,
+    channel_id: String,
+    message_id: String,
+    guild_id: Option(String),
+    member: Option(GuildMember),
+    emoji: Emoji,
+    message_author_id: Option(String),
+    is_burst: Bool,
+    burst_colors: Option(List(String)),
+    type_: reaction.Type,
+  )
+}
+
+pub type MessageReactionDeletedMessage {
+  MessageReactionDeletedMessage(
+    user_id: String,
+    channel_id: String,
+    message_id: String,
+    guild_id: Option(String),
+    emoji: Emoji,
+    is_burst: Bool,
+    type_: reaction.Type,
+  )
+}
+
+pub type MessageAllReactionsDeletedMessage {
+  MessageAllReactionsDeletedMessage(
+    channel_id: String,
+    message_id: String,
+    guild_id: Option(String),
+  )
+}
+
+pub type MessageEmojiReactionsDeletedMessage {
+  MessageEmojiReactionsDeletedMessage(
+    channel_id: String,
+    message_id: String,
+    guild_id: Option(String),
+    emoji: Emoji,
+  )
+}
+
 // SEND EVENTS -----------------------------------------------------------------
 
 pub type SentMessage {
@@ -784,6 +837,26 @@ pub fn dispatched_message_decoder(
       decode.map(message_deleted_message_decoder(), MessageDeleted)
     "MESSAGE_DELETE_BULK" ->
       decode.map(messages_bulk_deleted_message_decoder(), MessagesBulkDeleted)
+    "MESSAGE_REACTION_ADD" ->
+      decode.map(
+        message_reaction_created_message_decoder(),
+        MessageReactionCreated,
+      )
+    "MESSAGE_REACTION_REMOVE" ->
+      decode.map(
+        message_reaction_deleted_message_decoder(),
+        MessageReactionDeleted,
+      )
+    "MESSAGE_REACTION_REMOVE_ALL" ->
+      decode.map(
+        message_all_reactions_deleted_message_decoder(),
+        MessageAllReactionsDeleted,
+      )
+    "MESSAGE_REACTION_REMOVE_EMOJI" ->
+      decode.map(
+        message_emoji_reactions_deleted_message_decoder(),
+        MessageEmojiReactionsDeleted,
+      )
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -1624,6 +1697,116 @@ pub fn messages_bulk_deleted_message_decoder() -> decode.Decoder(
   decode.success(MessagesBulkDeletedMessage(ids:, channel_id:, guild_id:))
 }
 
+@internal
+pub fn message_reaction_created_message_decoder() -> decode.Decoder(
+  MessageReactionCreatedMessage,
+) {
+  use user_id <- decode.field("user_id", decode.string)
+  use channel_id <- decode.field("channel_id", decode.string)
+  use message_id <- decode.field("message_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use member <- decode.optional_field(
+    "member",
+    None,
+    decode.optional(guild_member.decoder()),
+  )
+  use emoji <- decode.field("emoji", emoji.decoder())
+  use message_author_id <- decode.optional_field(
+    "message_author_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use is_burst <- decode.field("burst", decode.bool)
+  use burst_colors <- decode.optional_field(
+    "burst_colors",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+  use type_ <- decode.field("type", reaction.type_decoder())
+  decode.success(MessageReactionCreatedMessage(
+    user_id:,
+    channel_id:,
+    message_id:,
+    guild_id:,
+    member:,
+    emoji:,
+    message_author_id:,
+    is_burst:,
+    burst_colors:,
+    type_:,
+  ))
+}
+
+@internal
+pub fn message_reaction_deleted_message_decoder() -> decode.Decoder(
+  MessageReactionDeletedMessage,
+) {
+  use user_id <- decode.field("user_id", decode.string)
+  use channel_id <- decode.field("channel_id", decode.string)
+  use message_id <- decode.field("message_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use emoji <- decode.field("emoji", emoji.decoder())
+  use is_burst <- decode.field("burst", decode.bool)
+  use type_ <- decode.field("type", reaction.type_decoder())
+  decode.success(MessageReactionDeletedMessage(
+    user_id:,
+    channel_id:,
+    message_id:,
+    guild_id:,
+    emoji:,
+    is_burst:,
+    type_:,
+  ))
+}
+
+@internal
+pub fn message_all_reactions_deleted_message_decoder() -> decode.Decoder(
+  MessageAllReactionsDeletedMessage,
+) {
+  use channel_id <- decode.field("channel_id", decode.string)
+  use message_id <- decode.field("message_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(MessageAllReactionsDeletedMessage(
+    channel_id:,
+    message_id:,
+    guild_id:,
+  ))
+}
+
+@internal
+pub fn message_emoji_reactions_deleted_message_decoder() -> decode.Decoder(
+  MessageEmojiReactionsDeletedMessage,
+) {
+  use channel_id <- decode.field("channel_id", decode.string)
+  use message_id <- decode.field("message_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use emoji <- decode.field("emoji", emoji.decoder())
+
+  decode.success(MessageEmojiReactionsDeletedMessage(
+    channel_id:,
+    message_id:,
+    guild_id:,
+    emoji:,
+  ))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -2297,6 +2480,14 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
     MessageDeleted(msg) -> actor.send(state.actor, MessageDeletedEvent(msg))
     MessagesBulkDeleted(msg) ->
       actor.send(state.actor, MessagesBulkDeletedEvent(msg))
+    MessageReactionCreated(msg) ->
+      actor.send(state.actor, MessageReactionCreatedEvent(msg))
+    MessageReactionDeleted(msg) ->
+      actor.send(state.actor, MessageReactionDeletedEvent(msg))
+    MessageAllReactionsDeleted(msg) ->
+      actor.send(state.actor, MessageAllReactionsDeletedEvent(msg))
+    MessageEmojiReactionsDeleted(msg) ->
+      actor.send(state.actor, MessageEmojiReactionsDeletedEvent(msg))
   }
 }
 
