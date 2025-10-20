@@ -27,6 +27,10 @@ pub type Option {
   )
 }
 
+pub type InteractionResponse {
+  InteractionResponse(id: Int, custom_id: String, selected_values: List(String))
+}
+
 pub type Emoji {
   Emoji(id: GOption(String), name: String, is_animated: Bool)
 }

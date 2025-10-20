@@ -21,6 +21,14 @@ pub type DefaultValue {
   DefaultValue(id: String)
 }
 
+pub type InteractionResponse {
+  InteractionResponse(
+    id: Int,
+    custom_id: String,
+    selected_users_ids: List(String),
+  )
+}
+
 // DECODERS --------------------------------------------------------------------
 
 @internal

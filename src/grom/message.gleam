@@ -8,22 +8,30 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import gleam/uri
 import grom
 import grom/application.{type Application}
 import grom/channel/thread.{type Thread}
+import grom/component/action_row.{type ActionRow}
+import grom/component/container.{type Container}
+import grom/component/file as component_file
+import grom/component/media_gallery.{type MediaGallery}
+import grom/component/section.{type Section}
+import grom/component/separator.{type Separator}
+import grom/component/text_display.{type TextDisplay}
 import grom/file.{type File}
 import grom/guild/role.{type Role}
 import grom/guild_member.{type GuildMember}
 import grom/internal/flags
 import grom/internal/rest
+import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/message/activity.{type Activity}
 import grom/message/allowed_mentions.{type AllowedMentions}
 import grom/message/attachment.{type Attachment}
 import grom/message/call.{type Call}
-import grom/message/component.{type Component}
 import grom/message/embed.{type Embed}
 import grom/message/interaction_metadata.{type InteractionMetadata}
 import grom/message/message_reference.{type MessageReference}
@@ -339,6 +347,44 @@ pub type ModifyAttachment {
   NewAttachment(attachment.Create)
 }
 
+pub type Component {
+  ActionRow(ActionRow)
+  Section(Section)
+  TextDisplay(TextDisplay)
+  MediaGallery(MediaGallery)
+  File(component_file.File)
+  Separator(Separator)
+  Container(Container)
+}
+
+pub type StartThreadInForumOrMedia {
+  StartThreadInForumOrMedia(
+    name: String,
+    auto_archive_duration: Option(Duration),
+    rate_limit_per_user: Option(Duration),
+    message: StartThreadInForumOrMediaMessage,
+    applied_tags_ids: Option(List(String)),
+    files: Option(List(File)),
+  )
+}
+
+pub type StartThreadInForumOrMediaMessage {
+  StartThreadInForumOrMediaMessage(
+    content: Option(String),
+    embeds: Option(List(Embed)),
+    allowed_mentions: Option(AllowedMentions),
+    components: Option(List(Component)),
+    sticker_ids: Option(List(String)),
+    attachments: Option(List(attachment.Create)),
+    flags: Option(List(StartThreadInForumOrMediaMessageFlag)),
+  )
+}
+
+pub type StartThreadInForumOrMediaMessageFlag {
+  StartThreadInForumOrMediaMessageWithSuppressedEmbeds
+  StartThreadInForumOrMediaMessageWithSuppressedNotifications
+}
+
 // FLAGS -----------------------------------------------------------------------
 
 @internal
@@ -375,6 +421,22 @@ pub fn bits_modify_flags() -> List(#(Int, ModifyFlag)) {
   [
     #(int.bitwise_shift_left(1, 2), ModifyEmbedSuppression),
     #(int.bitwise_shift_left(1, 15), ModifyUsingComponentsV2),
+  ]
+}
+
+@internal
+pub fn bits_start_thread_in_forum_or_media_message_flags() -> List(
+  #(Int, StartThreadInForumOrMediaMessageFlag),
+) {
+  [
+    #(
+      int.bitwise_shift_left(1, 2),
+      StartThreadInForumOrMediaMessageWithSuppressedEmbeds,
+    ),
+    #(
+      int.bitwise_shift_left(1, 12),
+      StartThreadInForumOrMediaMessageWithSuppressedNotifications,
+    ),
   ]
 }
 
@@ -473,7 +535,7 @@ pub fn decoder() -> decode.Decoder(Message) {
   use components <- decode.optional_field(
     "components",
     None,
-    decode.optional(decode.list(component.decoder())),
+    decode.optional(decode.list(component_decoder())),
   )
   use sticker_items <- decode.optional_field(
     "sticker_items",
@@ -635,7 +697,7 @@ pub fn snapshot_decoder() -> decode.Decoder(Snapshot) {
     use components <- decode.optional_field(
       "components",
       None,
-      decode.optional(decode.list(component.decoder())),
+      decode.optional(decode.list(component_decoder())),
     )
     decode.success(Snapshot(
       type_:,
@@ -828,6 +890,42 @@ pub fn resolved_decoder() -> decode.Decoder(Resolved) {
   ))
 }
 
+@internal
+pub fn component_decoder() -> decode.Decoder(Component) {
+  use type_ <- decode.field("type", decode.int)
+  case type_ {
+    1 -> {
+      use action_row <- decode.then(action_row.decoder())
+      decode.success(ActionRow(action_row))
+    }
+    9 -> {
+      use section <- decode.then(section.decoder())
+      decode.success(Section(section))
+    }
+    10 -> {
+      use text_display <- decode.then(text_display.decoder())
+      decode.success(TextDisplay(text_display))
+    }
+    12 -> {
+      use media_gallery <- decode.then(media_gallery.decoder())
+      decode.success(MediaGallery(media_gallery))
+    }
+    13 -> {
+      use file <- decode.then(component_file.decoder())
+      decode.success(File(file))
+    }
+    14 -> {
+      use separator <- decode.then(separator.decoder())
+      decode.success(Separator(separator))
+    }
+    17 -> {
+      use container <- decode.then(container.decoder())
+      decode.success(Container(container))
+    }
+    _ -> decode.failure(ActionRow(action_row.ActionRow(None, [])), "Component")
+  }
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -868,7 +966,7 @@ pub fn create_to_json(create: Create) -> Json {
 
   let components = case create.components {
     Some(components) -> [
-      #("components", json.array(components, of: component.to_json)),
+      #("components", json.array(components, of: component_to_json)),
     ]
     None -> []
   }
@@ -945,7 +1043,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
       ),
       modification.to_json(modify.components, "components", json.array(
         _,
-        component.to_json,
+        component_to_json,
       )),
       modification.to_json(modify.attachments, "attachments", json.array(
         _,
@@ -962,6 +1060,121 @@ pub fn modify_attachment_to_json(modify_attachment: ModifyAttachment) -> Json {
     ExistingAttachment(id:) -> json.object([#("id", json.string(id))])
     NewAttachment(create) -> attachment.create_to_json(create)
   }
+}
+
+@internal
+pub fn component_to_json(component: Component) -> Json {
+  case component {
+    ActionRow(action_row) -> action_row.to_json(action_row)
+    Section(section) -> section.to_json(section)
+    TextDisplay(text_display) -> text_display.to_json(text_display)
+    MediaGallery(media_gallery) -> media_gallery.to_json(media_gallery)
+    File(file) -> component_file.to_json(file)
+    Separator(separator) -> separator.to_json(separator)
+    Container(container) -> container.to_json(container)
+  }
+}
+
+@internal
+pub fn start_thread_in_forum_or_media_to_json(
+  start_thread: StartThreadInForumOrMedia,
+) -> Json {
+  let name = [#("name", json.string(start_thread.name))]
+
+  let auto_archive_duration = case start_thread.auto_archive_duration {
+    Some(duration) -> [
+      #("auto_archive_duration", time_duration.to_int_seconds_encode(duration)),
+    ]
+    None -> []
+  }
+
+  let rate_limit_per_user = case start_thread.rate_limit_per_user {
+    Some(limit) -> [
+      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+    ]
+    None -> []
+  }
+
+  let message = [
+    #(
+      "message",
+      start_thread_in_forum_or_media_message_to_json(start_thread.message),
+    ),
+  ]
+
+  let applied_tags_ids = case start_thread.applied_tags_ids {
+    Some(ids) -> [#("applied_tags", json.array(ids, json.string))]
+    None -> []
+  }
+
+  [name, auto_archive_duration, rate_limit_per_user, message, applied_tags_ids]
+  |> list.flatten
+  |> json.object
+}
+
+@internal
+pub fn start_thread_in_forum_or_media_message_to_json(
+  message: StartThreadInForumOrMediaMessage,
+) -> Json {
+  let content = case message.content {
+    Some(content) -> [#("content", json.string(content))]
+    None -> []
+  }
+
+  let embeds = case message.embeds {
+    Some(embeds) -> [#("embeds", json.array(embeds, embed.to_json))]
+    None -> []
+  }
+
+  let allowed_mentions = case message.allowed_mentions {
+    Some(allowed_mentions) -> [
+      #("allowed_mentions", allowed_mentions.to_json(allowed_mentions)),
+    ]
+    None -> []
+  }
+
+  let components = case message.components {
+    Some(components) -> [
+      #("components", json.array(components, component_to_json)),
+    ]
+    None -> []
+  }
+
+  let sticker_ids = case message.sticker_ids {
+    Some(ids) -> [#("sticker_ids", json.array(ids, json.string))]
+    None -> []
+  }
+
+  let attachments = case message.attachments {
+    Some(attachments) -> [
+      #("attachments", json.array(attachments, attachment.create_to_json)),
+    ]
+    None -> []
+  }
+
+  let flags = case message.flags {
+    Some(flags) -> [
+      #(
+        "flags",
+        flags
+          |> flags.to_int(bits_start_thread_in_forum_or_media_message_flags())
+          |> json.int,
+      ),
+    ]
+    None -> []
+  }
+
+  [
+    content,
+    embeds,
+    allowed_mentions,
+    components,
+    sticker_ids,
+    attachments,
+    flags,
+  ]
+  |> list.flatten
+  |> json.object
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
@@ -1236,4 +1449,49 @@ pub fn end_poll(
   response.body
   |> json.parse(using: decoder())
   |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn start_thread_in_forum_or_media(
+  client: grom.Client,
+  in channel_id: String,
+  with start_thread: StartThreadInForumOrMedia,
+  because reason: Option(String),
+) -> Result(Thread, grom.Error) {
+  use response <- result.try(case start_thread.files {
+    Some(files) -> {
+      client
+      |> rest.new_multipart_request(
+        http.Post,
+        "/channels/" <> channel_id <> "/threads",
+        start_thread_in_forum_or_media_to_json(start_thread),
+        files,
+      )
+      |> rest.with_reason(reason)
+      |> rest.execute_multipart
+    }
+    None -> {
+      let json = start_thread |> start_thread_in_forum_or_media_to_json
+
+      client
+      |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/threads")
+      |> request.set_body(json |> json.to_string)
+      |> rest.with_reason(reason)
+      |> rest.execute
+    }
+  })
+
+  response.body
+  |> json.parse(using: thread.decoder())
+  |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn new_start_thread_in_forum_or_media(
+  name: String,
+  message: StartThreadInForumOrMediaMessage,
+) -> StartThreadInForumOrMedia {
+  StartThreadInForumOrMedia(name, None, None, message, None, None)
+}
+
+pub fn new_start_thread_in_forum_or_media_message() -> StartThreadInForumOrMediaMessage {
+  StartThreadInForumOrMediaMessage(None, None, None, None, None, None, None)
 }

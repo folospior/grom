@@ -2,9 +2,9 @@ import gleam/dynamic/decode
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import grom/message/component/button.{type Button}
-import grom/message/component/text_display.{type TextDisplay}
-import grom/message/component/unfurled_media_item.{type UnfurledMediaItem}
+import grom/component/button.{type Button}
+import grom/component/text_display.{type TextDisplay}
+import grom/component/unfurled_media_item.{type UnfurledMediaItem}
 
 // TYPES -----------------------------------------------------------------------
 

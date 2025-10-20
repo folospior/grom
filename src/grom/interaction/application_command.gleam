@@ -3,7 +3,6 @@ import gleam/dynamic/decode
 import gleam/option.{type Option, None}
 import grom/application
 import grom/interaction/application_command/command_option.{type CommandOption}
-import grom/interaction/context_type.{type ContextType}
 import grom/permission
 
 // TYPES -----------------------------------------------------------------------
@@ -22,9 +21,15 @@ pub type ApplicationCommand {
     default_member_permissions: Option(List(permission.Permission)),
     is_nsfw: Option(Bool),
     installation_contexts: Option(List(application.InstallationContext)),
-    contexts: Option(List(ContextType)),
+    contexts: Option(List(Context)),
     version: String,
   )
+}
+
+pub type Context {
+  AllowedInGuilds
+  AllowedInBotDms
+  AllowedInPrivateChannels
 }
 
 pub type Type {
@@ -101,7 +106,7 @@ pub fn decoder() -> decode.Decoder(ApplicationCommand) {
   use contexts <- decode.optional_field(
     "contexts",
     None,
-    decode.optional(decode.list(context_type.decoder())),
+    decode.optional(decode.list(context_decoder())),
   )
   use version <- decode.field("version", decode.string)
   decode.success(ApplicationCommand(
@@ -130,6 +135,17 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     2 -> decode.success(User)
     3 -> decode.success(Message)
     _ -> decode.failure(ChatInput, "Type")
+  }
+}
+
+@internal
+pub fn context_decoder() -> decode.Decoder(Context) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(AllowedInGuilds)
+    1 -> decode.success(AllowedInBotDms)
+    2 -> decode.success(AllowedInPrivateChannels)
+    _ -> decode.failure(AllowedInGuilds, "Context")
   }
 }
 

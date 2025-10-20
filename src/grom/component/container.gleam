@@ -2,12 +2,12 @@ import gleam/dynamic/decode
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import grom/message/component/action_row.{type ActionRow}
-import grom/message/component/file.{type File}
-import grom/message/component/media_gallery.{type MediaGallery}
-import grom/message/component/section.{type Section}
-import grom/message/component/separator.{type Separator}
-import grom/message/component/text_display.{type TextDisplay}
+import grom/component/action_row.{type ActionRow}
+import grom/component/file.{type File}
+import grom/component/media_gallery.{type MediaGallery}
+import grom/component/section.{type Section}
+import grom/component/separator.{type Separator}
+import grom/component/text_display.{type TextDisplay}
 
 // TYPES -----------------------------------------------------------------------
 

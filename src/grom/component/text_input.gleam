@@ -24,6 +24,10 @@ pub type Style {
   Paragraph
 }
 
+pub type InteractionResponse {
+  InteractionResponse
+}
+
 // DECODERS --------------------------------------------------------------------
 
 @internal

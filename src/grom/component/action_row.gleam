@@ -2,13 +2,13 @@ import gleam/dynamic/decode
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import grom/message/component/button.{type Button}
-import grom/message/component/channel_select.{type ChannelSelect}
-import grom/message/component/mentionable_select.{type MentionableSelect}
-import grom/message/component/role_select.{type RoleSelect}
-import grom/message/component/string_select.{type StringSelect}
-import grom/message/component/text_input.{type TextInput}
-import grom/message/component/user_select.{type UserSelect}
+import grom/component/button.{type Button}
+import grom/component/channel_select.{type ChannelSelect}
+import grom/component/mentionable_select.{type MentionableSelect}
+import grom/component/role_select.{type RoleSelect}
+import grom/component/string_select.{type StringSelect}
+import grom/component/text_input.{type TextInput}
+import grom/component/user_select.{type UserSelect}
 
 // TYPES -----------------------------------------------------------------------
 
