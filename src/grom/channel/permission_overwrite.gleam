@@ -59,8 +59,8 @@ pub fn type_decoder() -> decode.Decoder(Type) {
 pub fn create_to_json(create: Create) -> Json {
   json.object([
     #("type", type_to_json(create.type_)),
-    #("allow", json.nullable(create.allow, permission.encode)),
-    #("deny", json.nullable(create.deny, permission.encode)),
+    #("allow", json.nullable(create.allow, permission.to_json)),
+    #("deny", json.nullable(create.deny, permission.to_json)),
   ])
 }
 

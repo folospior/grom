@@ -327,11 +327,11 @@ pub fn event_webhook_status_decoder() -> decode.Decoder(EventWebhookStatus) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn install_params_encode(install_params: InstallParams) -> Json {
+pub fn install_params_to_json(install_params: InstallParams) -> Json {
   let InstallParams(scopes:, permissions:) = install_params
   json.object([
     #("scopes", json.array(scopes, json.string)),
-    #("permissions", permission.encode(permissions)),
+    #("permissions", permission.to_json(permissions)),
   ])
 }
 
@@ -345,7 +345,16 @@ pub fn installation_context_to_string(context: InstallationContext) -> String {
 }
 
 @internal
-pub fn installation_context_config_encode(
+pub fn installation_context_to_json(context: InstallationContext) -> Json {
+  case context {
+    GuildInstall -> 0
+    UserInstall -> 1
+  }
+  |> json.int
+}
+
+@internal
+pub fn installation_context_config_to_json(
   installation_context_config: InstallationContextConfig,
 ) -> Json {
   let InstallationContextConfig(oauth2_install_params:) =
@@ -353,13 +362,13 @@ pub fn installation_context_config_encode(
   json.object([
     #("oauth2_install_params", case oauth2_install_params {
       None -> json.null()
-      option.Some(params) -> install_params_encode(params)
+      option.Some(params) -> install_params_to_json(params)
     }),
   ])
 }
 
 @internal
-pub fn event_webhook_status_encode(
+pub fn event_webhook_status_to_json(
   event_webhook_status: EventWebhookStatus,
 ) -> Json {
   case event_webhook_status {

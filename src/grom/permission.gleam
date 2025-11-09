@@ -140,6 +140,6 @@ pub fn decoder() -> decode.Decoder(List(Permission)) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn encode(permissions: List(Permission)) -> Json {
+pub fn to_json(permissions: List(Permission)) -> Json {
   json.string(permissions |> flags.to_int(permissions_bits()) |> int.to_string)
 }

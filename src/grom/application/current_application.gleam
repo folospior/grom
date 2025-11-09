@@ -60,7 +60,7 @@ fn modify_encode(modify: Modify) -> Json {
 
   let install_params = case modify.install_params {
     Some(params) -> [
-      #("install_params", application.install_params_encode(params)),
+      #("install_params", application.install_params_to_json(params)),
     ]
     None -> []
   }
@@ -72,7 +72,7 @@ fn modify_encode(modify: Modify) -> Json {
         json.dict(
           config,
           application.installation_context_to_string,
-          application.installation_context_config_encode,
+          application.installation_context_config_to_json,
         ),
       ),
     ]
@@ -111,7 +111,7 @@ fn modify_encode(modify: Modify) -> Json {
     Some(status) -> [
       #(
         "event_webhooks_status",
-        application.event_webhook_status_encode(status),
+        application.event_webhook_status_to_json(status),
       ),
     ]
     None -> []

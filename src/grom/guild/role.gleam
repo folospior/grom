@@ -180,7 +180,7 @@ pub fn create_to_json(create: Create) -> Json {
   }
 
   let permissions = case create.permissions {
-    Some(permissions) -> [#("permissions", permission.encode(permissions))]
+    Some(permissions) -> [#("permissions", permission.to_json(permissions))]
     None -> []
   }
 
@@ -225,7 +225,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let permissions =
     modify.permissions
-    |> modification.to_json("permissions", permission.encode)
+    |> modification.to_json("permissions", permission.to_json)
 
   let colors =
     modify.colors

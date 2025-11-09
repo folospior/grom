@@ -362,7 +362,6 @@ pub type Response {
   RespondWithDeferredChannelMessageWithSource(ResponseMessage)
   RespondWithDeferredUpdateMessage
   RespondWithUpdateMessage(ResponseMessage)
-  RespondWithApplicationCommandAutocompleteResult(AutocompleteResponse)
   RespondWithModal(ModalResponse)
 }
 
@@ -1203,12 +1202,6 @@ pub fn response_message_decoder() -> decode.Decoder(ResponseMessage) {
 }
 
 @internal
-pub fn autocomplete_response_decoder() -> decode.Decoder(AutocompleteResponse) {
-  use choices <- decode.field("choices", decode.list(of: choice.decoder()))
-  decode.success(AutocompleteResponse(choices:))
-}
-
-@internal
 pub fn modal_response_decoder() -> decode.Decoder(ModalResponse) {
   use custom_id <- decode.field("custom_id", decode.string)
   use title <- decode.field("title", decode.string)
@@ -1230,7 +1223,6 @@ pub fn response_to_json(response: Response) -> Json {
       RespondWithDeferredChannelMessageWithSource(..) -> json.int(5)
       RespondWithDeferredUpdateMessage -> json.int(6)
       RespondWithUpdateMessage(..) -> json.int(7)
-      RespondWithApplicationCommandAutocompleteResult(..) -> json.int(8)
       RespondWithModal(..) -> json.int(9)
     }),
   ]
@@ -1245,9 +1237,6 @@ pub fn response_to_json(response: Response) -> Json {
     RespondWithDeferredUpdateMessage -> []
     RespondWithUpdateMessage(message) -> [
       #("data", response_message_to_json(message)),
-    ]
-    RespondWithApplicationCommandAutocompleteResult(autocomplete) -> [
-      #("data", autocomplete_response_to_json(autocomplete)),
     ]
     RespondWithModal(modal) -> [#("data", modal_response_to_json(modal))]
   }
@@ -1319,16 +1308,6 @@ pub fn response_message_to_json(message: ResponseMessage) -> Json {
   ]
   |> list.flatten
   |> json.object
-}
-
-@internal
-pub fn autocomplete_response_to_json(autocomplete: AutocompleteResponse) -> Json {
-  json.object([
-    #(
-      "choices",
-      json.array(autocomplete.choices, todo as "app command choice to json"),
-    ),
-  ])
 }
 
 @internal
