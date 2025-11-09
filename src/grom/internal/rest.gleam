@@ -12,6 +12,7 @@ import grom
 import grom/file.{type File}
 import multipart_form
 import multipart_form/field
+import status_code
 
 // CONSTANTS -------------------------------------------------------------------
 
@@ -34,7 +35,7 @@ pub fn execute(request: Request(String)) -> Result(Response(String), grom.Error)
 }
 
 @internal
-pub fn execute_multipart(
+pub fn execute_bytes(
   request: Request(BitArray),
 ) -> Result(Response(String), grom.Error) {
   use response <- result.try(
@@ -124,8 +125,8 @@ pub fn with_reason(request: Request(a), reason: Option(String)) -> Request(a) {
 fn ensure_status_code_success(
   response: Response(String),
 ) -> Result(Response(String), grom.Error) {
-  case response.status {
-    status if status >= 200 && status < 300 -> Ok(response)
-    _ -> Error(grom.StatusCodeUnsuccessful(response))
+  case status_code.is_successful(response.status) {
+    True -> Ok(response)
+    False -> Error(grom.StatusCodeUnsuccessful(response))
   }
 }

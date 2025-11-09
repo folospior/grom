@@ -106,6 +106,19 @@ pub fn decoder() -> decode.Decoder(Attachment) {
   ))
 }
 
+// this is cursed and shouldn't exist
+@internal
+pub fn create_decoder() -> decode.Decoder(Create) {
+  use filename <- decode.field("filename", decode.string)
+  use description <- decode.optional_field(
+    "description",
+    None,
+    decode.optional(decode.string),
+  )
+
+  decode.success(Create(filename:, description:))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal

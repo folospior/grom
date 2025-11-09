@@ -1260,7 +1260,7 @@ pub fn create(
     }
   }
 
-  use response <- result.try(rest.execute_multipart(request))
+  use response <- result.try(rest.execute_bytes(request))
 
   response.body
   |> json.parse(using: decoder())
@@ -1405,7 +1405,7 @@ pub fn modify(
       |> request.set_body(json |> json.to_string |> bit_array.from_string)
   }
 
-  use response <- result.try(rest.execute_multipart(request))
+  use response <- result.try(rest.execute_bytes(request))
 
   response.body
   |> json.parse(using: decoder())
@@ -1467,7 +1467,7 @@ pub fn start_thread_in_forum_or_media(
         files,
       )
       |> rest.with_reason(reason)
-      |> rest.execute_multipart
+      |> rest.execute_bytes
     }
     None -> {
       let json = start_thread |> start_thread_in_forum_or_media_to_json

@@ -144,6 +144,58 @@ pub fn answer_count_decoder() -> decode.Decoder(AnswerCount) {
   decode.success(AnswerCount(id:, count:, current_user_voted:))
 }
 
+// this is cursed and shouldn't exist
+@internal
+pub fn create_decoder() -> decode.Decoder(Create) {
+  use question <- decode.field("question", create_question_decoder())
+  use answers <- decode.field(
+    "answers",
+    decode.list(of: create_answer_decoder()),
+  )
+  use duration <- decode.optional_field(
+    "duration",
+    None,
+    decode.optional(time_duration.from_int_hours_decoder()),
+  )
+  use allow_multiselect <- decode.optional_field(
+    "allow_multiselect",
+    False,
+    decode.bool,
+  )
+  use layout_type <- decode.optional_field(
+    "layout_type",
+    None,
+    decode.optional(layout_type_decoder()),
+  )
+
+  decode.success(Create(
+    question:,
+    answers:,
+    duration:,
+    allow_multiselect:,
+    layout_type:,
+  ))
+}
+
+@internal
+pub fn create_question_decoder() -> decode.Decoder(CreateQuestion) {
+  // what was i thinking
+  // why is a question's text optional
+  // actually what was discord thinking
+  use text <- decode.optional_field(
+    "text",
+    None,
+    decode.optional(decode.string),
+  )
+  decode.success(CreateQuestion(text))
+}
+
+@internal
+pub fn create_answer_decoder() -> decode.Decoder(CreateAnswer) {
+  use media <- decode.field("media", media_decoder())
+  decode.success(CreateAnswer(media))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal

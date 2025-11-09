@@ -36,6 +36,15 @@ pub fn from_int_seconds_decoder() -> decode.Decoder(Duration) {
   |> decode.success
 }
 
+@internal
+pub fn from_int_hours_decoder() -> decode.Decoder(Duration) {
+  use hours <- decode.then(decode.int)
+
+  hours
+  |> duration.hours
+  |> decode.success
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -63,5 +72,5 @@ pub fn to_int_seconds(duration: Duration) -> Int {
 
 @internal
 pub fn to_int_hours(duration: Duration) -> Int {
-  to_int_hours(duration) / 3600
+  to_int_seconds(duration) / 3600
 }

@@ -2096,7 +2096,7 @@ pub fn create_sticker(
       ),
     ])
 
-  use response <- result.try(rest.execute_multipart(request))
+  use response <- result.try(rest.execute_bytes(request))
 
   response.body
   |> json.parse(using: sticker.decoder())

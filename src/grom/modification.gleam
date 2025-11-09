@@ -5,8 +5,8 @@ import gleam/option.{None, Some}
 // TYPES -----------------------------------------------------------------------
 
 /// Sometimes, you'll find yourself passing this type into a `modify` function.
-/// This is because Gleam really has no way of determining whether to skip something
-/// or to send `null`.
+/// This is because Gleam really has no way of determining whether to skip something, leaving it unchanged
+/// or to send `null`, deleting that object from Discord's databases.
 pub type Modification(a) {
   /// Will send `a`.
   New(a)
