@@ -19,6 +19,7 @@ import grom/activity
 import grom/application.{type Application}
 import grom/channel.{type Channel}
 import grom/channel/thread.{type Thread}
+import grom/command
 import grom/emoji.{type Emoji}
 import grom/entitlement.{type Entitlement}
 import grom/gateway/connection_pid
@@ -37,7 +38,7 @@ import grom/guild/integration.{type Integration}
 import grom/guild/role.{type Role}
 import grom/guild/scheduled_event.{type ScheduledEvent}
 import grom/guild_member.{type GuildMember}
-import grom/interaction/application_command
+import grom/interaction.{type Interaction}
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
@@ -79,7 +80,7 @@ pub type Event {
   ErrorEvent(grom.Error)
   ResumedEvent
   RateLimitedEvent(RateLimitedMessage)
-  ApplicationCommandPermissionsUpdatedEvent(application_command.Permissions)
+  ApplicationCommandPermissionsUpdatedEvent(command.GuildPermissions)
   AutoModerationRuleCreatedEvent(auto_moderation.Rule)
   AutoModerationRuleUpdatedEvent(auto_moderation.Rule)
   AutoModerationRuleDeletedEvent(auto_moderation.Rule)
@@ -144,6 +145,7 @@ pub type Event {
   VoiceChannelEffectSentEvent(VoiceChannelEffectSentMessage)
   VoiceStateUpdatedEvent(voice.State)
   VoiceServerUpdatedEvent(VoiceServerUpdatedMessage)
+  InteractionCreatedEvent(Interaction)
 }
 
 pub type SessionStartLimits {
@@ -219,7 +221,7 @@ pub type DispatchedMessage {
   Ready(ReadyMessage)
   Resumed
   RateLimited(RateLimitedMessage)
-  ApplicationCommandPermissionsUpdated(application_command.Permissions)
+  ApplicationCommandPermissionsUpdated(command.GuildPermissions)
   AutoModerationRuleCreated(auto_moderation.Rule)
   AutoModerationRuleUpdated(auto_moderation.Rule)
   AutoModerationRuleDeleted(auto_moderation.Rule)
@@ -283,6 +285,7 @@ pub type DispatchedMessage {
   VoiceChannelEffectSent(VoiceChannelEffectSentMessage)
   VoiceStateUpdated(voice.State)
   VoiceServerUpdated(VoiceServerUpdatedMessage)
+  InteractionCreated(Interaction)
 }
 
 pub type ReadyMessage {
@@ -755,7 +758,7 @@ pub fn dispatched_message_decoder(
     "RATE_LIMITED" -> decode.map(rate_limited_message_decoder(), RateLimited)
     "APPLICATION_COMMAND_PERMISSIONS_UPDATE" ->
       decode.map(
-        application_command.permissions_decoder(),
+        command.guild_permissions_decoder(),
         ApplicationCommandPermissionsUpdated,
       )
     "AUTO_MODERATION_RULE_CREATE" ->
@@ -909,6 +912,8 @@ pub fn dispatched_message_decoder(
     "VOICE_STATE_UPDATE" -> decode.map(voice.state_decoder(), VoiceStateUpdated)
     "VOICE_SERVER_UPDATE" ->
       decode.map(voice_server_updated_message_decoder(), VoiceServerUpdated)
+    "INTERACTION_CREATED" ->
+      decode.map(interaction.decoder(), InteractionCreated)
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -2635,6 +2640,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, VoiceStateUpdatedEvent(voice_state))
     VoiceServerUpdated(msg) ->
       actor.send(state.actor, VoiceServerUpdatedEvent(msg))
+    InteractionCreated(interaction) ->
+      actor.send(state.actor, InteractionCreatedEvent(interaction))
   }
 }
 

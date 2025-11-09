@@ -17,7 +17,6 @@ import grom/file.{type File}
 import grom/guild.{type Guild}
 import grom/guild/role.{type Role}
 import grom/guild_member.{type GuildMember}
-import grom/interaction/application_command/choice.{type Choice}
 import grom/internal/flags
 import grom/internal/rest
 import grom/message.{type Message}
@@ -387,11 +386,6 @@ pub type ResponseMessageFlag {
   ResponseMessageWithComponentsV2
   VoiceResponseMessage
   ResponseMessageWithSuppressedNotifications
-}
-
-pub type AutocompleteResponse {
-  // TODO: revamp app command and come back
-  AutocompleteResponse(choices: List(Choice))
 }
 
 pub type ModalResponse {

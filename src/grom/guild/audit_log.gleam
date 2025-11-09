@@ -11,10 +11,10 @@ import gleam/set.{type Set}
 import grom
 import grom/channel.{type Channel}
 import grom/channel/permission_overwrite
+import grom/command.{type Command}
 import grom/guild/auto_moderation
 import grom/guild/integration
 import grom/guild/scheduled_event.{type ScheduledEvent}
-import grom/interaction/application_command.{type ApplicationCommand}
 import grom/internal/rest
 import grom/user.{type User}
 import grom/webhook.{type Webhook}
@@ -23,7 +23,7 @@ import grom/webhook.{type Webhook}
 
 pub type AuditLog {
   AuditLog(
-    application_commands: List(ApplicationCommand),
+    application_commands: List(Command),
     entries: List(Entry),
     auto_moderation_rules: List(auto_moderation.Rule),
     scheduled_events: List(ScheduledEvent),
@@ -472,7 +472,7 @@ pub fn entry_type_to_int(entry_type: EntryType) -> Int {
 pub fn decoder() -> decode.Decoder(AuditLog) {
   use application_commands <- decode.field(
     "application_commands",
-    decode.list(application_command.decoder()),
+    decode.list(command.decoder()),
   )
   use entries <- decode.field("entries", decode.list(entry_decoder()))
   use auto_moderation_rules <- decode.field(
