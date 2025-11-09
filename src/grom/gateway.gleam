@@ -146,6 +146,9 @@ pub type Event {
   VoiceStateUpdatedEvent(voice.State)
   VoiceServerUpdatedEvent(VoiceServerUpdatedMessage)
   InteractionCreatedEvent(Interaction)
+  StageInstanceCreatedEvent(StageInstance)
+  StageInstanceUpdatedEvent(StageInstance)
+  StageInstanceDeletedEvent(StageInstance)
 }
 
 pub type SessionStartLimits {
@@ -286,6 +289,9 @@ pub type DispatchedMessage {
   VoiceStateUpdated(voice.State)
   VoiceServerUpdated(VoiceServerUpdatedMessage)
   InteractionCreated(Interaction)
+  StageInstanceCreated(StageInstance)
+  StageInstanceUpdated(StageInstance)
+  StageInstanceDeleted(StageInstance)
 }
 
 pub type ReadyMessage {
@@ -912,8 +918,14 @@ pub fn dispatched_message_decoder(
     "VOICE_STATE_UPDATE" -> decode.map(voice.state_decoder(), VoiceStateUpdated)
     "VOICE_SERVER_UPDATE" ->
       decode.map(voice_server_updated_message_decoder(), VoiceServerUpdated)
-    "INTERACTION_CREATED" ->
+    "INTERACTION_CREATE" ->
       decode.map(interaction.decoder(), InteractionCreated)
+    "STAGE_INSTANCE_CREATE" ->
+      decode.map(stage_instance.decoder(), StageInstanceCreated)
+    "STAGE_INSTANCE_UPDATE" ->
+      decode.map(stage_instance.decoder(), StageInstanceUpdated)
+    "STAGE_INSTANCE_DELETE" ->
+      decode.map(stage_instance.decoder(), StageInstanceDeleted)
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -2642,6 +2654,12 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, VoiceServerUpdatedEvent(msg))
     InteractionCreated(interaction) ->
       actor.send(state.actor, InteractionCreatedEvent(interaction))
+    StageInstanceCreated(stage_instance) ->
+      actor.send(state.actor, StageInstanceCreatedEvent(stage_instance))
+    StageInstanceUpdated(stage_instance) ->
+      actor.send(state.actor, StageInstanceUpdatedEvent(stage_instance))
+    StageInstanceDeleted(stage_instance) ->
+      actor.send(state.actor, StageInstanceDeletedEvent(stage_instance))
   }
 }
 
