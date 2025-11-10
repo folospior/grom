@@ -1,6 +1,7 @@
 import gleam/http
 import gleam/http/request
 import gleam/json
+import gleam/option.{Some}
 import gleeunit
 import gleeunit/should
 import grom
@@ -13,8 +14,7 @@ pub fn main() {
 }
 
 pub fn encode_modify_current_test() {
-  current_user.new_modify()
-  |> current_user.modify_username("fo1o")
+  current_user.Modify(..current_user.new_modify(), username: Some("fo1o"))
   |> current_user.modify_encode
   |> json.to_string
   |> should.equal("{\"username\":\"fo1o\"}")

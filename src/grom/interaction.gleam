@@ -239,8 +239,8 @@ pub type SlashCommandOption {
 
 pub type SlashCommandExecution {
   SlashCommandExecution(
-    command_id: String,
-    command_name: String,
+    id: String,
+    name: String,
     resolved: Option(Resolved),
     options: List(SlashCommandOption),
     registered_to_guild_id: Option(String),
@@ -249,8 +249,8 @@ pub type SlashCommandExecution {
 
 pub type MessageCommandExecution {
   MessageCommandExecution(
-    command_id: String,
-    command_name: String,
+    id: String,
+    name: String,
     resolved: Option(Resolved),
     registered_to_guild_id: Option(String),
     message_id: String,
@@ -259,8 +259,8 @@ pub type MessageCommandExecution {
 
 pub type UserCommandExecution {
   UserCommandExecution(
-    command_id: String,
-    command_name: String,
+    id: String,
+    name: String,
     resolved: Option(Resolved),
     registered_to_guild_id: Option(String),
     user_id: String,
@@ -819,26 +819,26 @@ pub fn message_component_execution_decoder() -> decode.Decoder(
 pub fn slash_command_execution_decoder() -> decode.Decoder(
   SlashCommandExecution,
 ) {
-  use command_id <- decode.subfield(["data", "id"], decode.string)
-  use command_name <- decode.subfield(["data", "name"], decode.string)
-  use resolved <- decode.then(decode.optionally_at(
-    ["data", "resolved"],
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use resolved <- decode.optional_field(
+    "resolved",
     None,
     decode.optional(resolved_decoder()),
-  ))
-  use options <- decode.then(decode.optionally_at(
-    ["data", "options"],
+  )
+  use options <- decode.optional_field(
+    "options",
     [],
     decode.list(of: slash_command_option_decoder()),
-  ))
-  use registered_to_guild_id <- decode.then(decode.optionally_at(
-    ["data", "guild_id"],
+  )
+  use registered_to_guild_id <- decode.optional_field(
+    "guild_id",
     None,
     decode.optional(decode.string),
-  ))
+  )
   decode.success(SlashCommandExecution(
-    command_id:,
-    command_name:,
+    id:,
+    name:,
     resolved:,
     options:,
     registered_to_guild_id:,
@@ -1062,23 +1062,23 @@ pub fn resolved_channel_decoder() -> decode.Decoder(ResolvedChannel) {
 
 @internal
 pub fn user_command_execution_decoder() -> decode.Decoder(UserCommandExecution) {
-  use command_id <- decode.subfield(["data", "id"], decode.string)
-  use command_name <- decode.subfield(["data", "name"], decode.string)
-  use registered_to_guild_id <- decode.then(decode.optionally_at(
-    ["data", "guild_id"],
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use registered_to_guild_id <- decode.optional_field(
+    "guild_id",
     None,
     decode.optional(decode.string),
-  ))
-  use user_id <- decode.subfield(["data", "target_id"], decode.string)
-  use resolved <- decode.then(decode.optionally_at(
-    ["data", "resolved"],
+  )
+  use user_id <- decode.field("target_id", decode.string)
+  use resolved <- decode.optional_field(
+    "resolved",
     None,
     decode.optional(resolved_decoder()),
-  ))
+  )
 
   decode.success(UserCommandExecution(
-    command_id:,
-    command_name:,
+    id:,
+    name:,
     resolved:,
     registered_to_guild_id:,
     user_id:,
@@ -1089,22 +1089,22 @@ pub fn user_command_execution_decoder() -> decode.Decoder(UserCommandExecution) 
 pub fn message_command_execution_decoder() -> decode.Decoder(
   MessageCommandExecution,
 ) {
-  use command_id <- decode.subfield(["data", "id"], decode.string)
-  use command_name <- decode.subfield(["data", "name"], decode.string)
-  use registered_to_guild_id <- decode.then(decode.optionally_at(
-    ["data", "guild_id"],
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use registered_to_guild_id <- decode.optional_field(
+    "guild_id",
     None,
     decode.optional(decode.string),
-  ))
-  use message_id <- decode.subfield(["data", "target_id"], decode.string)
-  use resolved <- decode.then(decode.optionally_at(
-    ["data", "resolved"],
+  )
+  use message_id <- decode.field("target_id", decode.string)
+  use resolved <- decode.optional_field(
+    "resolved",
     None,
     decode.optional(resolved_decoder()),
-  ))
+  )
   decode.success(MessageCommandExecution(
-    command_id:,
-    command_name:,
+    id:,
+    name:,
     resolved:,
     registered_to_guild_id:,
     message_id:,
