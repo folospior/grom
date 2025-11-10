@@ -2,7 +2,7 @@ import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
 import gleam/json.{type Json}
-import gleam/option.{type Option}
+import gleam/option.{type Option, None}
 import gleam/result
 import grom
 import grom/internal/rest
@@ -115,4 +115,8 @@ pub fn delete(
   )
 
   Ok(Nil)
+}
+
+pub fn new_create(type_: Type) -> Create {
+  Create(type_, None, None)
 }
