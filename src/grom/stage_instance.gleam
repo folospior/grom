@@ -138,8 +138,8 @@ pub fn create(
 }
 
 pub fn new_create(
-  channel_id channel_id: String,
-  topic topic: String,
+  in channel_id: String,
+  about topic: String,
   send_start_notification send_start_notification: Bool,
 ) -> Create {
   Create(
@@ -197,4 +197,8 @@ pub fn delete(
   |> rest.with_reason(reason)
   |> rest.execute
   |> result.replace(Nil)
+}
+
+pub fn new_modify() -> Modify {
+  Modify(None, None)
 }
