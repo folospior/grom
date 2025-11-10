@@ -13,6 +13,7 @@ import stratus
 @internal
 pub type UserMessage {
   StartResume
+  StartNewConnection
   StartPresenceUpdate(UpdatePresenceMessage)
   StartVoiceStateUpdate(UpdateVoiceStateMessage)
   StartGuildMembersRequest(RequestGuildMembersMessage)

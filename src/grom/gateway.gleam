@@ -22,7 +22,7 @@ import grom/channel/thread.{type Thread}
 import grom/command
 import grom/emoji.{type Emoji}
 import grom/entitlement.{type Entitlement}
-import grom/gateway/connection_pid
+import grom/gateway/connection
 import grom/gateway/heartbeat
 import grom/gateway/intent.{type Intent}
 import grom/gateway/resuming
@@ -172,7 +172,7 @@ pub opaque type State {
     sequence_holder: Subject(sequence.Message),
     heartbeat_counter: Subject(heartbeat.Message),
     resuming_info_holder: Subject(resuming.Message),
-    connection_pid_holder: Subject(connection_pid.Message),
+    connection_holder: Subject(connection.Message),
     identify: IdentifyMessage,
     user_message_subject_holder: Subject(user_message.Message),
   )
@@ -2165,7 +2165,7 @@ pub fn start(
     |> result.replace_error(actor.InitFailed("couldn't init state")),
   )
 
-  use _ <- result.try(
+  use _supervisor <- result.try(
     static_supervisor.new(static_supervisor.OneForOne)
     |> static_supervisor.add(supervised(client, state))
     |> static_supervisor.start,
@@ -2175,9 +2175,6 @@ pub fn start(
 }
 
 fn supervised(client: grom.Client, state: State) {
-  state.connection_pid_holder
-  |> connection_pid.set(to: process.self())
-
   let start = case resuming.get_info(state.resuming_info_holder) {
     Some(info) -> {
       case resuming.is_possible(info) {
@@ -2197,6 +2194,9 @@ fn supervised(client: grom.Client, state: State) {
 
 fn new_connection(client: grom.Client, state: State) {
   fn() {
+    state.connection_holder
+    |> connection.set_pid(to: process.self())
+
     use gateway_data <- result.try(
       client
       |> get_data
@@ -2231,12 +2231,18 @@ fn new_connection(client: grom.Client, state: State) {
     state.user_message_subject_holder
     |> user_message.set_subject(subject.data)
 
+    subject.data
+    |> actor.send(user_message.StartNewConnection |> stratus.to_user_message)
+
     Ok(subject)
   }
 }
 
 fn resume(client: grom.Client, state: State, info: resuming.Info) {
   fn() {
+    state.connection_holder
+    |> connection.set_pid(to: process.self())
+
     use connection_request <- result.try(
       request.to(info.resume_gateway_url)
       |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
@@ -2282,7 +2288,7 @@ fn on_close(state: State, close_reason: stratus.CloseReason) {
   // consult on if this is a bug, no idea tbh
   // i think it's impossible state for the connection_pid to be none by the time this function gets called
   // typing requires work, impossible states defined as possible values i think
-  case connection_pid.get(state.connection_pid_holder) {
+  case connection.get_pid(state.connection_holder) {
     Some(pid) -> process.kill(pid)
     None -> Nil
   }
@@ -2394,11 +2400,11 @@ fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
   )
   let user_message_subject_holder = user_message_subject_holder.data
 
-  use connection_pid_holder <- result.try(
-    connection_pid.new_holder()
+  use connection_holder <- result.try(
+    connection.new_holder()
     |> result.map_error(string.inspect),
   )
-  let connection_pid_holder = connection_pid_holder.data
+  let connection_holder = connection_holder.data
 
   let state =
     State(
@@ -2408,7 +2414,7 @@ fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
       resuming_info_holder:,
       identify:,
       user_message_subject_holder:,
-      connection_pid_holder:,
+      connection_holder:,
     )
 
   Ok(state)
@@ -2423,6 +2429,7 @@ fn on_message(
   case message {
     stratus.Text(text_message) ->
       on_text_message(state, connection, text_message)
+    stratus.Binary(_) -> stratus.continue(state)
     stratus.User(user_message.StartResume) ->
       start_resume(client, state, connection)
     stratus.User(user_message.StartPresenceUpdate(msg)) ->
@@ -2433,8 +2440,16 @@ fn on_message(
       start_guild_members_request(state, connection, msg)
     stratus.User(user_message.StartSoundboardSoundsRequest(guild_ids)) ->
       start_soundboard_sounds_request(state, connection, guild_ids)
-    _ -> stratus.continue(state)
+    stratus.User(user_message.StartNewConnection) ->
+      start_new_connection(state, connection)
   }
+}
+
+fn start_new_connection(state: State, connection: stratus.Connection) {
+  state.connection_holder
+  |> connection.set(to: connection)
+
+  stratus.continue(state)
 }
 
 fn start_guild_members_request(
@@ -2530,7 +2545,7 @@ fn on_text_message(
     Hello(event) -> on_hello_event(state, connection, event)
     Dispatch(sequence, message) -> on_dispatch(state, sequence, message)
     HeartbeatAcknowledged -> on_heartbeat_acknowledged(state)
-    HeartbeatRequest -> on_heartbeat_request(state, connection)
+    HeartbeatRequest -> on_heartbeat_request(state)
     ReconnectRequest -> on_reconnect_request(state, connection)
     InvalidSession(can_reconnect) ->
       on_invalid_session(state, connection, can_reconnect)
@@ -2567,7 +2582,7 @@ fn on_invalid_session(
     _, _ -> Nil
   }
 
-  case connection_pid.get(state.connection_pid_holder) {
+  case connection.get_pid(state.connection_holder) {
     Some(pid) -> process.kill(pid)
     None -> Nil
   }
@@ -2592,7 +2607,7 @@ fn on_reconnect_request(state: State, connection: stratus.Connection) -> Nil {
     None -> Nil
   }
 
-  case connection_pid.get(state.connection_pid_holder) {
+  case connection.get_pid(state.connection_holder) {
     Some(pid) -> process.kill(pid)
     None -> Nil
   }
@@ -2603,6 +2618,9 @@ fn start_resume(
   state: State,
   connection: stratus.Connection,
 ) {
+  state.connection_holder
+  |> connection.set(to: connection)
+
   let resuming_info = resuming.get_info(state.resuming_info_holder)
   let last_sequence = sequence.get(state.sequence_holder)
 
@@ -2623,7 +2641,7 @@ fn start_resume(
 
   let heartbeat_counter = heartbeat.get(state.heartbeat_counter)
 
-  start_heartbeats(state, connection, heartbeat_counter.interval)
+  start_heartbeats(state, heartbeat_counter.interval)
 
   stratus.continue(state)
 }
@@ -2775,8 +2793,8 @@ fn on_ready(state: State, message: ReadyMessage) {
   |> actor.send(ReadyEvent(message))
 }
 
-fn on_heartbeat_request(state: State, connection: stratus.Connection) -> Nil {
-  case send_heartbeat(state, connection) {
+fn on_heartbeat_request(state: State) -> Nil {
+  case send_heartbeat(state) {
     Ok(_) -> Nil
     Error(err) -> {
       state.actor
@@ -2795,7 +2813,7 @@ fn on_hello_event(
   connection: stratus.Connection,
   event: HelloMessage,
 ) {
-  start_heartbeats(state, connection, event.heartbeat_interval)
+  start_heartbeats(state, event.heartbeat_interval)
   send_identify(state, connection)
 }
 
@@ -2813,12 +2831,7 @@ fn send_identify(state: State, connection: stratus.Connection) {
   }
 }
 
-/// returns the pid of the process taking care of the heartbeat loop
-fn start_heartbeats(
-  state: State,
-  connection: stratus.Connection,
-  interval: Duration,
-) {
+fn start_heartbeats(state: State, interval: Duration) {
   state.heartbeat_counter
   |> heartbeat.interval(interval)
 
@@ -2841,7 +2854,7 @@ fn start_heartbeats(
     use <-
       fn(next) {
         case
-          send_heartbeat(state, connection)
+          send_heartbeat(state)
           |> result.map_error(grom.CouldNotStartHeartbeatCycle)
         {
           Ok(_) -> next()
@@ -2850,7 +2863,7 @@ fn start_heartbeats(
       }
 
     repeatedly.call(regular_wait_duration, Nil, fn(_state, _i) {
-      case send_heartbeat(state, connection) {
+      case send_heartbeat(state) {
         Ok(_) -> Nil
         Error(error) -> actor.send(state.actor, ErrorEvent(error))
       }
@@ -2859,10 +2872,15 @@ fn start_heartbeats(
   })
 }
 
-fn send_heartbeat(
-  state: State,
-  connection: stratus.Connection,
-) -> Result(Nil, grom.Error) {
+fn send_heartbeat(state: State) -> Result(Nil, grom.Error) {
+  use connection <-
+    fn(next) {
+      case state.connection_holder |> connection.get {
+        Some(connection) -> next(connection)
+        None -> Error(grom.NoConnectionFound)
+      }
+    }
+
   let last_sequence = sequence.get(state.sequence_holder)
 
   let counter = heartbeat.get(state.heartbeat_counter)
