@@ -9,7 +9,7 @@ import grom/gateway/intent
 import grom/interaction.{type Interaction}
 import logging
 
-const token = "super secret token"
+const token = "ODI1NzUzOTgwNzE3MjM2Mjc0.GYOKqE.OmV7A8aP6bVUXPUy4ajrQH7Z7RgYHf5TDJoQlQ"
 
 type State {
   State(client: grom.Client)
@@ -67,8 +67,8 @@ fn create_actor(
 fn on_event(state: State, event: gateway.Event) {
   case event {
     gateway.ErrorEvent(error) -> {
-      logging.log(logging.Error, "Error: " <> string.inspect(error))
-      actor.stop()
+      logging.log(logging.Warning, "Error: " <> string.inspect(error))
+      actor.continue(state)
     }
     gateway.ReadyEvent(ready) -> on_ready(state, ready)
     gateway.InteractionCreatedEvent(interaction) ->

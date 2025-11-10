@@ -55,7 +55,6 @@ import grom/subscription.{type Subscription}
 import grom/user.{type User}
 import grom/voice
 import operating_system
-import repeatedly
 import stratus
 
 // TYPES -----------------------------------------------------------------------
@@ -170,7 +169,8 @@ pub opaque type State {
   State(
     actor: Subject(Event),
     sequence_holder: Subject(sequence.Message),
-    heartbeat_counter: Subject(heartbeat.Message),
+    heartbeat_counter: Subject(heartbeat.CounterMessage),
+    heartbeat_interval_holder: Subject(heartbeat.IntervalMessage),
     resuming_info_holder: Subject(resuming.Message),
     connection_holder: Subject(connection.Message),
     identify: IdentifyMessage,
@@ -2406,11 +2406,18 @@ fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
   )
   let connection_holder = connection_holder.data
 
+  use heartbeat_interval_holder <- result.try(
+    heartbeat.start_interval_holder()
+    |> result.map_error(string.inspect),
+  )
+  let heartbeat_interval_holder = heartbeat_interval_holder.data
+
   let state =
     State(
       actor:,
       sequence_holder:,
       heartbeat_counter:,
+      heartbeat_interval_holder:,
       resuming_info_holder:,
       identify:,
       user_message_subject_holder:,
@@ -2639,11 +2646,41 @@ fn start_resume(
       actor.send(state.actor, ErrorEvent(grom.CouldNotSendEvent(error)))
     })
 
-  let heartbeat_counter = heartbeat.get(state.heartbeat_counter)
+  let heartbeat_interval =
+    state.heartbeat_interval_holder
+    |> heartbeat.get_interval
 
-  start_heartbeats(state, heartbeat_counter.interval)
+  let initial_wait =
+    heartbeat_interval
+    |> duration.to_seconds
+    |> float.multiply(jitter())
+    |> float.round
+    |> duration.seconds
 
-  stratus.continue(state)
+  let heartbeat_start_result =
+    heartbeat.start(
+      call: fn() {
+        case send_heartbeat(state) {
+          Ok(_) -> Nil
+          Error(err) -> {
+            state.actor
+            |> actor.send(ErrorEvent(err))
+          }
+        }
+      },
+      every: heartbeat_interval,
+      after: initial_wait,
+    )
+
+  case heartbeat_start_result {
+    Ok(_timer) -> stratus.continue(state)
+    Error(err) -> {
+      state.actor
+      |> actor.send(ErrorEvent(err))
+
+      stratus.stop()
+    }
+  }
 }
 
 fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
@@ -2805,7 +2842,7 @@ fn on_heartbeat_request(state: State) -> Nil {
 
 fn on_heartbeat_acknowledged(state: State) -> Nil {
   state.heartbeat_counter
-  |> heartbeat.acknoweledged
+  |> heartbeat.acknowledged
 }
 
 fn on_hello_event(
@@ -2813,8 +2850,36 @@ fn on_hello_event(
   connection: stratus.Connection,
   event: HelloMessage,
 ) {
-  start_heartbeats(state, event.heartbeat_interval)
-  send_identify(state, connection)
+  state.heartbeat_interval_holder
+  |> heartbeat.set_interval(to: event.heartbeat_interval)
+
+  let initial_wait =
+    event.heartbeat_interval
+    |> duration.to_seconds
+    |> float.multiply(jitter())
+    |> float.round
+    |> duration.seconds
+
+  let heartbeat_start_result =
+    heartbeat.start(
+      call: fn() {
+        case send_heartbeat(state) {
+          Ok(_) -> Nil
+          Error(err) -> actor.send(state.actor, ErrorEvent(err))
+        }
+      },
+      every: event.heartbeat_interval,
+      after: initial_wait,
+    )
+
+  case heartbeat_start_result {
+    Ok(_) -> send_identify(state, connection)
+    Error(_) -> {
+      let _ =
+        stratus.close(connection, because: stratus.UnexpectedCondition(<<>>))
+      Nil
+    }
+  }
 }
 
 fn send_identify(state: State, connection: stratus.Connection) {
@@ -2831,47 +2896,6 @@ fn send_identify(state: State, connection: stratus.Connection) {
   }
 }
 
-fn start_heartbeats(state: State, interval: Duration) {
-  state.heartbeat_counter
-  |> heartbeat.interval(interval)
-
-  let regular_wait_duration =
-    interval
-    |> duration.to_seconds
-    |> float.multiply(1000.0)
-    |> float.round
-
-  let initial_wait_duration =
-    interval
-    |> duration.to_seconds
-    |> float.multiply(1000.0)
-    |> float.multiply(jitter())
-    |> float.round
-
-  process.spawn(fn() {
-    process.sleep(initial_wait_duration)
-
-    use <-
-      fn(next) {
-        case
-          send_heartbeat(state)
-          |> result.map_error(grom.CouldNotStartHeartbeatCycle)
-        {
-          Ok(_) -> next()
-          Error(error) -> actor.send(state.actor, ErrorEvent(error))
-        }
-      }
-
-    repeatedly.call(regular_wait_duration, Nil, fn(_state, _i) {
-      case send_heartbeat(state) {
-        Ok(_) -> Nil
-        Error(error) -> actor.send(state.actor, ErrorEvent(error))
-      }
-    })
-    Nil
-  })
-}
-
 fn send_heartbeat(state: State) -> Result(Nil, grom.Error) {
   use connection <-
     fn(next) {
@@ -2883,7 +2907,7 @@ fn send_heartbeat(state: State) -> Result(Nil, grom.Error) {
 
   let last_sequence = sequence.get(state.sequence_holder)
 
-  let counter = heartbeat.get(state.heartbeat_counter)
+  let counter = heartbeat.get_count(state.heartbeat_counter)
   use <- bool.guard(
     when: counter.heartbeat != counter.heartbeat_ack,
     return: stratus.close(connection, stratus.UnexpectedCondition(<<>>))
@@ -2899,7 +2923,10 @@ fn send_heartbeat(state: State) -> Result(Nil, grom.Error) {
     |> result.map_error(grom.CouldNotSendEvent),
   )
 
-  Ok(heartbeat.sent(state.heartbeat_counter))
+  state.heartbeat_counter
+  |> heartbeat.sent
+
+  Ok(Nil)
 }
 
 fn parse_message(text_message: String) -> Result(ReceivedMessage, grom.Error) {

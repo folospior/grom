@@ -21,7 +21,6 @@ gleam_stdlib = ">= 0.44.0 and < 2.0.0"
 gleam_time = ">= 1.1.0 and < 2.0.0"
 multipart_form = ">= 1.1.0 and < 2.0.0"
 operating_system = ">= 1.0.1 and < 2.0.0"
-repeatedly = ">= 2.1.2 and < 3.0.0"
 status_code = ">= 1.0.0 and < 2.0.0"
 discord_gleam_stratus = ">= 1.0.2 and < 2.0.0"
 

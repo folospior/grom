@@ -17,7 +17,6 @@ packages = [
   { name = "logging", version = "1.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "logging", source = "hex", outer_checksum = "1098FBF10B54B44C2C7FDF0B01C1253CAFACDACABEFB4B0D027803246753E06D" },
   { name = "multipart_form", version = "1.1.0", build_tools = ["gleam"], requirements = ["gleam_http", "gleam_stdlib"], otp_app = "multipart_form", source = "hex", outer_checksum = "082C77A0C3BB1128FCD55491665E9B72BC943E849B67D02B08CFA6808AD8E47C" },
   { name = "operating_system", version = "1.0.1", build_tools = ["gleam"], requirements = [], otp_app = "operating_system", source = "hex", outer_checksum = "682D4D19496E607A6E6229AA51A38A1400ED5067C2C54D56843DBCB0C61FFA6D" },
-  { name = "repeatedly", version = "2.1.2", build_tools = ["gleam"], requirements = [], otp_app = "repeatedly", source = "hex", outer_checksum = "93AE1938DDE0DC0F7034F32C1BF0D4E89ACEBA82198A1FE21F604E849DA5F589" },
   { name = "status_code", version = "1.1.0", build_tools = ["gleam"], requirements = [], otp_app = "status_code", source = "hex", outer_checksum = "F6EC765345A634602AD030EB1B4D34A425873CBC223CEC595EBF062073CD70BC" },
 ]
 
@@ -33,5 +32,4 @@ gleam_time = { version = ">= 1.1.0 and < 2.0.0" }
 gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
 multipart_form = { version = ">= 1.1.0 and < 2.0.0" }
 operating_system = { version = ">= 1.0.1 and < 2.0.0" }
-repeatedly = { version = ">= 2.1.2 and < 3.0.0" }
 status_code = { version = ">= 1.0.0 and < 2.0.0" }
