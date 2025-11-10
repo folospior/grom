@@ -478,3 +478,43 @@ pub fn field_to_json(field: Field) -> Json {
   |> list.flatten
   |> json.object
 }
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new() -> Embed {
+  Embed(
+    None,
+    Some(Rich),
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+  )
+}
+
+pub fn new_author(named name: String) -> Author {
+  Author(name, None, None, None)
+}
+
+pub fn new_field(named name: String, value value: String) -> Field {
+  Field(name, value, None)
+}
+
+pub fn new_footer(containing text: String) -> Footer {
+  Footer(text, None, None)
+}
+
+pub fn new_image(url url: String) -> Image {
+  Image(url, None, None, None)
+}
+
+pub fn new_video() -> Video {
+  Video(None, None, None, None)
+}
