@@ -2616,3 +2616,103 @@ pub fn get_guild_permissions(
   |> json.parse(using: guild_permissions_decoder())
   |> result.map_error(grom.CouldNotDecode)
 }
+
+pub fn new_parameter_attachment(
+  named name: String,
+  description description: String,
+) -> ParameterAttachment {
+  ParameterAttachment(name, None, description, None, False)
+}
+
+pub fn new_parameter_boolean(
+  named name: String,
+  description description: String,
+) -> ParameterBoolean {
+  ParameterBoolean(name, None, description, None, False)
+}
+
+pub fn new_parameter_channel(
+  named name: String,
+  description description: String,
+) -> ParameterChannel {
+  ParameterChannel(name, None, description, None, False, None)
+}
+
+pub fn new_parameter_integer(
+  named name: String,
+  description description: String,
+) -> ParameterInteger {
+  ParameterInteger(
+    name,
+    None,
+    description,
+    None,
+    False,
+    None,
+    None,
+    None,
+    False,
+  )
+}
+
+pub fn new_parameter_mentionable(
+  named name: String,
+  description description: String,
+) -> ParameterMentionable {
+  ParameterMentionable(name, None, description, None, False)
+}
+
+pub fn new_parameter_number(
+  named name: String,
+  description description: String,
+) -> ParameterNumber {
+  ParameterNumber(name, None, description, None, False, None, None, None, False)
+}
+
+pub fn new_parameter_role(
+  named name: String,
+  description description: String,
+) -> ParameterRole {
+  ParameterRole(name, None, description, None, False)
+}
+
+pub fn new_parameter_sub_command(
+  named name: String,
+  description description: String,
+) -> ParameterSubCommand {
+  ParameterSubCommand(name, None, description, None, None)
+}
+
+pub fn new_parameter_sub_command_group(
+  named name: String,
+  description description: String,
+  sub_commands parameters: List(Parameter),
+) -> ParameterSubCommandGroup {
+  ParameterSubCommandGroup(name, None, description, None, Some(parameters))
+}
+
+pub fn new_parameter_text(
+  named name: String,
+  description description: String,
+) -> ParameterText {
+  ParameterText(name, None, description, None, False, None, None, None, False)
+}
+
+pub fn new_parameter_user(
+  named name: String,
+  description description: String,
+) -> ParameterUser {
+  ParameterUser(name, None, description, None, False)
+}
+
+pub fn new_text_choice(named name: String, value value: String) -> TextChoice {
+  TextChoice(name, None, value)
+}
+
+pub fn new_integer_choice(named name: String, value value: Int) -> IntegerChoice {
+  IntegerChoice(name, None, value)
+}
+
+pub fn new_number_choice(named name: String, value value: Float) -> NumberChoice {
+  NumberChoice(name, None, value)
+}
