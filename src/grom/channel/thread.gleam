@@ -41,7 +41,7 @@ pub type Thread {
   )
 }
 
-pub opaque type Modify {
+pub type Modify {
   Modify(
     name: Option(String),
     is_archived: Option(Bool),
@@ -54,7 +54,7 @@ pub opaque type Modify {
   )
 }
 
-pub opaque type StartFromMessage {
+pub type StartFromMessage {
   StartFromMessage(
     name: String,
     auto_archive_duration: Option(Duration),
@@ -62,7 +62,7 @@ pub opaque type StartFromMessage {
   )
 }
 
-pub opaque type StartWithoutMessage {
+pub type StartWithoutMessage {
   StartWithoutMessage(
     name: String,
     auto_archive_duration: Option(Duration),
@@ -238,7 +238,7 @@ pub fn type_decoder() -> decode.Decoder(Type) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn type_encode(type_: Type) -> Json {
+pub fn type_to_json(type_: Type) -> Json {
   case type_ {
     Announcement -> 10
     Public -> 11
@@ -248,7 +248,7 @@ pub fn type_encode(type_: Type) -> Json {
 }
 
 @internal
-pub fn modify_encode(modify: Modify) -> Json {
+pub fn modify_to_json(modify: Modify) -> Json {
   let name = case modify.name {
     Some(name) -> [#("name", json.string(name))]
     None -> []
@@ -310,7 +310,7 @@ pub fn modify_encode(modify: Modify) -> Json {
 }
 
 @internal
-pub fn start_from_message_encode(start_from_message: StartFromMessage) -> Json {
+pub fn start_from_message_to_json(start_from_message: StartFromMessage) -> Json {
   let name = [#("name", json.string(start_from_message.name))]
 
   let auto_archive_duration = case start_from_message.auto_archive_duration {
@@ -333,7 +333,7 @@ pub fn start_from_message_encode(start_from_message: StartFromMessage) -> Json {
 }
 
 @internal
-pub fn start_without_message_encode(
+pub fn start_without_message_to_json(
   start_without_message: StartWithoutMessage,
 ) -> Json {
   let name = [#("name", json.string(start_without_message.name))]
@@ -346,7 +346,7 @@ pub fn start_without_message_encode(
   }
 
   let type_ = case start_without_message.type_ {
-    Some(type_) -> [#("type", type_encode(type_))]
+    Some(type_) -> [#("type", type_to_json(type_))]
     None -> []
   }
 
@@ -375,7 +375,7 @@ pub fn modify(
   with modify: Modify,
   because reason: Option(String),
 ) -> Result(Thread, grom.Error) {
-  let json = modify |> modify_encode
+  let json = modify |> modify_to_json
 
   use response <- result.try(
     client
@@ -403,50 +403,6 @@ pub fn new_modify() -> Modify {
   )
 }
 
-pub fn modify_name(modify: Modify, new name: String) -> Modify {
-  Modify(..modify, name: Some(name))
-}
-
-pub fn modify_is_archived(modify: Modify, new is_archived: Bool) -> Modify {
-  Modify(..modify, is_archived: Some(is_archived))
-}
-
-pub fn modify_auto_archive_duration(
-  modify: Modify,
-  new duration: Duration,
-) -> Modify {
-  Modify(..modify, auto_archive_duration: Some(duration))
-}
-
-pub fn modify_is_locked(modify: Modify, new is_locked: Bool) -> Modify {
-  Modify(..modify, is_locked: Some(is_locked))
-}
-
-pub fn modify_is_invitable(modify: Modify, new is_invitable: Bool) -> Modify {
-  Modify(..modify, is_invitable: Some(is_invitable))
-}
-
-pub fn modify_rate_limit_per_user(
-  modify: Modify,
-  limit limit: Modification(Duration),
-) -> Modify {
-  Modify(..modify, rate_limit_per_user: limit)
-}
-
-pub fn modify_flags(
-  modify: Modify,
-  flags flags: Modification(List(Flag)),
-) -> Modify {
-  Modify(..modify, flags:)
-}
-
-pub fn modify_applied_tags_ids(
-  modify: Modify,
-  ids ids: Modification(List(String)),
-) -> Modify {
-  Modify(..modify, applied_tags_ids: ids)
-}
-
 pub fn start_from_message(
   client: grom.Client,
   in channel_id: String,
@@ -454,7 +410,7 @@ pub fn start_from_message(
   with start_from_message: StartFromMessage,
   because reason: Option(String),
 ) -> Result(Thread, grom.Error) {
-  let json = start_from_message |> start_from_message_encode
+  let json = start_from_message |> start_from_message_to_json
 
   use response <- result.try(
     client
@@ -480,27 +436,13 @@ pub fn new_start_from_message(name: String) -> StartFromMessage {
   )
 }
 
-pub fn start_from_message_with_auto_archive_duration(
-  start_from_message: StartFromMessage,
-  duration: Duration,
-) -> StartFromMessage {
-  StartFromMessage(..start_from_message, auto_archive_duration: Some(duration))
-}
-
-pub fn start_from_message_with_rate_limit_per_user(
-  start_from_message: StartFromMessage,
-  limit: Duration,
-) -> StartFromMessage {
-  StartFromMessage(..start_from_message, rate_limit_per_user: Some(limit))
-}
-
 pub fn start_without_message(
   client: grom.Client,
   in channel_id: String,
   with start_without_message: StartWithoutMessage,
   reason reason: Option(String),
 ) -> Result(Thread, grom.Error) {
-  let json = start_without_message |> start_without_message_encode
+  let json = start_without_message |> start_without_message_to_json
 
   use response <- result.try(
     client
@@ -523,37 +465,6 @@ pub fn new_start_without_message(name: String) -> StartWithoutMessage {
     is_invitable: None,
     rate_limit_per_user: None,
   )
-}
-
-pub fn start_without_message_with_auto_archive_duration(
-  start_without_message: StartWithoutMessage,
-  duration: Duration,
-) -> StartWithoutMessage {
-  StartWithoutMessage(
-    ..start_without_message,
-    auto_archive_duration: Some(duration),
-  )
-}
-
-pub fn start_without_message_with_type(
-  start_without_message: StartWithoutMessage,
-  type_: Type,
-) -> StartWithoutMessage {
-  StartWithoutMessage(..start_without_message, type_: Some(type_))
-}
-
-pub fn start_without_message_with_is_invitable(
-  start_without_message: StartWithoutMessage,
-  is_invitable: Bool,
-) -> StartWithoutMessage {
-  StartWithoutMessage(..start_without_message, is_invitable: Some(is_invitable))
-}
-
-pub fn start_without_message_with_rate_limit_per_user(
-  start_without_message: StartWithoutMessage,
-  limit: Duration,
-) -> StartWithoutMessage {
-  StartWithoutMessage(..start_without_message, rate_limit_per_user: Some(limit))
 }
 
 pub fn join(
