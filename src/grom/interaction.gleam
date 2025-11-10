@@ -1674,3 +1674,7 @@ pub fn delete_followup(
   |> rest.execute
   |> result.replace(Nil)
 }
+
+pub fn new_response_message() -> ResponseMessage {
+  ResponseMessage(None, None, None, None, None, None, None, None, None)
+}
