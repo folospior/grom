@@ -51,6 +51,7 @@ import grom/modification.{type Modification}
 import grom/soundboard
 import grom/stage_instance.{type StageInstance}
 import grom/sticker.{type Sticker}
+import grom/subscription.{type Subscription}
 import grom/user.{type User}
 import grom/voice
 import operating_system
@@ -149,6 +150,9 @@ pub type Event {
   StageInstanceCreatedEvent(StageInstance)
   StageInstanceUpdatedEvent(StageInstance)
   StageInstanceDeletedEvent(StageInstance)
+  SubscriptionCreatedEvent(Subscription)
+  SubscriptionUpdatedEvent(Subscription)
+  SubscriptionDeletedEvent(Subscription)
 }
 
 pub type SessionStartLimits {
@@ -292,6 +296,9 @@ pub type DispatchedMessage {
   StageInstanceCreated(StageInstance)
   StageInstanceUpdated(StageInstance)
   StageInstanceDeleted(StageInstance)
+  SubscriptionCreated(Subscription)
+  SubscriptionUpdated(Subscription)
+  SubscriptionDeleted(Subscription)
 }
 
 pub type ReadyMessage {
@@ -926,6 +933,12 @@ pub fn dispatched_message_decoder(
       decode.map(stage_instance.decoder(), StageInstanceUpdated)
     "STAGE_INSTANCE_DELETE" ->
       decode.map(stage_instance.decoder(), StageInstanceDeleted)
+    "SUBSCRIPTION_CREATE" ->
+      decode.map(subscription.decoder(), SubscriptionCreated)
+    "SUBSCRIPTION_UPDATE" ->
+      decode.map(subscription.decoder(), SubscriptionUpdated)
+    "SUBSCRIPTION_DELETE" ->
+      decode.map(subscription.decoder(), SubscriptionDeleted)
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -2660,6 +2673,12 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, StageInstanceUpdatedEvent(stage_instance))
     StageInstanceDeleted(stage_instance) ->
       actor.send(state.actor, StageInstanceDeletedEvent(stage_instance))
+    SubscriptionCreated(subscription) ->
+      actor.send(state.actor, SubscriptionCreatedEvent(subscription))
+    SubscriptionUpdated(subscription) ->
+      actor.send(state.actor, SubscriptionUpdatedEvent(subscription))
+    SubscriptionDeleted(subscription) ->
+      actor.send(state.actor, SubscriptionDeletedEvent(subscription))
   }
 }
 
