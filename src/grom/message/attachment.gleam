@@ -140,7 +140,3 @@ pub fn create_to_json(create: Create) -> Json {
 pub fn new_create(filename: String) -> Create {
   Create(filename, description: None)
 }
-
-pub fn create_with_description(create: Create, description: String) -> Create {
-  Create(..create, description: Some(description))
-}
