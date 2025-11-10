@@ -132,7 +132,7 @@ fn type_encode(type_: Type) -> Json {
 
 pub fn get(
   client: grom.Client,
-  application_id: String,
+  for application_id: String,
 ) -> Result(List(RoleConnectionMetadata), grom.Error) {
   use response <- result.try(
     client
@@ -150,7 +150,7 @@ pub fn get(
 
 pub fn modify(
   client: grom.Client,
-  application_id: String,
+  for application_id: String,
   new metadata: List(RoleConnectionMetadata),
 ) -> Result(List(RoleConnectionMetadata), grom.Error) {
   let json = json.array(metadata, encode)
