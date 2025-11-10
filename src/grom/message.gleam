@@ -1023,6 +1023,7 @@ pub fn nonce_to_json(nonce: Nonce) -> Json {
   }
 }
 
+@internal
 pub fn modify_to_json(modify: Modify) -> Json {
   json.object(
     [
