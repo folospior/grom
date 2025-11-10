@@ -15,7 +15,7 @@ import grom/webhook_event
 
 // TYPES -----------------------------------------------------------------------
 
-pub opaque type Modify {
+pub type Modify {
   Modify(
     custom_install_url: Option(String),
     description: Option(String),
@@ -40,7 +40,7 @@ pub opaque type Modify {
 
 // ENCODERS --------------------------------------------------------------------
 
-fn modify_encode(modify: Modify) -> Json {
+fn modify_to_json(modify: Modify) -> Json {
   let custom_install_url = case modify.custom_install_url {
     Some(url) -> [#("custom_install_url", json.string(url))]
     None -> []
@@ -161,7 +161,7 @@ pub fn modify(
   client: grom.Client,
   with modify: Modify,
 ) -> Result(Application, grom.Error) {
-  let json = modify |> modify_encode
+  let json = modify |> modify_to_json
 
   use response <- result.try(
     client
@@ -191,69 +191,4 @@ pub fn new_modify() -> Modify {
     event_webhooks_status: None,
     event_webhooks_types: None,
   )
-}
-
-pub fn modify_custom_install_url(modify: Modify, url: String) -> Modify {
-  Modify(..modify, custom_install_url: Some(url))
-}
-
-pub fn modify_description(modify: Modify, description: String) -> Modify {
-  Modify(..modify, description: Some(description))
-}
-
-pub fn modify_role_connections_verification_url(
-  modify: Modify,
-  url: String,
-) -> Modify {
-  Modify(..modify, role_connections_verification_url: Some(url))
-}
-
-pub fn modify_install_params(
-  modify: Modify,
-  params: application.InstallParams,
-) -> Modify {
-  Modify(..modify, install_params: Some(params))
-}
-
-/// Only `GatewayPresenceLimited`, `GatewayGuildMembersLimited`, and `GatewayMessageContentLimited`
-/// flags can be updated.
-pub fn modify_flags(modify: Modify, flags: List(application.Flag)) -> Modify {
-  Modify(..modify, flags: Some(flags))
-}
-
-pub fn modify_icon(modify: Modify, icon: Modification(image.Data)) -> Modify {
-  Modify(..modify, icon:)
-}
-
-pub fn modify_cover_image(
-  modify: Modify,
-  cover_image: Modification(image.Data),
-) -> Modify {
-  Modify(..modify, cover_image:)
-}
-
-pub fn modify_interactions_endpoint_url(modify: Modify, url: String) -> Modify {
-  Modify(..modify, interactions_endpoint_url: Some(url))
-}
-
-pub fn modify_tags(modify: Modify, tags: List(String)) -> Modify {
-  Modify(..modify, tags: Some(tags))
-}
-
-pub fn modify_event_webhooks_url(modify: Modify, url: String) -> Modify {
-  Modify(..modify, event_webhooks_url: Some(url))
-}
-
-pub fn modify_event_webhooks_status(
-  modify: Modify,
-  status: application.EventWebhookStatus,
-) -> Modify {
-  Modify(..modify, event_webhooks_status: Some(status))
-}
-
-pub fn modify_event_webhooks_types(
-  modify: Modify,
-  types: List(webhook_event.Type),
-) -> Modify {
-  Modify(..modify, event_webhooks_types: Some(types))
 }
