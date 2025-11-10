@@ -1,5 +1,3 @@
-// TODO: REWRITE
-
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
@@ -87,7 +85,7 @@ pub fn change_decoder() -> decode.Decoder(Change) {
 
 pub type Entry {
   Entry(
-    target_id: option.Option(String),
+    target_id: Option(String),
     changes: Option(List(Change)),
     user_id: Option(String),
     id: String,

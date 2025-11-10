@@ -55,7 +55,6 @@ pub type Message {
     is_tts: Bool,
     mentions_everyone: Bool,
     mentions_users: List(User),
-    // TODO: Fix this being List(Role), not List(String)
     mentions_roles: List(String),
     mentions_channels: Option(List(ChannelMention)),
     attachments: List(Attachment),

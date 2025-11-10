@@ -15,6 +15,7 @@ import grom/emoji.{type Emoji}
 import grom/guild/auto_moderation
 import grom/guild/integration.{type Integration}
 import grom/guild/role.{type Role}
+import grom/guild/scheduled_event.{type ScheduledEvent}
 import grom/guild_member.{type GuildMember}
 import grom/image
 import grom/internal/flags
@@ -2142,4 +2143,19 @@ pub fn delete_sticker(
   |> rest.with_reason(reason)
   |> rest.execute
   |> result.replace(Nil)
+}
+
+pub fn get_scheduled_events(
+  client: grom.Client,
+  for guild_id: String,
+) -> Result(List(ScheduledEvent), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/guilds/" <> guild_id <> "/scheduled-events")
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.list(of: scheduled_event.decoder()))
+  |> result.map_error(grom.CouldNotDecode)
 }
