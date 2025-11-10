@@ -90,18 +90,6 @@ pub fn new_modify() -> Modify {
   Modify(username: None, avatar: None, banner: None)
 }
 
-pub fn modify_username(modify: Modify, username: String) -> Modify {
-  Modify(..modify, username: Some(username))
-}
-
-pub fn modify_avatar(modify: Modify, avatar: image.Data) -> Modify {
-  Modify(..modify, avatar: Some(avatar))
-}
-
-pub fn modify_banner(modify: Modify, banner: image.Data) -> Modify {
-  Modify(..modify, banner: Some(banner))
-}
-
 pub fn get_guilds(
   client: grom.Client,
   with query: List(GetGuildsQuery),
