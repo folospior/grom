@@ -396,3 +396,7 @@ pub fn delete(
   |> rest.execute
   |> result.replace(Nil)
 }
+
+pub fn new_create() -> Create {
+  Create(None, None, None, None, None, None)
+}
