@@ -304,3 +304,19 @@ pub fn get_voters_for_answer(
   |> json.parse(using: response_decoder)
   |> result.map_error(grom.CouldNotDecode)
 }
+
+pub fn new_create(
+  asking question: CreateQuestion,
+  answers answers: List(CreateAnswer),
+  allowing_multiselect allow_multiselect: Bool,
+) -> Create {
+  Create(question, answers, None, allow_multiselect, None)
+}
+
+pub fn new_create_question() -> CreateQuestion {
+  CreateQuestion(None)
+}
+
+pub fn new_media() -> Media {
+  Media(None, None)
+}
