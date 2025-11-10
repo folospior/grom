@@ -76,6 +76,7 @@ pub opaque type Message {
   ResetSubject
 }
 
+@internal
 pub fn new_subject_holder(
   subject: Option(Subject(stratus.InternalMessage(UserMessage))),
 ) {
@@ -185,12 +186,14 @@ pub fn update_voice_state_message_to_json(
   ])
 }
 
+@internal
 pub fn get_subject(
   actor: Subject(Message),
 ) -> Option(Subject(stratus.InternalMessage(UserMessage))) {
   actor.call(actor, 10, GetSubject)
 }
 
+@internal
 pub fn set_subject(
   actor: Subject(Message),
   to new: Subject(stratus.InternalMessage(UserMessage)),
