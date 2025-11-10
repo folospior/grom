@@ -66,7 +66,7 @@ pub type Action {
   BlockMemberInteraction
 }
 
-pub opaque type CreateRule {
+pub type CreateRule {
   CreateRule(
     name: String,
     trigger: Trigger,
@@ -77,7 +77,7 @@ pub opaque type CreateRule {
   )
 }
 
-pub opaque type ModifyRule {
+pub type ModifyRule {
   ModifyRule(
     name: Option(String),
     /// You can only modify the inner data, you _can't_ change the trigger.
@@ -123,6 +123,7 @@ pub fn rule_decoder() -> decode.Decoder(Rule) {
   ))
 }
 
+@internal
 pub fn trigger_decoder(trigger_type: Int) -> decode.Decoder(Trigger) {
   case trigger_type {
     1 | 6 -> {
@@ -470,20 +471,6 @@ pub fn new_create_rule(
   )
 }
 
-pub fn create_rule_with_exempt_roles(
-  create_rule: CreateRule,
-  ids exempt_role_ids: List(String),
-) -> CreateRule {
-  CreateRule(..create_rule, exempt_role_ids: Some(exempt_role_ids))
-}
-
-pub fn create_rule_with_exempt_channels(
-  create_rule: CreateRule,
-  ids exempt_channel_ids: List(String),
-) -> CreateRule {
-  CreateRule(..create_rule, exempt_channel_ids: Some(exempt_channel_ids))
-}
-
 pub fn modify_rule(
   client: grom.Client,
   in guild_id: String,
@@ -509,44 +496,8 @@ pub fn modify_rule(
   |> result.map_error(grom.CouldNotDecode)
 }
 
-pub fn modify_rule_name(modify_rule: ModifyRule, new name: String) -> ModifyRule {
-  ModifyRule(..modify_rule, name: Some(name))
-}
-
-pub fn modify_rule_trigger(
-  modify_rule: ModifyRule,
-  new trigger: Trigger,
-) -> ModifyRule {
-  ModifyRule(..modify_rule, trigger: Some(trigger))
-}
-
-pub fn modify_rule_actions(
-  modify_rule: ModifyRule,
-  new actions: List(Action),
-) -> ModifyRule {
-  ModifyRule(..modify_rule, actions: Some(actions))
-}
-
-pub fn enable_rule(modify_rule: ModifyRule) -> ModifyRule {
-  ModifyRule(..modify_rule, is_enabled: Some(True))
-}
-
-pub fn disable_rule(modify_rule: ModifyRule) -> ModifyRule {
-  ModifyRule(..modify_rule, is_enabled: Some(False))
-}
-
-pub fn exempt_roles_from_rule(
-  modify_rule: ModifyRule,
-  ids exempt_role_ids: List(String),
-) -> ModifyRule {
-  ModifyRule(..modify_rule, exempt_role_ids: Some(exempt_role_ids))
-}
-
-pub fn exempt_channels_from_rule(
-  modify_rule: ModifyRule,
-  ids exempt_channel_ids: List(String),
-) -> ModifyRule {
-  ModifyRule(..modify_rule, exempt_channel_ids: Some(exempt_channel_ids))
+pub fn new_modify_rule() -> ModifyRule {
+  ModifyRule(None, None, None, None, None, None)
 }
 
 pub fn delete_rule(
