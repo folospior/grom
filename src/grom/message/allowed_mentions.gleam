@@ -104,31 +104,3 @@ pub fn type_to_json(type_: Type) -> Json {
 pub fn new() -> AllowedMentions {
   AllowedMentions(None, None, None, None)
 }
-
-pub fn with_types(
-  allowed_mentions: AllowedMentions,
-  types: List(Type),
-) -> AllowedMentions {
-  AllowedMentions(..allowed_mentions, types: Some(types))
-}
-
-pub fn with_roles_ids(
-  allowed_mentions: AllowedMentions,
-  roles_ids: List(String),
-) -> AllowedMentions {
-  AllowedMentions(..allowed_mentions, roles_ids: Some(roles_ids))
-}
-
-pub fn with_users_ids(
-  allowed_mentions: AllowedMentions,
-  users_ids: List(String),
-) -> AllowedMentions {
-  AllowedMentions(..allowed_mentions, users_ids: Some(users_ids))
-}
-
-pub fn with_replied_user(
-  allowed_mentions: AllowedMentions,
-  replied_user: Bool,
-) -> AllowedMentions {
-  AllowedMentions(..allowed_mentions, replied_user: Some(replied_user))
-}
