@@ -153,6 +153,8 @@ pub type Event {
   SubscriptionCreatedEvent(Subscription)
   SubscriptionUpdatedEvent(Subscription)
   SubscriptionDeletedEvent(Subscription)
+  PollVoteCreatedEvent(PollVoteCreatedMessage)
+  PollVoteDeletedEvent(PollVoteDeletedMessage)
 }
 
 pub type SessionStartLimits {
@@ -299,6 +301,8 @@ pub type DispatchedMessage {
   SubscriptionCreated(Subscription)
   SubscriptionUpdated(Subscription)
   SubscriptionDeleted(Subscription)
+  PollVoteCreated(PollVoteCreatedMessage)
+  PollVoteDeleted(PollVoteDeletedMessage)
 }
 
 pub type ReadyMessage {
@@ -667,6 +671,26 @@ pub type VoiceServerUpdatedMessage {
   )
 }
 
+pub type PollVoteCreatedMessage {
+  PollVoteCreatedMessage(
+    user_id: String,
+    channel_id: String,
+    message_id: String,
+    guild_id: Option(String),
+    answer_id: Int,
+  )
+}
+
+pub type PollVoteDeletedMessage {
+  PollVoteDeletedMessage(
+    user_id: String,
+    channel_id: String,
+    message_id: String,
+    guild_id: Option(String),
+    answer_id: Int,
+  )
+}
+
 // SEND EVENTS -----------------------------------------------------------------
 
 pub type SentMessage {
@@ -939,6 +963,10 @@ pub fn dispatched_message_decoder(
       decode.map(subscription.decoder(), SubscriptionUpdated)
     "SUBSCRIPTION_DELETE" ->
       decode.map(subscription.decoder(), SubscriptionDeleted)
+    "MESSAGE_POLL_VOTE_ADD" ->
+      decode.map(poll_vote_created_message_decoder(), PollVoteCreated)
+    "MESSAGE_POLL_VOTE_REMOVE" ->
+      decode.map(poll_vote_deleted_message_decoder(), PollVoteDeleted)
     _ -> decode.failure(Resumed, "DispatchedMessage")
   }
 }
@@ -1975,6 +2003,52 @@ pub fn voice_server_updated_message_decoder() -> decode.Decoder(
   decode.success(VoiceServerUpdatedMessage(token:, guild_id:, endpoint:))
 }
 
+@internal
+pub fn poll_vote_created_message_decoder() -> decode.Decoder(
+  PollVoteCreatedMessage,
+) {
+  use user_id <- decode.field("user_id", decode.string)
+  use channel_id <- decode.field("channel_id", decode.string)
+  use message_id <- decode.field("message_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use answer_id <- decode.field("answer_id", decode.int)
+
+  decode.success(PollVoteCreatedMessage(
+    user_id:,
+    channel_id:,
+    message_id:,
+    guild_id:,
+    answer_id:,
+  ))
+}
+
+@internal
+pub fn poll_vote_deleted_message_decoder() -> decode.Decoder(
+  PollVoteDeletedMessage,
+) {
+  use user_id <- decode.field("user_id", decode.string)
+  use channel_id <- decode.field("channel_id", decode.string)
+  use message_id <- decode.field("message_id", decode.string)
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use answer_id <- decode.field("answer_id", decode.int)
+
+  decode.success(PollVoteDeletedMessage(
+    user_id:,
+    channel_id:,
+    message_id:,
+    guild_id:,
+    answer_id:,
+  ))
+}
+
 // ENCODERS --------------------------------------------------------------------
 
 @internal
@@ -2679,6 +2753,8 @@ fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
       actor.send(state.actor, SubscriptionUpdatedEvent(subscription))
     SubscriptionDeleted(subscription) ->
       actor.send(state.actor, SubscriptionDeletedEvent(subscription))
+    PollVoteCreated(msg) -> actor.send(state.actor, PollVoteCreatedEvent(msg))
+    PollVoteDeleted(msg) -> actor.send(state.actor, PollVoteDeletedEvent(msg))
   }
 }
 
