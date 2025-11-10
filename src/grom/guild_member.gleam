@@ -11,7 +11,7 @@ import grom
 import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_rfc3339
-import grom/modification.{type Modification}
+import grom/modification.{type Modification, Skip}
 import grom/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
@@ -346,4 +346,8 @@ pub fn kick(
   because reason: Option(String),
 ) -> Result(Nil, grom.Error) {
   remove(client, from: guild_id, id: user_id, because: reason)
+}
+
+pub fn new_modify() -> Modify {
+  Modify(Skip, Skip, None, None, Skip, Skip, Skip)
 }
