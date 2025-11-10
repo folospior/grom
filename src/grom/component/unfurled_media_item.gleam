@@ -53,6 +53,6 @@ pub fn to_json(unfurled_media_item: UnfurledMediaItem) -> Json {
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
 
-pub fn new(url: String) -> UnfurledMediaItem {
+pub fn new(url url: String) -> UnfurledMediaItem {
   UnfurledMediaItem(url, None, None, None, None)
 }

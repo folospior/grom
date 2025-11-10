@@ -10,7 +10,6 @@ pub type TextInput {
     id: Option(Int),
     custom_id: String,
     style: Style,
-    label: String,
     min_length: Int,
     max_length: Int,
     is_required: Bool,
@@ -24,10 +23,6 @@ pub type Style {
   Paragraph
 }
 
-pub type InteractionResponse {
-  InteractionResponse
-}
-
 // DECODERS --------------------------------------------------------------------
 
 @internal
@@ -35,7 +30,6 @@ pub fn decoder() -> decode.Decoder(TextInput) {
   use id <- decode.optional_field("id", None, decode.optional(decode.int))
   use custom_id <- decode.field("custom_id", decode.string)
   use style <- decode.field("style", style_decoder())
-  use label <- decode.field("label", decode.string)
   use min_length <- decode.optional_field("min_length", 0, decode.int)
   use max_length <- decode.optional_field("max_length", 4000, decode.int)
   use is_required <- decode.optional_field("required", True, decode.bool)
@@ -54,7 +48,6 @@ pub fn decoder() -> decode.Decoder(TextInput) {
     id:,
     custom_id:,
     style:,
-    label:,
     min_length:,
     max_length:,
     is_required:,
@@ -88,8 +81,6 @@ pub fn to_json(text_input: TextInput) -> Json {
 
   let style = [#("style", style_to_json(text_input.style))]
 
-  let label = [#("label", json.string(text_input.label))]
-
   let min_length = [#("min_length", json.int(text_input.min_length))]
 
   let max_length = [#("max_length", json.int(text_input.max_length))]
@@ -111,7 +102,6 @@ pub fn to_json(text_input: TextInput) -> Json {
     id,
     custom_id,
     style,
-    label,
     min_length,
     max_length,
     is_required,
@@ -129,4 +119,10 @@ pub fn style_to_json(style: Style) -> Json {
     Paragraph -> 2
   }
   |> json.int
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(custom_id custom_id: String, style style: Style) -> TextInput {
+  TextInput(None, custom_id, style, 0, 4000, True, None, None)
 }

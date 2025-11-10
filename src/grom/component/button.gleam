@@ -197,3 +197,21 @@ pub fn emoji_to_json(emoji: Emoji) -> Json {
   |> list.flatten
   |> json.object
 }
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new_regular(custom_id custom_id: String) -> Button {
+  Regular(None, False, Primary, None, None, custom_id:)
+}
+
+pub fn new_link(url url: String) -> Button {
+  Link(None, False, None, None, url:)
+}
+
+pub fn new_premium(sku_id sku_id: String) -> Button {
+  Premium(None, False, sku_id:)
+}
+
+pub fn new_emoji(named name: String) -> Emoji {
+  Emoji(None, name, False)
+}

@@ -35,3 +35,9 @@ pub fn to_json(text_display: TextDisplay) -> Json {
   |> list.flatten
   |> json.object
 }
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(showing content: String) -> TextDisplay {
+  TextDisplay(None, content)
+}

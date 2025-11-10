@@ -118,3 +118,9 @@ pub fn component_to_json(component: Component) -> Json {
     File(file) -> file.to_json(file)
   }
 }
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(containing components: List(Component)) -> Container {
+  Container(None, components, None, False)
+}

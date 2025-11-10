@@ -109,3 +109,9 @@ pub fn component_to_json(component: Component) -> Json {
     ChannelSelect(channel_select) -> channel_select.to_json(channel_select)
   }
 }
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(containing components: List(Component)) -> ActionRow {
+  ActionRow(id: None, components:)
+}

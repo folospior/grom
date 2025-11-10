@@ -121,3 +121,9 @@ pub fn default_value_to_json(default_value: DefaultValue) -> Json {
     ),
   ])
 }
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(custom_id custom_id: String) -> MentionableSelect {
+  MentionableSelect(None, custom_id, None, None, 1, 1, False)
+}

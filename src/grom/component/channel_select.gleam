@@ -3,6 +3,8 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 
+// TYPES -----------------------------------------------------------------------
+
 pub type ChannelSelect {
   ChannelSelect(
     id: Option(Int),
@@ -28,6 +30,8 @@ pub type ChannelType {
 pub type DefaultValue {
   DefaultValue(id: String)
 }
+
+// DECODERS --------------------------------------------------------------------
 
 @internal
 pub fn decoder() -> decode.Decoder(ChannelSelect) {
@@ -154,4 +158,10 @@ pub fn default_value_to_json(default_value: DefaultValue) -> Json {
     #("id", json.string(default_value.id)),
     #("type", json.string("channel")),
   ])
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(custom_id custom_id: String) -> ChannelSelect {
+  ChannelSelect(None, custom_id, None, None, None, 1, 1, False)
 }

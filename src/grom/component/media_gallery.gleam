@@ -68,3 +68,13 @@ pub fn item_to_json(item: Item) -> Json {
   |> list.flatten
   |> json.object
 }
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(containing items: List(Item)) -> MediaGallery {
+  MediaGallery(None, items)
+}
+
+pub fn new_item(showing media: UnfurledMediaItem) -> Item {
+  Item(media, None, False)
+}

@@ -135,3 +135,16 @@ pub fn accessory_to_json(accessory: Accessory) -> Json {
     }
   }
 }
+
+// PUBLIC API FUNCTION ---------------------------------------------------------
+
+pub fn new(
+  containing components: List(Component),
+  accompanied_by accessory: Accessory,
+) -> Section {
+  Section(None, components:, accessory:)
+}
+
+pub fn new_thumbnail(showing media: UnfurledMediaItem) -> Accessory {
+  Thumbnail(None, media, None, False)
+}

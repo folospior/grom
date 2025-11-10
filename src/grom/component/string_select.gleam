@@ -27,10 +27,6 @@ pub type Option {
   )
 }
 
-pub type InteractionResponse {
-  InteractionResponse(id: Int, custom_id: String, selected_values: List(String))
-}
-
 pub type Emoji {
   Emoji(id: GOption(String), name: String, is_animated: Bool)
 }
@@ -167,4 +163,17 @@ pub fn emoji_to_json(emoji: Emoji) -> Json {
   [id, name, is_animated]
   |> list.flatten
   |> json.object
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(
+  custom_id custom_id: String,
+  containing options: List(Option),
+) -> StringSelect {
+  StringSelect(None, custom_id, options, None, 1, 1, False)
+}
+
+pub fn new_option(labeled label: String, value value: String) -> Option {
+  Option(label, value, None, None, False)
 }

@@ -63,6 +63,7 @@ pub fn component_decoder() -> decode.Decoder(Component) {
 
 // ENCODERS --------------------------------------------------------------------
 
+@internal
 pub fn to_json(label: Label) -> Json {
   let id = case label.id {
     Some(id) -> [#("id", json.int(id))]
@@ -95,4 +96,10 @@ pub fn component_to_json(component: Component) -> Json {
     ChannelSelect(channel_select) -> channel_select.to_json(channel_select)
     FileUpload(file_upload) -> file_upload.to_json(file_upload)
   }
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(labeled label: String, containing component: Component) -> Label {
+  Label(None, label, None, component)
 }

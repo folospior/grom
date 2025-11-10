@@ -67,3 +67,9 @@ pub fn spacing_to_json(spacing: Spacing) -> Json {
   }
   |> json.int
 }
+
+// pUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new() -> Separator {
+  Separator(None, True, SmallPadding)
+}

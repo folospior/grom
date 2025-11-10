@@ -31,6 +31,7 @@ pub fn decoder() -> decode.Decoder(File) {
 
 // ENCODERS --------------------------------------------------------------------
 
+@internal
 pub fn to_json(file: File) -> Json {
   let type_ = [#("type", json.int(13))]
 
@@ -46,4 +47,10 @@ pub fn to_json(file: File) -> Json {
   [type_, id, file_, is_spoiler]
   |> list.flatten
   |> json.object
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(named name: String, holding file: UnfurledMediaItem) -> File {
+  File(None, file, False, name, 0)
 }

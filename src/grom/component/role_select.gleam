@@ -117,3 +117,9 @@ pub fn default_value_to_json(default_value: DefaultValue) -> Json {
     #("type", json.string("role")),
   ])
 }
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn new(custom_id custom_id: String) -> RoleSelect {
+  RoleSelect(None, custom_id, None, None, 1, 1, False)
+}
