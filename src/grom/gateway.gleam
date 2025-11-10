@@ -2288,7 +2288,10 @@ fn on_close(state: State, close_reason: stratus.CloseReason) {
   }
 }
 
-pub fn identify(client: grom.Client, intents: List(Intent)) -> IdentifyMessage {
+pub fn identify(
+  client: grom.Client,
+  intents intents: List(Intent),
+) -> IdentifyMessage {
   IdentifyMessage(
     token: client.token,
     properties: IdentifyProperties(
