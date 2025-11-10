@@ -2038,3 +2038,11 @@ pub fn get_scheduled_events(
   |> json.parse(using: decode.list(of: scheduled_event.decoder()))
   |> result.map_error(grom.CouldNotDecode)
 }
+
+pub fn new_modify_sticker() -> ModifySticker {
+  ModifySticker(None, Skip, None)
+}
+
+pub fn new_modify_incident_actions() -> ModifyIncidentActions {
+  ModifyIncidentActions(Skip, Skip)
+}
