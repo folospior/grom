@@ -1,6 +1,6 @@
 name = "grom"
 version = "0.0.0"
-description = "Gleam wrapper for the Discord API"
+description = "A Gleamy library for the Discord API 🌟"
 licenses = ["MIT"]
 repository = { type = "gitlab", user = "grom-gleam", repo = "grom" }
 internal_modules = [
