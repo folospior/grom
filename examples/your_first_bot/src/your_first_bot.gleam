@@ -102,7 +102,7 @@ fn on_ready(state: State, ready: gateway.ReadyMessage) {
     Ok(_) -> {
       logging.log(
         logging.Info,
-        "Overwritten the commands for " <> ready.application.id,
+        "Overwrote the commands for " <> ready.application.id,
       )
       actor.continue(state)
     }
