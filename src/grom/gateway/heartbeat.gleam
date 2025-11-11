@@ -18,7 +18,7 @@ pub type Message {
 }
 
 pub type State {
-  State(callback: fn() -> Nil, interval: Duration)
+  State(callback: fn() -> Nil, interval: Duration, subject: Subject(Message))
 }
 
 pub type Counter {
@@ -60,20 +60,28 @@ pub fn start(
   every interval: Duration,
   after initial_wait: Duration,
 ) {
-  actor.new(State(callback:, interval:))
-  |> actor.on_message(on_message)
-  |> actor.start
-  |> result.map_error(grom.CouldNotStartActor)
-  |> result.map(fn(actor) {
-    process.send_after(
-      actor.data,
+  actor.new_with_initialiser(20, fn(subject) {
+    let selector =
+      process.new_selector()
+      |> process.select(subject)
+
+    subject
+    |> process.send_after(
       initial_wait
         |> duration.to_seconds
         |> float.multiply(1000.0)
         |> float.round,
       Tick,
     )
+
+    actor.initialised(State(callback:, interval:, subject:))
+    |> actor.selecting(selector)
+    |> actor.returning(subject)
+    |> Ok
   })
+  |> actor.on_message(on_message)
+  |> actor.start
+  |> result.map_error(grom.CouldNotStartActor)
 }
 
 fn on_message(state: State, message: Message) {
@@ -82,7 +90,7 @@ fn on_message(state: State, message: Message) {
       state.callback()
 
       process.send_after(
-        process.new_subject(),
+        state.subject,
         state.interval
           |> duration.to_seconds
           |> float.multiply(1000.0)

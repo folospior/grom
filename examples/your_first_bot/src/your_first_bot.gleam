@@ -1,3 +1,5 @@
+import dotenv_gleam
+import envoy
 import gleam/erlang/process
 import gleam/option.{Some}
 import gleam/otp/actor
@@ -9,14 +11,16 @@ import grom/gateway/intent
 import grom/interaction.{type Interaction}
 import logging
 
-const token = "ODI1NzUzOTgwNzE3MjM2Mjc0.GYOKqE.OmV7A8aP6bVUXPUy4ajrQH7Z7RgYHf5TDJoQlQ"
-
 type State {
   State(client: grom.Client)
 }
 
 pub fn main() -> Nil {
   logging.configure()
+
+  let assert Ok(_) = dotenv_gleam.config()
+  let assert Ok(token) = envoy.get("BOT_TOKEN")
+
   let client = grom.Client(token:)
 
   let identify =
@@ -67,7 +71,7 @@ fn create_actor(
 fn on_event(state: State, event: gateway.Event) {
   case event {
     gateway.ErrorEvent(error) -> {
-      logging.log(logging.Warning, "Error: " <> string.inspect(error))
+      logging.log(logging.Warning, string.inspect(error))
       actor.continue(state)
     }
     gateway.ReadyEvent(ready) -> on_ready(state, ready)

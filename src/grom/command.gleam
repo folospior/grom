@@ -470,7 +470,9 @@ pub fn slash_command_decoder() -> decode.Decoder(SlashCommand) {
   use integration_types <- decode.optional_field(
     "integration_types",
     None,
-    decode.optional(decode.list(of: application.installation_context_decoder())),
+    decode.optional(
+      decode.list(of: application.installation_context_int_decoder()),
+    ),
   )
   use contexts <- decode.optional_field(
     "contexts",
@@ -518,7 +520,9 @@ pub fn user_command_decoder() -> decode.Decoder(UserCommand) {
   use integration_types <- decode.optional_field(
     "integration_types",
     None,
-    decode.optional(decode.list(of: application.installation_context_decoder())),
+    decode.optional(
+      decode.list(of: application.installation_context_int_decoder()),
+    ),
   )
   use contexts <- decode.optional_field(
     "contexts",

@@ -241,7 +241,7 @@ pub fn decoder() -> decode.Decoder(Application) {
     "integration_types_config",
     None,
     decode.optional(decode.dict(
-      installation_context_decoder(),
+      installation_context_string_decoder(),
       installation_context_config_decoder(),
     )),
   )
@@ -292,7 +292,19 @@ pub fn install_params_decoder() -> decode.Decoder(InstallParams) {
 }
 
 @internal
-pub fn installation_context_decoder() -> decode.Decoder(InstallationContext) {
+pub fn installation_context_string_decoder() -> decode.Decoder(
+  InstallationContext,
+) {
+  use variant <- decode.then(decode.string)
+  case variant {
+    "0" -> decode.success(GuildInstall)
+    "1" -> decode.success(UserInstall)
+    _ -> decode.failure(GuildInstall, "IntegrationType")
+  }
+}
+
+@internal
+pub fn installation_context_int_decoder() -> decode.Decoder(InstallationContext) {
   use variant <- decode.then(decode.int)
   case variant {
     0 -> decode.success(GuildInstall)
@@ -347,10 +359,10 @@ pub fn installation_context_to_string(context: InstallationContext) -> String {
 @internal
 pub fn installation_context_to_json(context: InstallationContext) -> Json {
   case context {
-    GuildInstall -> 0
-    UserInstall -> 1
+    GuildInstall -> "0"
+    UserInstall -> "1"
   }
-  |> json.int
+  |> json.string
 }
 
 @internal

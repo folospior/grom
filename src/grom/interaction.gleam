@@ -10,11 +10,9 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import grom
 import grom/application
-import grom/channel.{type Channel}
 import grom/channel/thread
 import grom/entitlement.{type Entitlement}
 import grom/file.{type File}
-import grom/guild.{type Guild}
 import grom/guild/role.{type Role}
 import grom/guild_member.{type GuildMember}
 import grom/internal/flags
@@ -37,7 +35,6 @@ pub type Interaction {
     application_id: String,
     data: Data,
     invokement_info: InvokementInfo,
-    channel: Channel,
     channel_id: String,
     token: String,
     /// For modals/component interactions, the message it was triggered from.
@@ -274,12 +271,7 @@ pub type Context {
 }
 
 pub type InvokementInfo {
-  InvokedInGuild(
-    guild: Guild,
-    guild_id: String,
-    member: GuildMember,
-    guild_locale: String,
-  )
+  InvokedInGuild(guild_id: String, member: GuildMember, guild_locale: String)
   InvokedInDm(user: User)
 }
 
@@ -498,7 +490,6 @@ pub fn decoder() -> decode.Decoder(Interaction) {
   use application_id <- decode.field("application_id", decode.string)
   use type_ <- decode.field("type", decode.int)
   use invokement_info <- decode.then(invokement_info_decoder())
-  use channel <- decode.field("channel", channel.decoder())
   use channel_id <- decode.field("channel_id", decode.string)
   use token <- decode.field("token", decode.string)
   use data <- decode.field("data", data_decoder(type_))
@@ -519,7 +510,10 @@ pub fn decoder() -> decode.Decoder(Interaction) {
   )
   use authorizing_integration_owners_ids <- decode.field(
     "authorizing_integration_owners",
-    decode.dict(application.installation_context_decoder(), decode.string),
+    decode.dict(
+      application.installation_context_string_decoder(),
+      decode.string,
+    ),
   )
   use context <- decode.optional_field(
     "context",
@@ -536,7 +530,6 @@ pub fn decoder() -> decode.Decoder(Interaction) {
     application_id:,
     data:,
     invokement_info:,
-    channel:,
     channel_id:,
     token:,
     message:,
@@ -683,7 +676,7 @@ pub fn submitted_label_component_decoder() -> decode.Decoder(
 
 @internal
 pub fn command_execution_decoder() -> decode.Decoder(CommandExecution) {
-  use command_type <- decode.subfield(["data", "type"], decode.int)
+  use command_type <- decode.field("type", decode.int)
   case command_type {
     1 -> decode.map(slash_command_execution_decoder(), SlashCommandExecuted)
     2 -> decode.map(user_command_execution_decoder(), UserCommandExecuted)
@@ -859,12 +852,11 @@ pub fn context_decoder() -> decode.Decoder(Context) {
 @internal
 pub fn invokement_info_decoder() -> decode.Decoder(InvokementInfo) {
   let in_guild_decoder = {
-    use guild <- decode.field("guild", guild.decoder())
     use guild_id <- decode.field("guild_id", decode.string)
     use member <- decode.field("member", guild_member.decoder())
     use guild_locale <- decode.field("guild_locale", decode.string)
 
-    decode.success(InvokedInGuild(guild:, guild_id:, member:, guild_locale:))
+    decode.success(InvokedInGuild(guild_id:, member:, guild_locale:))
   }
   let in_dm_decoder = {
     use user <- decode.field("user", user.decoder())
