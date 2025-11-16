@@ -14,7 +14,7 @@ import gleam/string
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom
-import grom/activity
+import grom/activity.{type Activity}
 import grom/application.{type Application}
 import grom/channel.{type Channel}
 import grom/channel/thread.{type Thread}
@@ -185,29 +185,6 @@ pub type ClientStatus {
   )
 }
 
-pub type ReceivedActivity {
-  ReceivedActivity(
-    name: String,
-    type_: activity.Type,
-    url: Option(String),
-    created_at: Timestamp,
-    timestamps: Option(activity.Timestamps),
-    application_id: Option(String),
-    status_display_type: Option(activity.DisplayType),
-    details: Option(String),
-    details_url: Option(String),
-    state: Option(String),
-    state_url: Option(String),
-    emoji: Option(activity.Emoji),
-    party: Option(activity.Party),
-    assets: Option(activity.Assets),
-    secrets: Option(activity.Secrets),
-    is_instance: Option(Bool),
-    flags: Option(List(activity.Flag)),
-    button_labels: Option(List(String)),
-  )
-}
-
 // RECEIVE EVENTS --------------------------------------------------------------
 
 pub type ReceivedMessage {
@@ -374,11 +351,11 @@ pub type ThreadMemberUpdatedMessage {
 
 pub type PresenceUpdatedMessage {
   PresenceUpdatedMessage(
-    user_id: String,
-    guild_id: String,
-    status: String,
-    activities: List(ReceivedActivity),
-    client_status: ClientStatus,
+    user_id: Option(String),
+    guild_id: Option(String),
+    status: Option(String),
+    activities: Option(List(Activity)),
+    client_status: Option(ClientStatus),
   )
 }
 
@@ -1169,117 +1146,37 @@ pub fn ready_application_decoder() -> decode.Decoder(ReadyApplication) {
 pub fn presence_updated_message_decoder() -> decode.Decoder(
   PresenceUpdatedMessage,
 ) {
-  use user_id <- decode.field("user_id", decode.string)
-  use guild_id <- decode.field("guild_id", decode.string)
-  use status <- decode.field("status", decode.string)
-  use activities <- decode.field(
-    "activities",
-    decode.list(received_activity_decoder()),
+  use user_id <- decode.then(decode.optionally_at(
+    ["user", "id"],
+    None,
+    decode.optional(decode.string),
+  ))
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(decode.string),
   )
-  use client_status <- decode.field("client_status", client_status_decoder())
+  use status <- decode.optional_field(
+    "status",
+    None,
+    decode.optional(decode.string),
+  )
+  use activities <- decode.optional_field(
+    "activities",
+    None,
+    decode.optional(decode.list(activity.decoder())),
+  )
+  use client_status <- decode.optional_field(
+    "client_status",
+    None,
+    decode.optional(client_status_decoder()),
+  )
   decode.success(PresenceUpdatedMessage(
     user_id:,
     guild_id:,
     status:,
     activities:,
     client_status:,
-  ))
-}
-
-pub fn received_activity_decoder() -> decode.Decoder(ReceivedActivity) {
-  use name <- decode.field("name", decode.string)
-  use type_ <- decode.field("type", activity.type_decoder())
-  use url <- decode.optional_field("url", None, decode.optional(decode.string))
-  use created_at <- decode.field(
-    "created_at",
-    time_timestamp.from_unix_milliseconds_decoder(),
-  )
-  use timestamps <- decode.optional_field(
-    "timestamps",
-    None,
-    decode.optional(activity.timestamps_decoder()),
-  )
-  use application_id <- decode.optional_field(
-    "application_id",
-    None,
-    decode.optional(decode.string),
-  )
-  use status_display_type <- decode.optional_field(
-    "status_display_type",
-    None,
-    decode.optional(activity.display_type_decoder()),
-  )
-  use details <- decode.optional_field(
-    "details",
-    None,
-    decode.optional(decode.string),
-  )
-  use details_url <- decode.optional_field(
-    "details_url",
-    None,
-    decode.optional(decode.string),
-  )
-  use state <- decode.optional_field(
-    "state",
-    None,
-    decode.optional(decode.string),
-  )
-  use state_url <- decode.optional_field(
-    "state_url",
-    None,
-    decode.optional(decode.string),
-  )
-  use emoji <- decode.optional_field(
-    "emoji",
-    None,
-    decode.optional(activity.emoji_decoder()),
-  )
-  use party <- decode.optional_field(
-    "party",
-    None,
-    decode.optional(activity.party_decoder()),
-  )
-  use assets <- decode.optional_field(
-    "assets",
-    None,
-    decode.optional(activity.assets_decoder()),
-  )
-  use secrets <- decode.optional_field(
-    "secrets",
-    None,
-    decode.optional(activity.secrets_decoder()),
-  )
-  use is_instance <- decode.field("instance", decode.optional(decode.bool))
-  use flags <- decode.optional_field(
-    "flags",
-    None,
-    decode.optional(flags.decoder(activity.bits_flags())),
-  )
-  use button_labels <- decode.optional_field(
-    "buttons",
-    None,
-    decode.optional(decode.list(decode.string)),
-  )
-
-  decode.success(ReceivedActivity(
-    name:,
-    type_:,
-    url:,
-    created_at:,
-    timestamps:,
-    application_id:,
-    status_display_type:,
-    details:,
-    details_url:,
-    state:,
-    state_url:,
-    emoji:,
-    party:,
-    assets:,
-    secrets:,
-    is_instance:,
-    flags:,
-    button_labels:,
   ))
 }
 

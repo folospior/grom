@@ -114,6 +114,99 @@ pub fn bits_flags() -> List(#(Int, Flag)) {
 // DECODERS --------------------------------------------------------------------
 
 @internal
+pub fn decoder() -> decode.Decoder(Activity) {
+  use name <- decode.field("name", decode.string)
+  use type_ <- decode.field("type", type_decoder())
+  use url <- decode.optional_field("url", None, decode.optional(decode.string))
+  use created_at <- decode.field(
+    "created_at",
+    time_timestamp.from_unix_milliseconds_decoder(),
+  )
+  use timestamps <- decode.optional_field(
+    "timestamps",
+    None,
+    decode.optional(timestamps_decoder()),
+  )
+  use application_id <- decode.optional_field(
+    "application_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use status_display_type <- decode.optional_field(
+    "status_display_type",
+    None,
+    decode.optional(display_type_decoder()),
+  )
+  use details <- decode.optional_field(
+    "details",
+    None,
+    decode.optional(decode.string),
+  )
+  use details_url <- decode.optional_field(
+    "details_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use state <- decode.optional_field(
+    "state",
+    None,
+    decode.optional(decode.string),
+  )
+  use state_url <- decode.optional_field(
+    "state_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use emoji <- decode.optional_field(
+    "emoji",
+    None,
+    decode.optional(emoji_decoder()),
+  )
+  use party <- decode.optional_field(
+    "party",
+    None,
+    decode.optional(party_decoder()),
+  )
+  use assets <- decode.optional_field(
+    "assets",
+    None,
+    decode.optional(assets_decoder()),
+  )
+  use secrets <- decode.optional_field(
+    "secrets",
+    None,
+    decode.optional(secrets_decoder()),
+  )
+  use is_instance <- decode.field("instance", decode.optional(decode.bool))
+  use flags <- decode.optional_field(
+    "flags",
+    None,
+    decode.optional(flags.decoder(bits_flags())),
+  )
+  use buttons <- decode.optional_field("buttons", None, decode.success(None))
+  decode.success(Activity(
+    name:,
+    type_:,
+    url:,
+    created_at:,
+    timestamps:,
+    application_id:,
+    status_display_type:,
+    details:,
+    details_url:,
+    state:,
+    state_url:,
+    emoji:,
+    party:,
+    assets:,
+    secrets:,
+    is_instance:,
+    flags:,
+    buttons:,
+  ))
+}
+
+@internal
 pub fn type_decoder() -> decode.Decoder(Type) {
   use variant <- decode.then(decode.int)
   case variant {
