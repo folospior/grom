@@ -58,8 +58,8 @@ pub fn decoder() -> decode.Decoder(MessageReference) {
 pub fn type_decoder() -> decode.Decoder(Type) {
   use variant <- decode.then(decode.int)
   case variant {
-    1 -> decode.success(Default)
-    2 -> decode.success(Forward)
+    0 -> decode.success(Default)
+    1 -> decode.success(Forward)
     _ -> decode.failure(Default, "Type")
   }
 }
