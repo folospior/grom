@@ -36,10 +36,10 @@ pub type Tags {
   Tags(
     bot_id: Option(String),
     integration_id: Option(String),
-    premium_subscriber: Option(Nil),
+    is_premium_subscriber: Bool,
     subscription_listing_id: Option(String),
-    available_for_purchase: Option(Nil),
-    guild_connections: Option(Nil),
+    is_available_for_purchase: Bool,
+    is_guild_connections: Bool,
   )
 }
 
@@ -130,34 +130,43 @@ pub fn decoder() -> decode.Decoder(Role) {
 
 @internal
 pub fn tags_decoder() -> decode.Decoder(Tags) {
-  use bot_id <- decode.field("bot_id", decode.optional(decode.string))
-  use integration_id <- decode.field(
+  use bot_id <- decode.optional_field(
+    "bot_id",
+    None,
+    decode.optional(decode.string),
+  )
+  use integration_id <- decode.optional_field(
     "integration_id",
+    None,
     decode.optional(decode.string),
   )
-  use premium_subscriber <- decode.field(
+  use is_premium_subscriber <- decode.optional_field(
     "premium_subscriber",
-    decode.optional(decode.success(Nil)),
+    False,
+    decode.success(True),
   )
-  use subscription_listing_id <- decode.field(
+  use subscription_listing_id <- decode.optional_field(
     "subscription_listing_id",
+    None,
     decode.optional(decode.string),
   )
-  use available_for_purchase <- decode.field(
+  use is_available_for_purchase <- decode.optional_field(
     "available_for_purchase",
-    decode.optional(decode.success(Nil)),
+    False,
+    decode.success(True),
   )
-  use guild_connections <- decode.field(
+  use is_guild_connections <- decode.optional_field(
     "guild_connections",
-    decode.optional(decode.success(Nil)),
+    False,
+    decode.success(True),
   )
   decode.success(Tags(
     bot_id:,
     integration_id:,
-    premium_subscriber:,
+    is_premium_subscriber:,
     subscription_listing_id:,
-    available_for_purchase:,
-    guild_connections:,
+    is_available_for_purchase:,
+    is_guild_connections:,
   ))
 }
 
