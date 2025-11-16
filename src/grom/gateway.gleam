@@ -1,4 +1,3 @@
-import gleam/bool
 import gleam/dynamic/decode
 import gleam/erlang/process.{type Subject}
 import gleam/float
@@ -2194,9 +2193,6 @@ fn supervised(client: grom.Client, state: State) {
 
 fn new_connection(client: grom.Client, state: State) {
   fn() {
-    state.connection_holder
-    |> connection.set_pid(to: process.self())
-
     use gateway_data <- result.try(
       client
       |> get_data
@@ -2240,9 +2236,6 @@ fn new_connection(client: grom.Client, state: State) {
 
 fn resume(client: grom.Client, state: State, info: resuming.Info) {
   fn() {
-    state.connection_holder
-    |> connection.set_pid(to: process.self())
-
     use connection_request <- result.try(
       request.to(info.resume_gateway_url)
       |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
@@ -2285,13 +2278,27 @@ fn on_close(state: State, close_reason: stratus.CloseReason) {
   state.resuming_info_holder
   |> resuming.set_info(to: new_resuming_info)
 
-  // consult on if this is a bug, no idea tbh
-  // i think it's impossible state for the connection_pid to be none by the time this function gets called
-  // typing requires work, impossible states defined as possible values i think
+  reconnect(state)
+}
+
+fn reconnect(state: State) -> Nil {
   case connection.get_pid(state.connection_holder) {
     Some(pid) -> process.kill(pid)
+    // this should be impossible
     None -> Nil
   }
+
+  case resuming.get_info(state.resuming_info_holder) {
+    Some(info) -> {
+      case resuming.is_possible(for: info) {
+        True -> resume(grom.Client(state.identify.token), state, info)
+        False -> new_connection(grom.Client(state.identify.token), state)
+      }
+    }
+    None -> new_connection(grom.Client(state.identify.token), state)
+  }
+
+  Nil
 }
 
 pub fn identify(
@@ -2456,6 +2463,9 @@ fn start_new_connection(state: State, connection: stratus.Connection) {
   state.connection_holder
   |> connection.set(to: connection)
 
+  state.connection_holder
+  |> connection.set_pid(to: process.self())
+
   stratus.continue(state)
 }
 
@@ -2571,7 +2581,7 @@ fn on_invalid_session(
   let resuming_info = resuming.get_info(state.resuming_info_holder)
 
   case resuming_info, can_reconnect {
-    Some(info), True ->
+    Some(info), True -> {
       resuming.set_info(
         state.resuming_info_holder,
         to: Some(
@@ -2581,11 +2591,15 @@ fn on_invalid_session(
           ),
         ),
       )
-    Some(info), False ->
+      on_close(state, stratus.NotProvided)
+    }
+    Some(info), False -> {
       resuming.set_info(
         state.resuming_info_holder,
         to: Some(resuming.Info(..info, last_received_close_reason: None)),
       )
+      on_close(state, stratus.UnexpectedCondition(<<>>))
+    }
     _, _ -> Nil
   }
 
@@ -2614,6 +2628,8 @@ fn on_reconnect_request(state: State, connection: stratus.Connection) -> Nil {
     None -> Nil
   }
 
+  on_close(state, stratus.NotProvided)
+
   case connection.get_pid(state.connection_holder) {
     Some(pid) -> process.kill(pid)
     None -> Nil
@@ -2627,6 +2643,9 @@ fn start_resume(
 ) {
   state.connection_holder
   |> connection.set(to: connection)
+
+  state.connection_holder
+  |> connection.set_pid(to: process.self())
 
   let resuming_info = resuming.get_info(state.resuming_info_holder)
   let last_sequence = sequence.get(state.sequence_holder)
@@ -2877,6 +2896,7 @@ fn on_hello_event(
     Error(_) -> {
       let _ =
         stratus.close(connection, because: stratus.UnexpectedCondition(<<>>))
+      on_close(state, stratus.UnexpectedCondition(<<>>))
       Nil
     }
   }
@@ -2908,11 +2928,20 @@ fn send_heartbeat(state: State) -> Result(Nil, grom.Error) {
   let last_sequence = sequence.get(state.sequence_holder)
 
   let counter = heartbeat.get_count(state.heartbeat_counter)
-  use <- bool.guard(
-    when: counter.heartbeat != counter.heartbeat_ack,
-    return: stratus.close(connection, stratus.UnexpectedCondition(<<>>))
-      |> result.map_error(grom.CouldNotCloseWebsocketConnection),
-  )
+
+  use <-
+    fn(next: fn() -> Result(Nil, grom.Error)) {
+      case counter.heartbeat == counter.heartbeat_ack {
+        True -> next()
+        False -> {
+          let result =
+            stratus.close(connection, stratus.UnexpectedCondition(<<>>))
+            |> result.map_error(grom.CouldNotCloseWebsocketConnection)
+          on_close(state, stratus.UnexpectedCondition(<<>>))
+          result
+        }
+      }
+    }
 
   use _nil <- result.try(
     last_sequence

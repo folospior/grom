@@ -65,7 +65,7 @@ fn on_message(current: Option(Info), message: Message) {
   }
 }
 
-pub fn is_possible(info: Info) -> Bool {
+pub fn is_possible(for info: Info) -> Bool {
   let resumable_codes = [4000, 4001, 4002, 4003, 4005, 4007, 4008, 4009]
 
   // None - not resumable
