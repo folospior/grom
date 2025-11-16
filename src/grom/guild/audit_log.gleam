@@ -76,8 +76,16 @@ pub type Change {
 @internal
 pub fn change_decoder() -> decode.Decoder(Change) {
   use key <- decode.field("key", decode.string)
-  use old_value <- decode.field("old_value", decode.optional(decode.dynamic))
-  use new_value <- decode.field("new_value", decode.optional(decode.dynamic))
+  use old_value <- decode.optional_field(
+    "old_value",
+    None,
+    decode.optional(decode.dynamic),
+  )
+  use new_value <- decode.optional_field(
+    "new_value",
+    None,
+    decode.optional(decode.dynamic),
+  )
   decode.success(Change(key:, old_value:, new_value:))
 }
 
