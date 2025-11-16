@@ -150,6 +150,8 @@ pub type Feature {
   HasWelcomeScreenEnabled
   CanHaveGuestInvites
   CanSetEnhancedRoleColors
+  /// Workaround for undocumented guild features.
+  UnknownFeature
 }
 
 pub type SystemChannelFlag {
@@ -588,7 +590,7 @@ pub fn feature_decoder() -> decode.Decoder(Feature) {
     "WELCOME_SCREEN_ENABLED" -> decode.success(HasWelcomeScreenEnabled)
     "GUESTS_ENABLED" -> decode.success(CanHaveGuestInvites)
     "ENHANCED_ROLE_COLORS" -> decode.success(CanSetEnhancedRoleColors)
-    _ -> decode.failure(HasAnimatedBanner, "Feature")
+    _ -> decode.success(UnknownFeature)
   }
 }
 
@@ -1041,6 +1043,7 @@ pub fn feature_to_json(feature: Feature) -> Json {
     HasWelcomeScreenEnabled -> "WELCOME_SCREEN_ENABLED"
     CanHaveGuestInvites -> "GUESTS_ENABLED"
     CanSetEnhancedRoleColors -> "ENHANCED_ROLE_COLORS"
+    UnknownFeature -> "UNKNOWN"
   }
   |> json.string
 }
