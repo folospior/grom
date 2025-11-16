@@ -91,7 +91,7 @@ pub fn decoder() -> decode.Decoder(Role) {
   use id <- decode.field("id", decode.string)
   use name <- decode.field("name", decode.string)
   use colors <- decode.field("colors", colors_decoder())
-  use is_hoisted <- decode.field("hoisted", decode.bool)
+  use is_hoisted <- decode.field("hoist", decode.bool)
   use icon_hash <- decode.optional_field(
     "icon",
     None,
