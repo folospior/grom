@@ -33,6 +33,7 @@ pub type Type {
   Article
   Link
   PollResult
+  Unknown
 }
 
 pub type Footer {
@@ -163,7 +164,7 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     "article" -> decode.success(Article)
     "link" -> decode.success(Link)
     "poll_result" -> decode.success(PollResult)
-    _ -> decode.failure(Rich, "Type")
+    _ -> decode.success(Unknown)
   }
 }
 
@@ -348,6 +349,7 @@ pub fn type_to_json(type_: Type) -> Json {
     Article -> "article"
     Link -> "link"
     PollResult -> "poll_result"
+    Unknown -> "unknown"
   }
   |> json.string
 }

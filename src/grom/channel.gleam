@@ -38,7 +38,7 @@ pub type Channel {
     parent_id: Option(String),
     last_pin_timestamp: Option(Timestamp),
     current_user_permissions: Option(List(Permission)),
-    default_auto_archive_duration: Duration,
+    default_auto_archive_duration: Option(Duration),
   )
   Dm(
     id: String,
@@ -415,7 +415,7 @@ pub fn decoder() -> decode.Decoder(Channel) {
           None,
           None,
           None,
-          duration.seconds(0),
+          None,
         ),
         "Channel",
       )
@@ -447,8 +447,9 @@ pub fn text_decoder() -> decode.Decoder(Channel) {
     time_duration.from_minutes_decoder(),
   )
   use parent_id <- decode.field("parent_id", decode.optional(decode.string))
-  use last_pin_timestamp <- decode.field(
+  use last_pin_timestamp <- decode.optional_field(
     "last_pin_timestamp",
+    None,
     decode.optional(time_rfc3339.decoder()),
   )
   use current_user_permissions <- decode.optional_field(
@@ -456,9 +457,10 @@ pub fn text_decoder() -> decode.Decoder(Channel) {
     None,
     decode.optional(permission.decoder()),
   )
-  use default_auto_archive_duration <- decode.field(
+  use default_auto_archive_duration <- decode.optional_field(
     "default_auto_archive_duration",
-    time_duration.from_int_seconds_decoder(),
+    None,
+    decode.optional(time_duration.from_int_seconds_decoder()),
   )
   decode.success(Text(
     id:,
@@ -602,8 +604,9 @@ pub fn announcement_decoder() -> decode.Decoder(Channel) {
     decode.optional(decode.string),
   )
   use parent_id <- decode.field("parent_id", decode.optional(decode.string))
-  use last_pin_timestamp <- decode.field(
+  use last_pin_timestamp <- decode.optional_field(
     "last_pin_timestamp",
+    None,
     decode.optional(time_rfc3339.decoder()),
   )
   use current_user_permissions <- decode.optional_field(
