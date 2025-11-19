@@ -91,12 +91,16 @@ pub type Event {
   ThreadUpdatedEvent(Thread)
   ThreadDeletedEvent(ThreadDeletedMessage)
   ThreadListSyncedEvent(ThreadListSyncedMessage)
+  /// Could not test decoding. Please report any success in issues.
   ThreadMemberUpdatedEvent(ThreadMemberUpdatedMessage)
   PresenceUpdatedEvent(PresenceUpdatedMessage)
   ThreadMembersUpdatedEvent(ThreadMembersUpdatedMessage)
   ChannelPinsUpdatedEvent(ChannelPinsUpdatedMessage)
+  /// Could not test decoding. Please report any success in issues.
   EntitlementCreatedEvent(Entitlement)
+  /// Could not test decoding. Please report any success in issues.
   EntitlementUpdatedEvent(Entitlement)
+  /// Could not test decoding. Please report any success in issues.
   EntitlementDeletedEvent(Entitlement)
   GuildCreatedEvent(GuildCreatedMessage)
   GuildUpdatedEvent(Guild)
