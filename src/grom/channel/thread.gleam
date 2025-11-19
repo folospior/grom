@@ -29,10 +29,9 @@ pub type Thread {
     last_message_id: Option(String),
     rate_limit_per_user: Duration,
     parent_id: String,
-    last_pin_timestamp: Option(Timestamp),
     message_count: Int,
     member_count: Int,
-    metadata: Metadata,
+    metadata: Option(Metadata),
     current_member: Option(Member),
     current_user_permissions: Option(List(Permission)),
     flags: List(Flag),
@@ -130,13 +129,13 @@ pub fn decoder() -> decode.Decoder(Thread) {
     time_duration.from_minutes_decoder(),
   )
   use parent_id <- decode.field("parent_id", decode.string)
-  use last_pin_timestamp <- decode.field(
-    "last_pin_timestamp",
-    decode.optional(time_rfc3339.decoder()),
-  )
   use message_count <- decode.field("message_count", decode.int)
   use member_count <- decode.field("member_count", decode.int)
-  use metadata <- decode.field("metadata", metadata_decoder())
+  use metadata <- decode.optional_field(
+    "metadata",
+    None,
+    decode.optional(metadata_decoder()),
+  )
   use current_member <- decode.optional_field(
     "current_member",
     None,
@@ -162,7 +161,6 @@ pub fn decoder() -> decode.Decoder(Thread) {
     last_message_id:,
     rate_limit_per_user:,
     parent_id:,
-    last_pin_timestamp:,
     message_count:,
     member_count:,
     metadata:,
