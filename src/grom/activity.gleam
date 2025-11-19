@@ -26,7 +26,6 @@ pub type Activity {
     party: Option(Party),
     assets: Option(Assets),
     secrets: Option(Secrets),
-    is_instance: Option(Bool),
     flags: Option(List(Flag)),
     buttons: Option(List(Button)),
   )
@@ -177,7 +176,6 @@ pub fn decoder() -> decode.Decoder(Activity) {
     None,
     decode.optional(secrets_decoder()),
   )
-  use is_instance <- decode.field("instance", decode.optional(decode.bool))
   use flags <- decode.optional_field(
     "flags",
     None,
@@ -200,7 +198,6 @@ pub fn decoder() -> decode.Decoder(Activity) {
     party:,
     assets:,
     secrets:,
-    is_instance:,
     flags:,
     buttons:,
   ))
@@ -419,11 +416,6 @@ pub fn to_json(activity: Activity) -> Json {
     None -> []
   }
 
-  let is_instance = case activity.is_instance {
-    Some(instance) -> [#("instance", json.bool(instance))]
-    None -> []
-  }
-
   let flags = case activity.flags {
     Some(flags) -> [#("flags", flags.to_json(flags, bits_flags()))]
     None -> []
@@ -450,7 +442,6 @@ pub fn to_json(activity: Activity) -> Json {
     party,
     assets,
     secrets,
-    is_instance,
     flags,
     buttons,
   ]
