@@ -121,6 +121,8 @@ pub type Type {
   GuildIncidentReportFalseAlarm
   PurchaseNotification
   PollResult
+  /// Used as a workaround for undocumented message types.
+  Unknown
 }
 
 pub type Nonce {
@@ -659,7 +661,7 @@ pub fn type_decoder() -> decode.Decoder(Type) {
     39 -> decode.success(GuildIncidentReportFalseAlarm)
     44 -> decode.success(PurchaseNotification)
     46 -> decode.success(PollResult)
-    _ -> decode.failure(Default, "Type")
+    _ -> decode.success(Unknown)
   }
 }
 

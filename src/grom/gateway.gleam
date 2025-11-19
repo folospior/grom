@@ -46,7 +46,7 @@ import grom/internal/time_timestamp
 import grom/invite
 import grom/message.{type Message}
 import grom/message/reaction
-import grom/modification.{type Modification}
+import grom/modification.{type Modification, Skip}
 import grom/soundboard
 import grom/stage_instance.{type StageInstance}
 import grom/sticker.{type Sticker}
@@ -1385,30 +1385,50 @@ pub fn guild_member_updated_message_decoder() -> decode.Decoder(
   use guild_id <- decode.field("guild_id", decode.string)
   use role_ids <- decode.field("roles", decode.list(decode.string))
   use user <- decode.field("user", user.decoder())
-  use nick <- decode.field("nick", modification.decoder(decode.string))
+  use nick <- decode.optional_field(
+    "nick",
+    Skip,
+    modification.decoder(decode.string),
+  )
   use avatar_hash <- decode.field("avatar", decode.optional(decode.string))
   use banner_hash <- decode.field("banner", decode.optional(decode.string))
   use joined_at <- decode.field(
     "joined_at",
     decode.optional(time_rfc3339.decoder()),
   )
-  use premium_since <- decode.field(
+  use premium_since <- decode.optional_field(
     "premium_since",
+    None,
     decode.optional(time_rfc3339.decoder()),
   )
-  use is_deaf <- decode.field("deaf", decode.optional(decode.bool))
-  use is_mute <- decode.field("mute", decode.optional(decode.bool))
-  use is_pending <- decode.field("pending", decode.optional(decode.bool))
-  use communication_disabled_until <- decode.field(
+  use is_deaf <- decode.optional_field(
+    "deaf",
+    None,
+    decode.optional(decode.bool),
+  )
+  use is_mute <- decode.optional_field(
+    "mute",
+    None,
+    decode.optional(decode.bool),
+  )
+  use is_pending <- decode.optional_field(
+    "pending",
+    None,
+    decode.optional(decode.bool),
+  )
+  use communication_disabled_until <- decode.optional_field(
     "communication_disabled_until",
+    Skip,
     modification.decoder(time_rfc3339.decoder()),
   )
-  use flags <- decode.field(
+  use flags <- decode.optional_field(
     "flags",
+    None,
     decode.optional(flags.decoder(guild_member.bits_member_flags())),
   )
-  use avatar_decoration_data <- decode.field(
+  use avatar_decoration_data <- decode.optional_field(
     "avatar_decoration_data",
+    Skip,
     modification.decoder(user.avatar_decoration_data_decoder()),
   )
   decode.success(GuildMemberUpdatedMessage(
