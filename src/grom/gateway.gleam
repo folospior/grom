@@ -703,6 +703,14 @@ pub type IdentifyProperties {
   IdentifyProperties(os: String, browser: String, device: String)
 }
 
+pub type Builder(user_state) {
+  Builder(on_message: fn(State, user_state, Message) -> Next(user_state))
+}
+
+pub type Next(user_state) {
+  Continue(state: State, user_state: user_state)
+}
+
 // DECODERS --------------------------------------------------------------------
 
 @internal
@@ -2075,11 +2083,28 @@ pub fn get_data(client: grom.Client) -> Result(GatewayData, grom.Error) {
   |> result.map_error(grom.CouldNotDecode)
 }
 
+pub fn new() -> Builder(user_state) {
+  Builder(on_message: fn(state, user_state, _msg) {
+    continue(state, user_state)
+  })
+}
+
+pub fn on_message(
+  builder: Builder(user_state),
+  on_message: fn(State, user_state, Message) -> Next(user_state),
+) -> Builder(user_state) {
+  Builder(..builder, on_message:)
+}
+
+pub fn continue(state: State, user_state: user_state) -> Next(user_state) {
+  Continue(state, user_state)
+}
+
 pub fn start(
-  client: grom.Client,
-  identify: IdentifyMessage,
-  notify actor: Subject(Event),
-) {
+  builder: Builder(user_state),
+  client client: grom.Client,
+  using identify: IdentifyMessage,
+) -> Result(State, actor.StartError) {
   use state <- result.try(
     init_state(actor, identify)
     |> result.replace_error(actor.InitFailed("couldn't init state")),
@@ -2351,8 +2376,6 @@ fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
       user_message_subject_holder:,
       connection_holder:,
     )
-
-  Ok(state)
 }
 
 fn on_message(
