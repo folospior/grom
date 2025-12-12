@@ -58,6 +58,7 @@ import stratus
 
 // TYPES -----------------------------------------------------------------------
 
+// TODO: Rename this
 pub type GatewayData {
   GatewayData(
     url: String,
@@ -91,16 +92,16 @@ pub type Event {
   ThreadUpdatedEvent(Thread)
   ThreadDeletedEvent(ThreadDeletedMessage)
   ThreadListSyncedEvent(ThreadListSyncedMessage)
-  /// Could not test decoding. Please report any success in issues.
+  /// Could not test decoding. Please report any attempts in issues.
   ThreadMemberUpdatedEvent(ThreadMemberUpdatedMessage)
   PresenceUpdatedEvent(PresenceUpdatedMessage)
   ThreadMembersUpdatedEvent(ThreadMembersUpdatedMessage)
   ChannelPinsUpdatedEvent(ChannelPinsUpdatedMessage)
-  /// Could not test decoding. Please report any success in issues.
+  /// Could not test decoding. Please report any attempts in issues.
   EntitlementCreatedEvent(Entitlement)
-  /// Could not test decoding. Please report any success in issues.
+  /// Could not test decoding. Please report any attempts in issues.
   EntitlementUpdatedEvent(Entitlement)
-  /// Could not test decoding. Please report any success in issues.
+  /// Could not test decoding. Please report any attempts in issues.
   EntitlementDeletedEvent(Entitlement)
   GuildCreatedEvent(GuildCreatedMessage)
   GuildUpdatedEvent(Guild)
@@ -165,19 +166,6 @@ pub type SessionStartLimits {
     remaining_starts: Int,
     resets_after: Duration,
     max_identify_requests_per_5_seconds: Int,
-  )
-}
-
-pub opaque type State {
-  State(
-    actor: Subject(Event),
-    sequence_holder: Subject(sequence.Message),
-    heartbeat_counter: Subject(heartbeat.CounterMessage),
-    heartbeat_interval_holder: Subject(heartbeat.IntervalMessage),
-    resuming_info_holder: Subject(resuming.Message),
-    connection_holder: Subject(connection.Message),
-    identify: IdentifyMessage,
-    user_message_subject_holder: Subject(user_message.Message),
   )
 }
 
@@ -703,12 +691,61 @@ pub type IdentifyProperties {
   IdentifyProperties(os: String, browser: String, device: String)
 }
 
-pub type Builder(user_state) {
-  Builder(on_message: fn(State, user_state, Message) -> Next(user_state))
+pub opaque type Next(state) {
+  Continue(state: state)
+  Stop
+  StopAbnormal(reason: String)
 }
 
-pub type Next(user_state) {
-  Continue(state: State, user_state: user_state)
+pub opaque type Builder(state) {
+  Builder(
+    identify: IdentifyMessage,
+    init: fn() -> state,
+    handler: fn(state, Event, Connection) -> Next(state),
+    close: fn(state) -> Nil,
+  )
+}
+
+pub opaque type Connection {
+  Connection(websocket: Subject(stratus.InternalMessage(UserMessage)))
+}
+
+type InternalState(user_state) {
+  Connecting(
+    identify: IdentifyMessage,
+    user_state: user_state,
+    event_handler: fn(user_state, Event, Connection) -> Next(user_state),
+    close_handler: fn(user_state) -> Nil,
+  )
+  Identifying(
+    identify: IdentifyMessage,
+    user_state: user_state,
+    event_handler: fn(user_state, Event, Connection) -> Next(user_state),
+    close_handler: fn(user_state) -> Nil,
+    heartbeat_interval: Duration,
+    heartbeat_loop: Subject(heartbeat.Message),
+    sequence: Option(Int),
+    sent_heartbeats: Int,
+    acknowledged_heartbeats: Int,
+  )
+  Connected(
+    identify: IdentifyMessage,
+    user_state: user_state,
+    event_handler: fn(user_state, Event, Connection) -> Next(user_state),
+    close_handler: fn(user_state) -> Nil,
+    heartbeat_interval: Int,
+    heartbeat_loop: Subject(heartbeat.Message),
+    sequence: Option(Int),
+    sent_heartbeats: Int,
+    acknowledged_heartbeats: Int,
+    session_id: String,
+    resume_gateway_url: String,
+    last_received_close_reason: Option(stratus.CloseReason),
+  )
+}
+
+type ResumingInfo {
+  ResumingInfo(session_id: String, resume_gateway_url: String)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -2083,135 +2120,124 @@ pub fn get_data(client: grom.Client) -> Result(GatewayData, grom.Error) {
   |> result.map_error(grom.CouldNotDecode)
 }
 
-pub fn new() -> Builder(user_state) {
-  Builder(on_message: fn(state, user_state, _msg) {
-    continue(state, user_state)
-  })
+pub fn continue(state: state) -> Next(state) {
+  Continue(state)
 }
 
-pub fn on_message(
+pub fn stop() -> Next(state) {
+  Stop
+}
+
+pub fn stop_abnormal(reason: String) -> Next(state) {
+  StopAbnormal(reason:)
+}
+
+pub fn new(identify: IdentifyMessage, state: state) -> Builder(state) {
+  Builder(
+    identify:,
+    init: fn() { state },
+    handler: fn(state, _event, _connection) { continue(state) },
+    close: fn(_state) { Nil },
+  )
+}
+
+pub fn on_event(
+  builder: Builder(state),
+  do handler: fn(state, Event, Connection) -> Next(state),
+) -> Builder(state) {
+  Builder(..builder, handler:)
+}
+
+pub fn on_close(
+  builder: Builder(state),
+  do close: fn(state) -> Nil,
+) -> Builder(state) {
+  Builder(..builder, close:)
+}
+
+pub fn start(builder: Builder(state)) -> Result(Connection, actor.StartError) {
+  let initial_state =
+    Connecting(
+      identify: builder.identify,
+      event_handler: builder.handler,
+      user_state: builder.init(),
+    )
+
+  use websocket <- result.map(new_connection(builder, initial_state))
+  Connection(websocket.data)
+}
+
+fn new_connection(
   builder: Builder(user_state),
-  on_message: fn(State, user_state, Message) -> Next(user_state),
-) -> Builder(user_state) {
-  Builder(..builder, on_message:)
-}
-
-pub fn continue(state: State, user_state: user_state) -> Next(user_state) {
-  Continue(state, user_state)
-}
-
-pub fn start(
-  builder: Builder(user_state),
-  client client: grom.Client,
-  using identify: IdentifyMessage,
-) -> Result(State, actor.StartError) {
-  use state <- result.try(
-    init_state(actor, identify)
-    |> result.replace_error(actor.InitFailed("couldn't init state")),
+  state: InternalState(user_state),
+) -> Result(
+  actor.Started(Subject(stratus.InternalMessage(UserMessage))),
+  actor.StartError,
+) {
+  use gateway_data <- result.try(
+    grom.Client(builder.identify.token)
+    |> get_data
+    |> result.replace_error(actor.InitFailed("couldn't get gateway data")),
   )
 
-  use _supervisor <- result.try(
-    static_supervisor.new(static_supervisor.OneForOne)
-    |> static_supervisor.add(supervised(client, state))
-    |> static_supervisor.start,
+  let request_url =
+    string.replace(in: gateway_data.url, each: "wss://", with: "https://")
+    <> "?v=10&encoding=json"
+
+  use connection_request <- result.try(
+    request.to(request_url)
+    |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
   )
 
-  Ok(state)
+  stratus.new(connection_request, state)
+  |> stratus.on_message(on_message)
+  |> stratus.on_close(try_resume)
+  |> stratus.start
+  |> result.replace_error(actor.InitFailed(
+    "couldn't start websocket connection",
+  ))
 }
 
-fn supervised(client: grom.Client, state: State) {
-  let start = case resuming.get_info(state.resuming_info_holder) {
-    Some(info) -> {
-      case resuming.is_possible(info) {
-        True -> resume(client, state, info)
-        False -> new_connection(client, state)
-      }
-    }
-    None -> new_connection(client, state)
-  }
-
-  let restart = supervision.Permanent
-  let significant = False
-  let child_type = supervision.Supervisor
-
-  supervision.ChildSpecification(start:, restart:, significant:, child_type:)
+fn try_resume(state: InternalState(user_state), reason: stratus.CloseReason) {
+  use info <- get_resuming_info(state)
+  resume(state, info)
 }
 
-fn new_connection(client: grom.Client, state: State) {
-  fn() {
-    use gateway_data <- result.try(
-      client
-      |> get_data
-      |> result.replace_error(actor.InitFailed("couldn't get gateway data")),
-    )
-
-    let request_url =
-      string.replace(in: gateway_data.url, each: "wss://", with: "https://")
-      <> "?v=10&encoding=json"
-
-    use connection_request <- result.try(
-      request.to(request_url)
-      |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
-    )
-
-    heartbeat.reset(state.heartbeat_counter)
-    sequence.reset(state.sequence_holder)
-    resuming.reset(state.resuming_info_holder)
-
-    use subject <- result.try(
-      stratus.new(connection_request, state)
-      |> stratus.on_message(fn(state, message, connection) {
-        on_message(client, state, message, connection)
-      })
-      |> stratus.on_close(on_close)
-      |> stratus.start
-      |> result.replace_error(actor.InitFailed(
-        "couldn't start websocket connection",
-      )),
-    )
-
-    state.user_message_subject_holder
-    |> user_message.set_subject(subject.data)
-
-    subject.data
-    |> actor.send(user_message.StartNewConnection |> stratus.to_user_message)
-
-    Ok(subject)
+fn get_resuming_info(
+  state: InternalState(user_state),
+  next: fn(ResumingInfo) -> Nil,
+) {
+  case state {
+    Connected(..) ->
+      next(ResumingInfo(state.session_id, state.resume_gateway_url))
+    _ -> state.close_handler(state.user_state)
   }
 }
 
-fn resume(client: grom.Client, state: State, info: resuming.Info) {
-  fn() {
-    use connection_request <- result.try(
-      request.to(info.resume_gateway_url)
-      |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
-    )
+fn resume(state: InternalState(user_state), info: ResumingInfo) {
+  use connection_request <- result.try(
+    request.to(info.resume_gateway_url)
+    |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
+  )
 
-    use subject <- result.try(
-      stratus.new(connection_request, state)
-      |> stratus.on_message(fn(state, message, connection) {
-        on_message(client, state, message, connection)
-      })
-      |> stratus.on_close(on_close)
-      |> stratus.start
-      |> result.replace_error(actor.InitFailed(
-        "couldn't start websocket connection",
-      )),
-    )
+  use subject <- result.try(
+    stratus.new(connection_request, state)
+    |> stratus.on_message(fn(state, message, connection) {
+      on_message(client, state, message, connection)
+    })
+    |> stratus.on_close(on_close)
+    |> stratus.start
+    |> result.replace_error(actor.InitFailed(
+      "couldn't start websocket connection",
+    )),
+  )
 
-    state.user_message_subject_holder
-    |> user_message.set_subject(subject.data)
+  process.send(subject.data, stratus.to_user_message(user_message.StartResume))
 
-    process.send(
-      subject.data,
-      stratus.to_user_message(user_message.StartResume),
-    )
-
-    Ok(subject)
-  }
+  Ok(subject)
 }
 
-fn on_close(state: State, close_reason: stratus.CloseReason) {
+fn close(state: State, close_reason: stratus.CloseReason) {
   let resuming_info = resuming.get_info(state.resuming_info_holder)
   let new_resuming_info = case resuming_info {
     Some(info) ->
@@ -2330,7 +2356,7 @@ pub fn request_soundboard_sounds(state: State, for guild_ids: List(String)) {
   }
 }
 
-fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
+fn init_state(identify: IdentifyMessage) {
   use sequence_holder <- result.try(
     sequence.holder_start() |> result.map_error(string.inspect),
   )
@@ -2365,22 +2391,20 @@ fn init_state(actor: Subject(Event), identify: IdentifyMessage) {
   )
   let heartbeat_interval_holder = heartbeat_interval_holder.data
 
-  let state =
-    State(
-      actor:,
-      sequence_holder:,
-      heartbeat_counter:,
-      heartbeat_interval_holder:,
-      resuming_info_holder:,
-      identify:,
-      user_message_subject_holder:,
-      connection_holder:,
-    )
+  State(
+    sequence_holder:,
+    heartbeat_counter:,
+    heartbeat_interval_holder:,
+    resuming_info_holder:,
+    identify:,
+    user_message_subject_holder:,
+    connection_holder:,
+  )
+  |> Ok
 }
 
 fn on_message(
-  client: grom.Client,
-  state: State,
+  state: InternalState(user_state),
   message: stratus.Message(UserMessage),
   connection: stratus.Connection,
 ) {
@@ -2487,7 +2511,7 @@ fn start_soundboard_sounds_request(
 }
 
 fn on_text_message(
-  state: State,
+  state: InternalState(user_state),
   connection: stratus.Connection,
   text_message: String,
 ) {
@@ -2496,7 +2520,13 @@ fn on_text_message(
       case parse_message(text_message) {
         Ok(msg) -> next(msg)
         Error(err) -> {
-          actor.send(state.actor, ErrorEvent(err))
+          state.event_handler(
+            state.user_state,
+            ErrorEvent,
+            Connection(
+              todo as "what do i put here? `connection` is of the stratus.Connection type, not the actor",
+            ),
+          )
           stratus.continue(state)
         }
       }

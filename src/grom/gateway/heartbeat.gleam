@@ -59,7 +59,7 @@ pub fn start(
   call callback: fn() -> Nil,
   every interval: Duration,
   after initial_wait: Duration,
-) {
+) -> Result(actor.Started(Subject(Message)), grom.Error) {
   actor.new_with_initialiser(20, fn(subject) {
     let selector =
       process.new_selector()
