@@ -1,4 +1,5 @@
 import gleam/bool
+import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
@@ -2048,4 +2049,23 @@ pub fn new_modify_sticker() -> ModifySticker {
 
 pub fn new_modify_incident_actions() -> ModifyIncidentActions {
   ModifyIncidentActions(Skip, Skip)
+}
+
+/// Returns a Dict of Role IDs to member counts.
+pub fn get_role_member_counts(
+  client: grom.Client,
+  for guild_id: String,
+) -> Result(Dict(String, Int), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(
+      http.Get,
+      "/guilds/" <> guild_id <> "/roles/member-counts",
+    )
+    |> rest.execute,
+  )
+
+  response.body
+  |> json.parse(using: decode.dict(decode.string, decode.int))
+  |> result.map_error(grom.CouldNotDecode)
 }
