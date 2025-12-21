@@ -77,14 +77,6 @@ fn on_ready(
       named: "ping",
       description: "Ping-pong! 🏓",
     )),
-    command.CreateGlobalSlash(command.new_create_global_slash_command(
-      named: "soundboards",
-      description: "pierdole prawo na rozne sposoby",
-    )),
-    command.CreateGlobalSlash(command.new_create_global_slash_command(
-      named: "join",
-      description: "you can find me in da club",
-    )),
   ]
 
   let bulk_overwrite_result =
