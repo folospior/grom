@@ -41,7 +41,7 @@ pub fn state_decoder() -> decode.Decoder(State) {
   use is_mute <- decode.field("mute", decode.bool)
   use is_self_deaf <- decode.field("self_deaf", decode.bool)
   use is_self_mute <- decode.field("self_mute", decode.bool)
-  use is_streaming <- decode.field("self_stream", decode.bool)
+  use is_streaming <- decode.optional_field("self_stream", False, decode.bool)
   use is_sharing_camera <- decode.field("self_video", decode.bool)
   use is_suppressed <- decode.field("suppress", decode.bool)
   use request_to_speak_timestamp <- decode.field(

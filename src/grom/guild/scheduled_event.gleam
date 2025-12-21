@@ -124,8 +124,16 @@ pub fn decoder() -> decode.Decoder(ScheduledEvent) {
     "entity_metadata",
     decode.optional(entity_metadata_decoder()),
   )
-  use creator <- decode.field("creator", decode.optional(user.decoder()))
-  use image_hash <- decode.field("image_hash", decode.optional(decode.string))
+  use creator <- decode.optional_field(
+    "creator",
+    None,
+    decode.optional(user.decoder()),
+  )
+  use image_hash <- decode.optional_field(
+    "image_hash",
+    None,
+    decode.optional(decode.string),
+  )
   use recurrence_rule <- decode.field(
     "recurrence_rule",
     decode.optional(recurrence_rule.decoder()),

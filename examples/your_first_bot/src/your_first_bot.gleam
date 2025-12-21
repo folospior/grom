@@ -25,7 +25,7 @@ pub fn main() -> Nil {
 
   let identify =
     client
-    |> gateway.identify(intents: intent.all_unprivileged)
+    |> gateway.identify(intents: intent.all)
 
   let state = State(client:)
 
@@ -60,7 +60,7 @@ fn on_event(
     }
     gateway.ReadyEvent(ready) -> on_ready(state, ready, connection)
     gateway.InteractionCreatedEvent(interaction) ->
-      on_interaction_created(state, interaction)
+      on_interaction_created(state, interaction, connection)
     _ -> {
       echo event
       gateway.continue(state)
@@ -79,6 +79,14 @@ fn on_ready(
     command.CreateGlobalSlash(command.new_create_global_slash_command(
       named: "ping",
       description: "Ping-pong! 🏓",
+    )),
+    command.CreateGlobalSlash(command.new_create_global_slash_command(
+      named: "soundboards",
+      description: "pierdole prawo na rozne sposoby",
+    )),
+    command.CreateGlobalSlash(command.new_create_global_slash_command(
+      named: "join",
+      description: "you can find me in da club",
     )),
   ]
 
@@ -117,10 +125,14 @@ fn on_ready(
   gateway.continue(state)
 }
 
-fn on_interaction_created(state: State, interaction: Interaction) {
+fn on_interaction_created(
+  state: State,
+  interaction: Interaction,
+  connection: gateway.Connection(State),
+) {
   case interaction.data {
     interaction.CommandExecuted(command) ->
-      on_command_executed(state, interaction, command)
+      on_command_executed(state, interaction, command, connection)
     _ -> gateway.continue(state)
   }
 }
@@ -129,10 +141,11 @@ fn on_command_executed(
   state: State,
   interaction: Interaction,
   command: interaction.CommandExecution,
+  connection: gateway.Connection(State),
 ) {
   case command {
     interaction.SlashCommandExecuted(command) ->
-      on_slash_command_executed(state, interaction, command)
+      on_slash_command_executed(state, interaction, command, connection)
     _ -> gateway.continue(state)
   }
 }
@@ -141,11 +154,65 @@ fn on_slash_command_executed(
   state: State,
   interaction: Interaction,
   command: interaction.SlashCommandExecution,
+  connection: gateway.Connection(State),
 ) {
   case command.name {
     "ping" -> on_ping_command(state, interaction)
+    "soundboards" -> on_soundboards_command(state, interaction, connection)
+    "join" -> on_join_command(state, interaction, connection)
     _ -> gateway.continue(state)
   }
+}
+
+fn on_join_command(
+  state: State,
+  interaction: Interaction,
+  connection: gateway.Connection(State),
+) -> gateway.Next(State) {
+  connection
+  |> gateway.update_voice_state(using: gateway.UpdateVoiceStateMessage(
+    "1155216444691325049",
+    Some("1155216445211422795"),
+    False,
+    False,
+  ))
+
+  let _response_result =
+    state.client
+    |> interaction.respond(
+      to: interaction,
+      using: interaction.RespondWithChannelMessageWithSource(
+        interaction.ResponseMessage(
+          ..interaction.new_response_message(),
+          content: Some("Joined!"),
+        ),
+      ),
+    )
+
+  gateway.continue(state)
+}
+
+fn on_soundboards_command(
+  state: State,
+  interaction: Interaction,
+  connection: gateway.Connection(State),
+) -> gateway.Next(State) {
+  connection
+  |> gateway.request_soundboard_sounds(for: ["1155216444691325049"])
+
+  let _response_result =
+    state.client
+    |> interaction.respond(
+      to: interaction,
+      using: interaction.RespondWithChannelMessageWithSource(
+        interaction.ResponseMessage(
+          ..interaction.new_response_message(),
+          content: Some("See the console!"),
+        ),
+      ),
+    )
+
+  gateway.continue(state)
 }
 
 fn on_ping_command(state: State, interaction: Interaction) {

@@ -142,11 +142,15 @@ pub type Event {
   StageInstanceCreatedEvent(StageInstance)
   StageInstanceUpdatedEvent(StageInstance)
   StageInstanceDeletedEvent(StageInstance)
+  /// Could not test decoding. Please report any attempts in issues.
   SubscriptionCreatedEvent(Subscription)
+  /// Could not test decoding. Please report any attempts in issues.
   SubscriptionUpdatedEvent(Subscription)
+  /// Could not test decoding. Please report any attempts in issues.
   SubscriptionDeletedEvent(Subscription)
   PollVoteCreatedEvent(PollVoteCreatedMessage)
   PollVoteDeletedEvent(PollVoteDeletedMessage)
+  UnknownEvent
 }
 
 pub type SessionStartLimits {
@@ -260,6 +264,7 @@ pub type DispatchedMessage {
   SubscriptionDeleted(Subscription)
   PollVoteCreated(PollVoteCreatedMessage)
   PollVoteDeleted(PollVoteDeletedMessage)
+  UnknownDispatchedMessage
 }
 
 pub type ReadyMessage {
@@ -1039,7 +1044,7 @@ pub fn dispatched_message_decoder(
       decode.map(poll_vote_created_message_decoder(), PollVoteCreated)
     "MESSAGE_POLL_VOTE_REMOVE" ->
       decode.map(poll_vote_deleted_message_decoder(), PollVoteDeleted)
-    _ -> decode.failure(Resumed, "DispatchedMessage")
+    _ -> decode.success(UnknownDispatchedMessage)
   }
 }
 
@@ -2732,6 +2737,7 @@ fn on_text_message(
   connection: stratus.Connection,
   text_message: String,
 ) -> stratus.Next(Connection(user_state), UserMessage(user_state)) {
+  echo text_message
   use message <-
     fn(next) {
       case parse_message(text_message) {
@@ -2906,6 +2912,7 @@ fn on_dispatch(
           SubscriptionDeletedEvent(subscription)
         PollVoteCreated(msg) -> PollVoteCreatedEvent(msg)
         PollVoteDeleted(msg) -> PollVoteDeletedEvent(msg)
+        UnknownDispatchedMessage -> UnknownEvent
       }
 
       let next =

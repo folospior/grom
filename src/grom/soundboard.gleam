@@ -55,7 +55,11 @@ pub fn sound_decoder() -> decode.Decoder(Sound) {
     decode.optional(decode.string),
   )
   use is_available <- decode.field("available", decode.bool)
-  use creator <- decode.field("user", decode.optional(user.decoder()))
+  use creator <- decode.optional_field(
+    "user",
+    None,
+    decode.optional(user.decoder()),
+  )
   decode.success(Sound(
     name:,
     id:,
