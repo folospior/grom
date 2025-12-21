@@ -1,4 +1,4 @@
-# Unreleased
+# v2.0.0 (22/12/2025)
 * Add all missing type annotations (Filip Hoffmann)
 * Add newly added permissions (Filip Hoffmann)
 * Add the new get role member counts endpoint (Filip Hoffmann)
