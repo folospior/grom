@@ -792,6 +792,7 @@ pub opaque type UserMessage(user_state) {
   StartGuildMembersRequest(RequestGuildMembersMessage)
   StartSoundboardSoundsRequest(guild_ids: List(String))
   StartResume(ResumingInfo)
+  StartHeartbeatInequalityDisconnect
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -2461,7 +2462,16 @@ fn reconnect(connection_state: Connection(user_state)) -> Nil {
     }
 
   let start_result =
-    stratus.new(request, connection_state)
+    stratus.new(
+      request,
+      GettingReady(
+        gateway_url: connection_state.gateway_url,
+        identify: connection_state.identify,
+        user_state: connection_state.user_state,
+        event_handler: connection_state.event_handler,
+        manager: connection_state.manager,
+      ),
+    )
     |> stratus.on_message(on_message)
     |> stratus.on_close(try_reconnect)
     |> stratus.start
@@ -2499,7 +2509,11 @@ fn on_connection_manager_message(
         UpdateWebsocket(to: new) -> actor.continue(Some(new))
       }
     }
-    None -> actor.continue(None)
+    None ->
+      case message {
+        SendUserMessage(_) -> actor.continue(current)
+        UpdateWebsocket(to: new) -> actor.continue(Some(new))
+      }
   }
 }
 
@@ -2592,7 +2606,22 @@ fn on_message(
       on_start_soundboard_sounds_request(connection_state, connection, ids)
     stratus.User(StartResume(resuming_info)) ->
       on_start_resume(connection_state, connection, resuming_info)
+    stratus.User(StartHeartbeatInequalityDisconnect) ->
+      on_start_heartbeat_inequality_disconnect(connection_state, connection)
   }
+}
+
+fn on_start_heartbeat_inequality_disconnect(
+  connection_state: Connection(user_state),
+  connection: stratus.Connection,
+) -> stratus.Next(Connection(user_state), UserMessage(user_state)) {
+  let _ =
+    connection
+    |> stratus.close(because: stratus.GoingAway(body: <<>>))
+
+  reconnect(connection_state)
+
+  stratus.stop()
 }
 
 fn on_start_resume(
@@ -3142,6 +3171,8 @@ fn on_heartbeat_manager_message(
         ),
       )
     SendHeartbeat -> {
+      use <- check_heartbeat_equality(current)
+
       // tell stratus to actually send it via the websocket
       process.send(
         current.connection_manager,
@@ -3168,6 +3199,22 @@ fn on_heartbeat_manager_message(
     ResetHeartbeatCount ->
       actor.continue(HeartbeatState(..current, count: HeartbeatCount(0, 0)))
     StopHeartbeats -> actor.stop()
+  }
+}
+
+fn check_heartbeat_equality(
+  current: HeartbeatState(user_state),
+  next: fn() -> actor.Next(a, b),
+) -> actor.Next(a, b) {
+  case current.count.heartbeat == current.count.heartbeat_ack {
+    True -> next()
+    False -> {
+      process.send(
+        current.connection_manager,
+        SendUserMessage(StartHeartbeatInequalityDisconnect),
+      )
+      actor.stop()
+    }
   }
 }
 

@@ -1,10 +1,10 @@
 import dotenv_gleam
 import envoy
 import gleam/erlang/process
-import gleam/option.{Some}
-import gleam/otp/actor
+import gleam/option.{None, Some}
 import gleam/string
 import grom
+import grom/activity
 import grom/command
 import grom/gateway
 import grom/gateway/intent
@@ -29,11 +29,10 @@ pub fn main() -> Nil {
 
   let state = State(client:)
 
-  use actor <- create_actor(state)
-
   let gateway_start_result =
-    client
-    |> gateway.start(identify, notify: actor)
+    gateway.new(identify, state)
+    |> gateway.on_event(do: on_event)
+    |> gateway.start
 
   case gateway_start_result {
     Ok(_) -> {
@@ -49,39 +48,28 @@ pub fn main() -> Nil {
   }
 }
 
-fn create_actor(
+fn on_event(
   state: State,
-  next: fn(process.Subject(gateway.Event)) -> Nil,
-) -> Nil {
-  let actor =
-    actor.new(state)
-    |> actor.on_message(on_event)
-    |> actor.start
-
-  case actor {
-    Ok(actor) -> next(actor.data)
-    Error(err) ->
-      logging.log(
-        logging.Critical,
-        "Couldn't start the gateway: " <> string.inspect(err),
-      )
-  }
-}
-
-fn on_event(state: State, event: gateway.Event) {
+  event: gateway.Event,
+  connection: gateway.Connection(State),
+) {
   case event {
     gateway.ErrorEvent(error) -> {
       logging.log(logging.Warning, string.inspect(error))
-      actor.continue(state)
+      gateway.continue(state)
     }
-    gateway.ReadyEvent(ready) -> on_ready(state, ready)
+    gateway.ReadyEvent(ready) -> on_ready(state, ready, connection)
     gateway.InteractionCreatedEvent(interaction) ->
       on_interaction_created(state, interaction)
-    _ -> actor.continue(state)
+    _ -> gateway.continue(state)
   }
 }
 
-fn on_ready(state: State, ready: gateway.ReadyMessage) {
+fn on_ready(
+  state: State,
+  ready: gateway.ReadyMessage,
+  connection: gateway.Connection(State),
+) {
   logging.log(logging.Info, "Ready!")
 
   let global_commands = [
@@ -104,23 +92,33 @@ fn on_ready(state: State, ready: gateway.ReadyMessage) {
         logging.Info,
         "Overwrote the commands for " <> ready.application.id,
       )
-      actor.continue(state)
     }
     Error(err) -> {
       logging.log(
         logging.Error,
         "Couldn't bulk overwrite global commands: " <> string.inspect(err),
       )
-      actor.stop()
     }
   }
+
+  connection
+  |> gateway.update_presence(using: gateway.UpdatePresenceMessage(
+    status: gateway.Online,
+    since: None,
+    activities: [
+      activity.new(named: "the gateway connection", type_: activity.Watching),
+    ],
+    is_afk: False,
+  ))
+
+  gateway.continue(state)
 }
 
 fn on_interaction_created(state: State, interaction: Interaction) {
   case interaction.data {
     interaction.CommandExecuted(command) ->
       on_command_executed(state, interaction, command)
-    _ -> actor.continue(state)
+    _ -> gateway.continue(state)
   }
 }
 
@@ -132,7 +130,7 @@ fn on_command_executed(
   case command {
     interaction.SlashCommandExecuted(command) ->
       on_slash_command_executed(state, interaction, command)
-    _ -> actor.continue(state)
+    _ -> gateway.continue(state)
   }
 }
 
@@ -143,7 +141,7 @@ fn on_slash_command_executed(
 ) {
   case command.name {
     "ping" -> on_ping_command(state, interaction)
-    _ -> actor.continue(state)
+    _ -> gateway.continue(state)
   }
 }
 
@@ -160,5 +158,5 @@ fn on_ping_command(state: State, interaction: Interaction) {
     state.client
     |> interaction.respond(to: interaction, using: response)
 
-  actor.continue(state)
+  gateway.continue(state)
 }
