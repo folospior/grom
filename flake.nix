@@ -23,7 +23,7 @@
     devShells = forAllSystems (pkgs: {
       default = pkgs.mkShellNoCC {
         buildInputs = with pkgs; [
-          pkgs.gleam.bin.latest
+          pkgs.gleam.bin.nightly
           rebar3
           beamPackages.erlang
         ];

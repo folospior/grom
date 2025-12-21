@@ -53,7 +53,7 @@ pub fn component_decoder() -> decode.Decoder(Component) {
 }
 
 @internal
-pub fn accessory_decoder() {
+pub fn accessory_decoder() -> decode.Decoder(Accessory) {
   use type_ <- decode.field("type", decode.int)
   case type_ {
     2 -> {

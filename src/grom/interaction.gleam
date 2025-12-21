@@ -1297,7 +1297,7 @@ pub fn response_message_to_json(message: ResponseMessage) -> Json {
 }
 
 @internal
-pub fn modal_response_to_json(modal: ModalResponse) {
+pub fn modal_response_to_json(modal: ModalResponse) -> Json {
   json.object([
     #("custom_id", json.string(modal.custom_id)),
     #("title", json.string(modal.title)),
@@ -1306,7 +1306,7 @@ pub fn modal_response_to_json(modal: ModalResponse) {
 }
 
 @internal
-pub fn modify_original_response_to_json(modify: ModifyOriginalResponse) {
+pub fn modify_original_response_to_json(modify: ModifyOriginalResponse) -> Json {
   [
     modification.to_json(modify.content, "content", json.string),
     modification.to_json(modify.embeds, "embeds", json.array(_, embed.to_json)),

@@ -111,7 +111,7 @@ pub fn to_json(user_select: UserSelect) -> Json {
 }
 
 @internal
-pub fn default_value_to_json(default_value: DefaultValue) {
+pub fn default_value_to_json(default_value: DefaultValue) -> Json {
   json.object([
     #("id", json.string(default_value.id)),
     #("type", json.string("user")),

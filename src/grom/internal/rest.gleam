@@ -16,9 +16,9 @@ import status_code
 
 // CONSTANTS -------------------------------------------------------------------
 
-const discord_url = "discord.com"
+const discord_url: String = "discord.com"
 
-const discord_api_path = "api/v10"
+const discord_api_path: String = "api/v10"
 
 // INTERNAL FUNCTIONS ----------------------------------------------------------
 

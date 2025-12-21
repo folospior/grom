@@ -62,7 +62,7 @@ pub type Modify {
 // FLAGS -----------------------------------------------------------------------
 
 @internal
-pub fn bits_member_flags() {
+pub fn bits_member_flags() -> List(#(Int, Flag)) {
   [
     #(int.bitwise_shift_left(1, 0), DidRejoin),
     #(int.bitwise_shift_left(1, 1), CompletedOnboarding),

@@ -1,3 +1,6 @@
+# Unreleased
+* Add all missing type annotations (Filip Hoffmann)
+
 # v1.0.1 (21/12/2025)
 * Update README.md (Filip Hoffmann)
 * Update grom.version/0 (Filip Hoffmann)

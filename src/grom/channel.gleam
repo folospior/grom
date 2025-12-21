@@ -480,7 +480,7 @@ pub fn text_decoder() -> decode.Decoder(Channel) {
 }
 
 @internal
-pub fn dm_decoder() {
+pub fn dm_decoder() -> decode.Decoder(Channel) {
   use id <- decode.field("id", decode.string)
   use last_message_id <- decode.field(
     "last_message_id",

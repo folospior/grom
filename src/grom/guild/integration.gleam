@@ -171,7 +171,7 @@ pub fn application_decoder() -> decode.Decoder(Application) {
 }
 
 @internal
-pub fn expire_behavior_decoder() {
+pub fn expire_behavior_decoder() -> decode.Decoder(ExpireBehavior) {
   use variant <- decode.then(decode.int)
   case variant {
     0 -> decode.success(RemoveRole)

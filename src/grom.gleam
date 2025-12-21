@@ -26,6 +26,6 @@ pub type Error {
 
 // FUNCTIONS -------------------------------------------------------------------
 
-pub fn version() {
+pub fn version() -> String {
   "v1.0.2"
 }

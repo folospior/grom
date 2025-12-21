@@ -2385,7 +2385,10 @@ fn try_resume(connection_state: Connection(user_state)) -> Nil {
   }
 }
 
-fn resume(connection_state: Connection(user_state), resuming_info: ResumingInfo) {
+fn resume(
+  connection_state: Connection(user_state),
+  resuming_info: ResumingInfo,
+) -> Nil {
   let request_url =
     resuming_info.resume_gateway_url
     |> string.replace(each: "wss://", with: "https://")
@@ -2500,6 +2503,9 @@ fn reconnect(connection_state: Connection(user_state)) -> Nil {
 fn on_connection_manager_message(
   current: Option(Subject(stratus.InternalMessage(UserMessage(user_state)))),
   message: ConnectionManagerMessage(user_state),
+) -> actor.Next(
+  Option(Subject(stratus.InternalMessage(UserMessage(user_state)))),
+  a,
 ) {
   case current {
     Some(manager) -> {
@@ -2551,7 +2557,7 @@ pub fn identify_with_presence(
 pub fn update_presence(
   connection_state: Connection(user_state),
   using message: UpdatePresenceMessage,
-) {
+) -> Nil {
   process.send(
     connection_state.manager,
     SendUserMessage(StartPresenceUpdate(message)),
@@ -2561,7 +2567,7 @@ pub fn update_presence(
 pub fn update_voice_state(
   connection_state: Connection(user_state),
   using message: UpdateVoiceStateMessage,
-) {
+) -> Nil {
   process.send(
     connection_state.manager,
     SendUserMessage(StartVoiceStateUpdate(message)),
@@ -2571,7 +2577,7 @@ pub fn update_voice_state(
 pub fn request_guild_members(
   connection_state: Connection(user_state),
   using message: RequestGuildMembersMessage,
-) {
+) -> Nil {
   process.send(
     connection_state.manager,
     SendUserMessage(StartGuildMembersRequest(message)),
@@ -2581,7 +2587,7 @@ pub fn request_guild_members(
 pub fn request_soundboard_sounds(
   connection_state: Connection(user_state),
   for guild_ids: List(String),
-) {
+) -> Nil {
   process.send(
     connection_state.manager,
     SendUserMessage(StartSoundboardSoundsRequest(guild_ids)),
@@ -2659,7 +2665,7 @@ fn on_start_guild_members_request(
   connection_state: Connection(user_state),
   connection: stratus.Connection,
   msg: RequestGuildMembersMessage,
-) {
+) -> stratus.Next(Connection(user_state), a) {
   let send_result =
     msg
     |> request_guild_members_message_to_json
@@ -2677,7 +2683,7 @@ fn on_start_voice_state_update(
   connection_state: Connection(user_state),
   connection: stratus.Connection,
   msg: UpdateVoiceStateMessage,
-) {
+) -> stratus.Next(Connection(user_state), a) {
   let send_result =
     msg
     |> update_voice_state_message_to_json
@@ -2787,7 +2793,10 @@ fn on_reconnect_request(
   stratus.stop()
 }
 
-fn send_error(err: grom.Error, connection_state: Connection(user_state)) {
+fn send_error(
+  err: grom.Error,
+  connection_state: Connection(user_state),
+) -> stratus.Next(Connection(user_state), a) {
   let next =
     connection_state.event_handler(
       connection_state.user_state,
@@ -3125,7 +3134,7 @@ type HeartbeatCount {
 fn start_heartbeats(
   every interval: Duration,
   send_to connection_manager: Subject(ConnectionManagerMessage(user_state)),
-) {
+) -> Result(actor.Started(Subject(HeartbeatManagerMessage)), grom.Error) {
   let initial_wait =
     interval
     |> duration.to_seconds
@@ -3165,7 +3174,7 @@ fn start_heartbeats(
 fn on_heartbeat_manager_message(
   current: HeartbeatState(user_state),
   message: HeartbeatManagerMessage,
-) {
+) -> actor.Next(HeartbeatState(user_state), a) {
   case message {
     HeartbeatSent ->
       actor.continue(
@@ -3236,4 +3245,4 @@ fn check_heartbeat_equality(
 }
 
 // sounds better
-const heartbeat_jitter = float.random
+const heartbeat_jitter: fn() -> Float = float.random

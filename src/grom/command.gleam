@@ -2317,11 +2317,15 @@ pub fn new_create_global_slash_command(
   )
 }
 
-pub fn new_create_global_user_command(named name: String) {
+pub fn new_create_global_user_command(
+  named name: String,
+) -> CreateGlobalUserCommand {
   CreateGlobalUserCommand(name, None, None, None, None, False)
 }
 
-pub fn new_create_global_message_command(named name: String) {
+pub fn new_create_global_message_command(
+  named name: String,
+) -> CreateGlobalMessageCommand {
   CreateGlobalMessageCommand(name, None, None, None, None, False)
 }
 
