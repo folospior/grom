@@ -63,8 +63,8 @@ pub type File {
 pub fn type_decoder() -> decode.Decoder(Type) {
   use variant <- decode.then(decode.int)
   case variant {
-    0 -> decode.success(Standard)
-    1 -> decode.success(Guild)
+    1 -> decode.success(Standard)
+    2 -> decode.success(Guild)
     _ -> decode.failure(Standard, "Type")
   }
 }
@@ -73,10 +73,10 @@ pub fn type_decoder() -> decode.Decoder(Type) {
 pub fn format_type_decoder() -> decode.Decoder(ContentType) {
   use variant <- decode.then(decode.int)
   case variant {
-    0 -> decode.success(Png)
-    1 -> decode.success(Apng)
-    2 -> decode.success(Lottie)
-    3 -> decode.success(Gif)
+    1 -> decode.success(Png)
+    2 -> decode.success(Apng)
+    3 -> decode.success(Lottie)
+    4 -> decode.success(Gif)
     _ -> decode.failure(Png, "FormatType")
   }
 }
@@ -84,7 +84,11 @@ pub fn format_type_decoder() -> decode.Decoder(ContentType) {
 @internal
 pub fn decoder() -> decode.Decoder(Sticker) {
   use id <- decode.field("id", decode.string)
-  use pack_id <- decode.field("pack_id", decode.optional(decode.string))
+  use pack_id <- decode.optional_field(
+    "pack_id",
+    None,
+    decode.optional(decode.string),
+  )
   use name <- decode.field("name", decode.string)
   use description <- decode.field("description", decode.optional(decode.string))
   use tags <- decode.field("tags", decode.string)

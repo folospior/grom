@@ -61,7 +61,10 @@ fn on_event(
     gateway.ReadyEvent(ready) -> on_ready(state, ready, connection)
     gateway.InteractionCreatedEvent(interaction) ->
       on_interaction_created(state, interaction)
-    _ -> gateway.continue(state)
+    _ -> {
+      echo event
+      gateway.continue(state)
+    }
   }
 }
 

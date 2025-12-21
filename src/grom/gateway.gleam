@@ -2917,7 +2917,13 @@ fn on_dispatch(
 
       case next {
         Continue(user_state) ->
-          stratus.continue(Identified(..connection_state, user_state:))
+          stratus.continue(
+            Identified(
+              ..connection_state,
+              user_state:,
+              sequence: Some(sequence),
+            ),
+          )
         Stop -> stratus.stop()
         StopAbnormal(reason) -> stratus.stop_abnormal(reason)
       }
@@ -3053,11 +3059,13 @@ fn on_start_send_heartbeat(
   connection_state: Connection(user_state),
   connection: stratus.Connection,
 ) -> stratus.Next(Connection(user_state), a) {
-  use sequence <-
+  use heartbeat_manager, sequence <-
     fn(next) {
       case connection_state {
         GettingReady(..) -> stratus.continue(connection_state)
-        Welcomed(sequence:, ..) | Identified(sequence:, ..) -> next(sequence)
+        Welcomed(sequence:, heartbeat_manager:, ..)
+        | Identified(sequence:, heartbeat_manager:, ..) ->
+          next(heartbeat_manager, sequence)
       }
     }
 
@@ -3070,7 +3078,10 @@ fn on_start_send_heartbeat(
     |> result.map_error(grom.CouldNotSendEvent)
 
   case send_result {
-    Ok(_) -> stratus.continue(connection_state)
+    Ok(_) -> {
+      process.send(heartbeat_manager, HeartbeatSent)
+      stratus.continue(connection_state)
+    }
     Error(err) -> send_error(err, connection_state)
   }
 }
