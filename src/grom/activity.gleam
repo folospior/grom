@@ -9,6 +9,7 @@ import grom/internal/time_timestamp
 
 // TYPES ----------------------------------------------------------------------
 
+/// Important documents: https://discord.com/developers/docs/events/gateway-events#activity-object
 pub type Activity {
   Activity(
     name: String,
@@ -31,6 +32,7 @@ pub type Activity {
   )
 }
 
+/// Important documents: https://discord.com/developers/docs/events/gateway-events#activity-object-activity-types
 pub type Type {
   Playing
   Streaming
@@ -44,6 +46,7 @@ pub type Timestamps {
   Timestamps(start: Option(Timestamp), end: Option(Timestamp))
 }
 
+/// Important documents: https://discord.com/developers/docs/events/gateway-events#activity-object-status-display-types
 pub type DisplayType {
   DisplayName
   DisplayState
@@ -595,4 +598,38 @@ pub fn secrets_to_json(secrets: Secrets) -> Json {
 pub fn button_to_json(button: Button) -> Json {
   [#("label", json.string(button.label)), #("url", json.string(button.url))]
   |> json.object
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+/// Example usage:
+/// ```gleam
+/// let activity = activity.new(named: "with your mom", type_: activity.Playing)
+///
+/// gateway_connection
+/// |> gateway.update_presence(gateway.UpdatePresenceMessage(
+///   ..gateway.new_update_presence_message(),
+///   activities: [activity],
+/// ))
+/// ```
+pub fn new(named name: String, type_ type_: Type) -> Activity {
+  Activity(
+    name:,
+    type_:,
+    url: None,
+    created_at: timestamp.system_time(),
+    timestamps: None,
+    application_id: None,
+    status_display_type: None,
+    details: None,
+    details_url: None,
+    state: None,
+    state_url: None,
+    emoji: None,
+    party: None,
+    assets: None,
+    secrets: None,
+    flags: None,
+    buttons: None,
+  )
 }

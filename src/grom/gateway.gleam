@@ -48,9 +48,8 @@ import stratus
 
 // TYPES -----------------------------------------------------------------------
 
-// TODO: Rename this
-pub type GatewayData {
-  GatewayData(
+pub type Data {
+  Data(
     url: String,
     recommended_shards: Int,
     session_start_limits: SessionStartLimits,
@@ -798,7 +797,7 @@ pub opaque type UserMessage(user_state) {
 // DECODERS --------------------------------------------------------------------
 
 @internal
-pub fn data_decoder() -> decode.Decoder(GatewayData) {
+pub fn data_decoder() -> decode.Decoder(Data) {
   use url <- decode.field("url", decode.string)
   use recommended_shards <- decode.field("shards", decode.int)
   use session_start_limits <- decode.field(
@@ -806,7 +805,7 @@ pub fn data_decoder() -> decode.Decoder(GatewayData) {
     session_start_limits_decoder(),
   )
 
-  decode.success(GatewayData(url:, recommended_shards:, session_start_limits:))
+  decode.success(Data(url:, recommended_shards:, session_start_limits:))
 }
 
 @internal
@@ -2249,7 +2248,7 @@ fn update_voice_state_message_to_json(message: UpdateVoiceStateMessage) -> Json 
 
 // FUNCTIONS -------------------------------------------------------------------
 
-pub fn get_data(client: grom.Client) -> Result(GatewayData, grom.Error) {
+pub fn get_data(client: grom.Client) -> Result(Data, grom.Error) {
   use response <- result.try(
     client
     |> rest.new_request(http.Get, "/gateway/bot")
