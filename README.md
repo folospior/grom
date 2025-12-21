@@ -12,15 +12,15 @@ Grom is considered __experimental__, and while it has released as v1.0.0, there 
 These changes will either stem from the library's internal changes, or the Discord API's changes.
 
 Features:
-[x] Support for the Discord v10 gateway - connecting, reconnecting, resuming, heartbeating, sending/receiving events.
-[x] Full Discord REST API support in the library. ~~We don't talk about scheduled events 😂~~
-[x] Slash/message/user commands, interactions.
-[x] Components v2, along with modal components.
-[x] Using the Erlang target, along with its amazing OTP library.
-[x] Monetization. (untested, hic sunt dracones)
-[ ] Sharding.
-[ ] Voice support.
-[ ] Bearer token authentication.
+* [x] Support for the Discord v10 gateway - connecting, reconnecting, resuming, heartbeating, sending/receiving events.
+* [x] Full Discord REST API support in the library. ~~We don't talk about scheduled events 😂~~
+* [x] Slash/message/user commands, interactions.
+* [x] Components v2, along with modal components.
+* [x] Using the Erlang target, along with its amazing OTP library.
+* [x] Monetization. (untested, hic sunt dracones)
+* [ ] Sharding.
+* [ ] Voice support.
+* [ ] Bearer token authentication.
 
 ## 💻 Examples
 You can see the examples [here](./examples). These will be rolled out over time.
