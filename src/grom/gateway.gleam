@@ -2737,7 +2737,6 @@ fn on_text_message(
   connection: stratus.Connection,
   text_message: String,
 ) -> stratus.Next(Connection(user_state), UserMessage(user_state)) {
-  echo text_message
   use message <-
     fn(next) {
       case parse_message(text_message) {
