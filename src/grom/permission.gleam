@@ -56,6 +56,8 @@ pub type Permission {
   SendVoiceMessages
   SendPolls
   UseExternalApps
+  PinMessages
+  BypassSlowmode
 }
 
 // FLAGS -----------------------------------------------------------------------
@@ -111,6 +113,8 @@ fn permissions_bits() -> List(#(Int, Permission)) {
     #(int.bitwise_shift_left(1, 46), SendVoiceMessages),
     #(int.bitwise_shift_left(1, 49), SendPolls),
     #(int.bitwise_shift_left(1, 50), UseExternalApps),
+    #(int.bitwise_shift_left(1, 51), PinMessages),
+    #(int.bitwise_shift_left(1, 52), BypassSlowmode),
   ]
 }
 
