@@ -12,6 +12,7 @@ import stratus
 
 @internal
 pub type UserMessage {
+  SendHeartbeat
   StartResume
   StartNewConnection
   StartPresenceUpdate(UpdatePresenceMessage)

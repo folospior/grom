@@ -7,8 +7,6 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
-import gleam/otp/static_supervisor
-import gleam/otp/supervision
 import gleam/result
 import gleam/string
 import gleam/time/duration.{type Duration}
@@ -21,15 +19,7 @@ import grom/channel/thread.{type Thread}
 import grom/command
 import grom/emoji.{type Emoji}
 import grom/entitlement.{type Entitlement}
-import grom/gateway/connection
-import grom/gateway/heartbeat
 import grom/gateway/intent.{type Intent}
-import grom/gateway/resuming
-import grom/gateway/sequence
-import grom/gateway/user_message.{
-  type RequestGuildMembersMessage, type UpdatePresenceMessage,
-  type UpdateVoiceStateMessage, type UserMessage,
-}
 import grom/guild.{type Guild}
 import grom/guild/audit_log
 import grom/guild/auto_moderation
@@ -659,6 +649,57 @@ pub type PollVoteDeletedMessage {
   )
 }
 
+// USER MESSAGES ---------------------------------------------------------------
+
+pub type UpdatePresenceMessage {
+  UpdatePresenceMessage(
+    /// Only for Idle.
+    since: Option(Timestamp),
+    activities: List(Activity),
+    status: PresenceStatus,
+    is_afk: Bool,
+  )
+}
+
+pub type UpdateVoiceStateMessage {
+  UpdateVoiceStateMessage(
+    guild_id: String,
+    /// Set to `None` if disconnecting.
+    channel_id: Option(String),
+    is_self_muted: Bool,
+    is_self_deafened: Bool,
+  )
+}
+
+pub type RequestGuildMembersMessage {
+  RequestAllGuildMembersMessage(
+    guild_id: String,
+    with_presences: Bool,
+    nonce: Option(String),
+  )
+  RequestGuildMembersByIdsMessage(
+    guild_id: String,
+    with_presences: Bool,
+    nonce: Option(String),
+    user_ids: List(String),
+  )
+  RequestGuildMembersByQueryMessage(
+    guild_id: String,
+    with_presences: Bool,
+    nonce: Option(String),
+    query: String,
+    limit: Int,
+  )
+}
+
+pub type PresenceStatus {
+  Online
+  DoNotDisturb
+  Idle
+  Invisible
+  Offline
+}
+
 // SEND EVENTS -----------------------------------------------------------------
 
 pub type SentMessage {
@@ -701,51 +742,57 @@ pub opaque type Builder(state) {
   Builder(
     identify: IdentifyMessage,
     init: fn() -> state,
-    handler: fn(state, Event, Connection) -> Next(state),
+    handler: fn(state, Event, Connection(state)) -> Next(state),
     close: fn(state) -> Nil,
   )
 }
 
-pub opaque type Connection {
-  Connection(websocket: Subject(stratus.InternalMessage(UserMessage)))
+pub opaque type ConnectionManagerMessage(user_state) {
+  UpdateWebsocket(to: Subject(stratus.InternalMessage(UserMessage(user_state))))
+  SendUserMessage(message: UserMessage(user_state))
 }
 
-type InternalState(user_state) {
-  Connecting(
+pub opaque type Connection(user_state) {
+  GettingReady(
+    gateway_url: String,
     identify: IdentifyMessage,
     user_state: user_state,
-    event_handler: fn(user_state, Event, Connection) -> Next(user_state),
-    close_handler: fn(user_state) -> Nil,
+    event_handler: fn(user_state, Event, Connection(user_state)) ->
+      Next(user_state),
+    manager: Subject(ConnectionManagerMessage(user_state)),
   )
-  Identifying(
+  Welcomed(
+    gateway_url: String,
     identify: IdentifyMessage,
     user_state: user_state,
-    event_handler: fn(user_state, Event, Connection) -> Next(user_state),
-    close_handler: fn(user_state) -> Nil,
-    heartbeat_interval: Duration,
-    heartbeat_loop: Subject(heartbeat.Message),
+    event_handler: fn(user_state, Event, Connection(user_state)) ->
+      Next(user_state),
+    manager: Subject(ConnectionManagerMessage(user_state)),
+    heartbeat_manager: Subject(HeartbeatManagerMessage),
     sequence: Option(Int),
-    sent_heartbeats: Int,
-    acknowledged_heartbeats: Int,
   )
-  Connected(
+  Identified(
+    gateway_url: String,
     identify: IdentifyMessage,
     user_state: user_state,
-    event_handler: fn(user_state, Event, Connection) -> Next(user_state),
-    close_handler: fn(user_state) -> Nil,
-    heartbeat_interval: Int,
-    heartbeat_loop: Subject(heartbeat.Message),
+    event_handler: fn(user_state, Event, Connection(user_state)) ->
+      Next(user_state),
+    manager: Subject(ConnectionManagerMessage(user_state)),
+    heartbeat_manager: Subject(HeartbeatManagerMessage),
     sequence: Option(Int),
-    sent_heartbeats: Int,
-    acknowledged_heartbeats: Int,
     session_id: String,
     resume_gateway_url: String,
-    last_received_close_reason: Option(stratus.CloseReason),
   )
 }
 
-type ResumingInfo {
-  ResumingInfo(session_id: String, resume_gateway_url: String)
+pub opaque type UserMessage(user_state) {
+  StartSendHeartbeat
+  StartIdentify(Connection(user_state))
+  StartPresenceUpdate(UpdatePresenceMessage)
+  StartVoiceStateUpdate(UpdateVoiceStateMessage)
+  StartGuildMembersRequest(RequestGuildMembersMessage)
+  StartSoundboardSoundsRequest(guild_ids: List(String))
+  StartResume(ResumingInfo)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -2065,7 +2112,7 @@ fn identify_to_json(msg: IdentifyMessage) -> Json {
 
     let presence = case msg.presence {
       Some(presence) -> [
-        #("presence", user_message.update_presence_to_json(presence, False)),
+        #("presence", update_presence_to_json(presence, False)),
       ]
       None -> []
     }
@@ -2106,6 +2153,100 @@ fn heartbeat_to_json(heartbeat: HeartbeatMessage) -> Json {
   ])
 }
 
+fn update_presence_to_json(
+  msg: UpdatePresenceMessage,
+  with_opcode: Bool,
+) -> Json {
+  let data = {
+    let since = case msg.since, msg.status {
+      Some(timestamp), Idle -> [
+        #("since", json.int(time_timestamp.to_unix_milliseconds(timestamp))),
+      ]
+      _, _ -> [#("since", json.null())]
+    }
+
+    let activities = [
+      #("activities", json.array(msg.activities, activity.to_json)),
+    ]
+
+    let status = [#("status", presence_status_to_json(msg.status))]
+
+    let is_afk = [#("afk", json.bool(msg.is_afk))]
+
+    [since, activities, status, is_afk]
+    |> list.flatten
+    |> json.object
+  }
+
+  case with_opcode {
+    True -> json.object([#("op", json.int(3)), #("d", data)])
+    False -> data
+  }
+}
+
+fn presence_status_to_json(status: PresenceStatus) -> Json {
+  case status {
+    Online -> "online"
+    DoNotDisturb -> "dnd"
+    Idle -> "idle"
+    Invisible -> "invisible"
+    Offline -> "offline"
+  }
+  |> json.string
+}
+
+fn request_guild_members_message_to_json(
+  message: RequestGuildMembersMessage,
+) -> Json {
+  let data = {
+    let guild_id = [#("guild_id", json.string(message.guild_id))]
+
+    let with_presences = [#("presences", json.bool(message.with_presences))]
+
+    let nonce = case message.nonce {
+      Some(nonce) -> [#("nonce", json.string(nonce))]
+      None -> []
+    }
+
+    let #(query, limit, user_ids) = case message {
+      RequestAllGuildMembersMessage(..) -> #(
+        [#("query", json.string(""))],
+        [#("limit", json.int(0))],
+        [],
+      )
+      RequestGuildMembersByIdsMessage(..) -> #([], [], [
+        #("user_ids", json.array(message.user_ids, json.string)),
+      ])
+      RequestGuildMembersByQueryMessage(..) -> #(
+        [#("query", json.string(message.query))],
+        [#("limit", json.int(message.limit))],
+        [],
+      )
+    }
+
+    [guild_id, with_presences, nonce, query, limit, user_ids]
+    |> list.flatten
+    |> json.object
+  }
+
+  json.object([#("op", json.int(8)), #("d", data)])
+}
+
+fn update_voice_state_message_to_json(message: UpdateVoiceStateMessage) -> Json {
+  json.object([
+    #("op", json.int(4)),
+    #(
+      "d",
+      json.object([
+        #("guild_id", json.string(message.guild_id)),
+        #("channel_id", json.nullable(message.channel_id, json.string)),
+        #("self_mute", json.bool(message.is_self_muted)),
+        #("self_deaf", json.bool(message.is_self_deafened)),
+      ]),
+    ),
+  ])
+}
+
 // FUNCTIONS -------------------------------------------------------------------
 
 pub fn get_data(client: grom.Client) -> Result(GatewayData, grom.Error) {
@@ -2143,134 +2284,224 @@ pub fn new(identify: IdentifyMessage, state: state) -> Builder(state) {
 
 pub fn on_event(
   builder: Builder(state),
-  do handler: fn(state, Event, Connection) -> Next(state),
+  do handler: fn(state, Event, Connection(state)) -> Next(state),
 ) -> Builder(state) {
   Builder(..builder, handler:)
 }
 
-pub fn on_close(
-  builder: Builder(state),
-  do close: fn(state) -> Nil,
-) -> Builder(state) {
-  Builder(..builder, close:)
-}
+pub fn start(builder: Builder(state)) -> Result(Nil, grom.Error) {
+  use data <- result.try(get_data(grom.Client(builder.identify.token)))
 
-pub fn start(builder: Builder(state)) -> Result(Connection, actor.StartError) {
-  let initial_state =
-    Connecting(
+  let request_url =
+    data.url
+    |> string.replace(each: "wss://", with: "https://")
+    |> string.append(suffix: "?v=10&encoding=json")
+
+  use request <- result.try(
+    request.to(request_url)
+    |> result.replace_error(grom.InvalidGatewayUrl(request_url)),
+  )
+
+  use connection_manager <- result.try(
+    actor.new(None)
+    |> actor.on_message(on_connection_manager_message)
+    |> actor.start
+    |> result.map_error(grom.CouldNotStartActor),
+  )
+
+  let initial_connection_state =
+    GettingReady(
+      gateway_url: data.url,
       identify: builder.identify,
       event_handler: builder.handler,
       user_state: builder.init(),
+      manager: connection_manager.data,
     )
 
-  use websocket <- result.map(new_connection(builder, initial_state))
-  Connection(websocket.data)
-}
-
-fn new_connection(
-  builder: Builder(user_state),
-  state: InternalState(user_state),
-) -> Result(
-  actor.Started(Subject(stratus.InternalMessage(UserMessage))),
-  actor.StartError,
-) {
-  use gateway_data <- result.try(
-    grom.Client(builder.identify.token)
-    |> get_data
-    |> result.replace_error(actor.InitFailed("couldn't get gateway data")),
-  )
-
-  let request_url =
-    string.replace(in: gateway_data.url, each: "wss://", with: "https://")
-    <> "?v=10&encoding=json"
-
-  use connection_request <- result.try(
-    request.to(request_url)
-    |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
-  )
-
-  stratus.new(connection_request, state)
-  |> stratus.on_message(on_message)
-  |> stratus.on_close(try_resume)
-  |> stratus.start
-  |> result.replace_error(actor.InitFailed(
-    "couldn't start websocket connection",
-  ))
-}
-
-fn try_resume(state: InternalState(user_state), reason: stratus.CloseReason) {
-  use info <- get_resuming_info(state)
-  resume(state, info)
-}
-
-fn get_resuming_info(
-  state: InternalState(user_state),
-  next: fn(ResumingInfo) -> Nil,
-) {
-  case state {
-    Connected(..) ->
-      next(ResumingInfo(state.session_id, state.resume_gateway_url))
-    _ -> state.close_handler(state.user_state)
-  }
-}
-
-fn resume(state: InternalState(user_state), info: ResumingInfo) {
-  use connection_request <- result.try(
-    request.to(info.resume_gateway_url)
-    |> result.replace_error(actor.InitFailed("couldn't parse connection url")),
-  )
-
-  use subject <- result.try(
-    stratus.new(connection_request, state)
-    |> stratus.on_message(fn(state, message, connection) {
-      on_message(client, state, message, connection)
-    })
-    |> stratus.on_close(on_close)
+  use websocket <- result.try(
+    stratus.new(request:, state: initial_connection_state)
+    |> stratus.on_message(on_message)
+    |> stratus.on_close(try_reconnect)
     |> stratus.start
-    |> result.replace_error(actor.InitFailed(
-      "couldn't start websocket connection",
-    )),
+    |> result.map_error(grom.CouldNotInitializeWebsocketConnection),
   )
+  process.send(connection_manager.data, UpdateWebsocket(to: websocket.data))
 
-  process.send(subject.data, stratus.to_user_message(user_message.StartResume))
-
-  Ok(subject)
+  Ok(Nil)
 }
 
-fn close(state: State, close_reason: stratus.CloseReason) {
-  let resuming_info = resuming.get_info(state.resuming_info_holder)
-  let new_resuming_info = case resuming_info {
-    Some(info) ->
-      Some(
-        resuming.Info(..info, last_received_close_reason: Some(close_reason)),
+fn try_reconnect(
+  connection_state: Connection(user_state),
+  reason: stratus.CloseReason,
+) -> Nil {
+  let can_reconnect = case reason {
+    stratus.NotProvided -> True
+    stratus.Custom(custom_reason) -> {
+      let code = stratus.get_custom_code(custom_reason)
+      let allowed_codes = [4000, 4001, 4002, 4003, 4005, 4007, 4008, 4009]
+
+      allowed_codes
+      |> list.contains(code)
+    }
+    _ -> False
+  }
+
+  case can_reconnect, connection_state {
+    True, _ -> try_resume(connection_state)
+    False, Welcomed(heartbeat_manager:, ..)
+    | False, Identified(heartbeat_manager:, ..)
+    -> process.send(heartbeat_manager, StopHeartbeats)
+    False, _ -> Nil
+  }
+}
+
+type ResumingInfo {
+  ResumingInfo(
+    heartbeat_manager: Subject(HeartbeatManagerMessage),
+    sequence: Option(Int),
+    resume_gateway_url: String,
+    session_id: String,
+  )
+}
+
+fn try_resume(connection_state: Connection(user_state)) -> Nil {
+  case connection_state {
+    Identified(..) ->
+      resume(
+        connection_state,
+        ResumingInfo(
+          heartbeat_manager: connection_state.heartbeat_manager,
+          sequence: connection_state.sequence,
+          resume_gateway_url: connection_state.resume_gateway_url,
+          session_id: connection_state.session_id,
+        ),
       )
-    None -> None
+    _ -> reconnect(connection_state)
   }
-
-  state.resuming_info_holder
-  |> resuming.set_info(to: new_resuming_info)
-
-  reconnect(state)
 }
 
-fn reconnect(state: State) -> Nil {
-  case connection.get_pid(state.connection_holder) {
-    Some(pid) -> process.kill(pid)
-    // this should be impossible
-    None -> Nil
-  }
+fn resume(connection_state: Connection(user_state), resuming_info: ResumingInfo) {
+  let request_url =
+    resuming_info.resume_gateway_url
+    |> string.replace(each: "wss://", with: "https://")
+    |> string.append(suffix: "?v=10&encoding=json")
 
-  case resuming.get_info(state.resuming_info_holder) {
-    Some(info) -> {
-      case resuming.is_possible(for: info) {
-        True -> resume(grom.Client(state.identify.token), state, info)
-        False -> new_connection(grom.Client(state.identify.token), state)
+  let request_result =
+    request.to(request_url)
+    |> result.replace_error(grom.InvalidGatewayUrl(request_url))
+
+  use request <-
+    fn(next) {
+      case request_result {
+        Ok(request) -> next(request)
+        Error(_) -> reconnect(connection_state)
       }
     }
-    None -> new_connection(grom.Client(state.identify.token), state)
+
+  let websocket_result =
+    stratus.new(request:, state: connection_state)
+    |> stratus.on_message(on_message)
+    |> stratus.on_close(try_reconnect)
+    |> stratus.start
+
+  // AHHHHHHHHH THIS IS SO FUCKING UGLY
+  // BUT NO TYPE ANNOTATIONS KILLS MY LSP
+  // HERE'S THE VERSION WITHOUT THEM
+  // 
+  // use websocket <-
+  //   fn(next) {
+  //     case websocket_result {
+  //       Ok(websocket) -> next(websocket)
+  //       Error(_) -> reconnect(connection_state)
+  //     }
+  //   }
+  use
+    websocket: actor.Started(
+      Subject(stratus.InternalMessage(UserMessage(user_state))),
+    )
+  <-
+    fn(
+      next: fn(
+        actor.Started(Subject(stratus.InternalMessage(UserMessage(user_state)))),
+      ) ->
+        Nil,
+    ) -> Nil {
+      case websocket_result {
+        Ok(websocket) -> next(websocket)
+        Error(_) -> reconnect(connection_state)
+      }
+    }
+
+  process.send(connection_state.manager, UpdateWebsocket(to: websocket.data))
+  process.send(
+    connection_state.manager,
+    SendUserMessage(StartResume(resuming_info)),
+  )
+  process.send(resuming_info.heartbeat_manager, ResetHeartbeatCount)
+}
+
+fn reconnect(connection_state: Connection(user_state)) -> Nil {
+  case connection_state {
+    Welcomed(heartbeat_manager:, ..) | Identified(heartbeat_manager:, ..) ->
+      process.send(heartbeat_manager, StopHeartbeats)
+    _ -> Nil
   }
 
-  Nil
+  // yes, i know this was done before in start
+  // cry about it or make a PR lol, it's too late for me to do ts
+  let request_result =
+    request.to(connection_state.gateway_url)
+    |> result.replace_error(grom.InvalidGatewayUrl(connection_state.gateway_url))
+
+  use request <-
+    fn(next) {
+      case request_result {
+        Ok(request) -> next(request)
+        Error(_) -> Nil
+      }
+    }
+
+  let start_result =
+    stratus.new(request, connection_state)
+    |> stratus.on_message(on_message)
+    |> stratus.on_close(try_reconnect)
+    |> stratus.start
+    |> result.map_error(grom.CouldNotInitializeWebsocketConnection)
+
+  use
+    websocket: actor.Started(
+      Subject(stratus.InternalMessage(UserMessage(user_state))),
+    )
+  <-
+    fn(next) {
+      case start_result {
+        Ok(websocket) -> next(websocket)
+        Error(_) -> Nil
+      }
+    }
+
+  process.send(connection_state.manager, UpdateWebsocket(to: websocket.data))
+}
+
+fn on_connection_manager_message(
+  current: Option(Subject(stratus.InternalMessage(UserMessage(user_state)))),
+  message: ConnectionManagerMessage(user_state),
+) {
+  case current {
+    Some(manager) -> {
+      case message {
+        SendUserMessage(user_message) -> {
+          user_message
+          |> stratus.to_user_message
+          |> process.send(manager, _)
+
+          actor.continue(current)
+        }
+        UpdateWebsocket(to: new) -> actor.continue(Some(new))
+      }
+    }
+    None -> actor.continue(None)
+  }
 }
 
 pub fn identify(
@@ -2299,637 +2530,521 @@ pub fn identify_with_presence(
   IdentifyMessage(..identify, presence: Some(presence))
 }
 
-pub fn update_presence(state: State, using message: UpdatePresenceMessage) {
-  let subject = user_message.get_subject(state.user_message_subject_holder)
-
-  case subject {
-    Some(subject) ->
-      process.send(
-        subject,
-        stratus.to_user_message(user_message.StartPresenceUpdate(message)),
-      )
-    None -> Nil
-  }
+pub fn update_presence(
+  connection_state: Connection(user_state),
+  using message: UpdatePresenceMessage,
+) {
+  process.send(
+    connection_state.manager,
+    SendUserMessage(StartPresenceUpdate(message)),
+  )
 }
 
-pub fn update_voice_state(state: State, using message: UpdateVoiceStateMessage) {
-  let subject = user_message.get_subject(state.user_message_subject_holder)
-
-  case subject {
-    Some(subject) ->
-      process.send(
-        subject,
-        stratus.to_user_message(user_message.StartVoiceStateUpdate(message)),
-      )
-    None -> Nil
-  }
+pub fn update_voice_state(
+  connection_state: Connection(user_state),
+  using message: UpdateVoiceStateMessage,
+) {
+  process.send(
+    connection_state.manager,
+    SendUserMessage(StartVoiceStateUpdate(message)),
+  )
 }
 
 pub fn request_guild_members(
-  state: State,
+  connection_state: Connection(user_state),
   using message: RequestGuildMembersMessage,
 ) {
-  let subject = user_message.get_subject(state.user_message_subject_holder)
-
-  case subject {
-    Some(subject) ->
-      process.send(
-        subject,
-        stratus.to_user_message(user_message.StartGuildMembersRequest(message)),
-      )
-    None -> Nil
-  }
+  process.send(
+    connection_state.manager,
+    SendUserMessage(StartGuildMembersRequest(message)),
+  )
 }
 
-pub fn request_soundboard_sounds(state: State, for guild_ids: List(String)) {
-  let subject = user_message.get_subject(state.user_message_subject_holder)
-
-  case subject {
-    Some(subject) ->
-      process.send(
-        subject,
-        stratus.to_user_message(user_message.StartSoundboardSoundsRequest(
-          guild_ids:,
-        )),
-      )
-    None -> Nil
-  }
-}
-
-fn init_state(identify: IdentifyMessage) {
-  use sequence_holder <- result.try(
-    sequence.holder_start() |> result.map_error(string.inspect),
+pub fn request_soundboard_sounds(
+  connection_state: Connection(user_state),
+  for guild_ids: List(String),
+) {
+  process.send(
+    connection_state.manager,
+    SendUserMessage(StartSoundboardSoundsRequest(guild_ids)),
   )
-  let sequence_holder = sequence_holder.data
-
-  use heartbeat_counter <- result.try(
-    heartbeat.counter_start() |> result.map_error(string.inspect),
-  )
-  let heartbeat_counter = heartbeat_counter.data
-
-  use resuming_info_holder <- result.try(
-    resuming.info_holder_start()
-    |> result.map_error(string.inspect),
-  )
-  let resuming_info_holder = resuming_info_holder.data
-
-  use user_message_subject_holder <- result.try(
-    user_message.new_subject_holder(None)
-    |> result.map_error(string.inspect),
-  )
-  let user_message_subject_holder = user_message_subject_holder.data
-
-  use connection_holder <- result.try(
-    connection.new_holder()
-    |> result.map_error(string.inspect),
-  )
-  let connection_holder = connection_holder.data
-
-  use heartbeat_interval_holder <- result.try(
-    heartbeat.start_interval_holder()
-    |> result.map_error(string.inspect),
-  )
-  let heartbeat_interval_holder = heartbeat_interval_holder.data
-
-  State(
-    sequence_holder:,
-    heartbeat_counter:,
-    heartbeat_interval_holder:,
-    resuming_info_holder:,
-    identify:,
-    user_message_subject_holder:,
-    connection_holder:,
-  )
-  |> Ok
 }
 
 fn on_message(
-  state: InternalState(user_state),
-  message: stratus.Message(UserMessage),
+  connection_state: Connection(user_state),
+  message: stratus.Message(UserMessage(user_state)),
   connection: stratus.Connection,
-) {
+) -> stratus.Next(Connection(user_state), UserMessage(user_state)) {
   case message {
     stratus.Text(text_message) ->
-      on_text_message(state, connection, text_message)
-    stratus.Binary(_) -> stratus.continue(state)
-    stratus.User(user_message.StartResume) ->
-      start_resume(client, state, connection)
-    stratus.User(user_message.StartPresenceUpdate(msg)) ->
-      start_presence_update(state, connection, msg)
-    stratus.User(user_message.StartVoiceStateUpdate(msg)) ->
-      start_voice_state_update(state, connection, msg)
-    stratus.User(user_message.StartGuildMembersRequest(msg)) ->
-      start_guild_members_request(state, connection, msg)
-    stratus.User(user_message.StartSoundboardSoundsRequest(guild_ids)) ->
-      start_soundboard_sounds_request(state, connection, guild_ids)
-    stratus.User(user_message.StartNewConnection) ->
-      start_new_connection(state, connection)
+      on_text_message(connection_state, connection, text_message)
+    stratus.Binary(_) -> stratus.continue(connection_state)
+    stratus.User(StartIdentify(true_state)) ->
+      on_start_identify(true_state, connection)
+    stratus.User(StartSendHeartbeat) ->
+      on_start_send_heartbeat(connection_state, connection)
+    stratus.User(StartGuildMembersRequest(message)) ->
+      on_start_guild_members_request(connection_state, connection, message)
+    stratus.User(StartVoiceStateUpdate(message)) ->
+      on_start_voice_state_update(connection_state, connection, message)
+    stratus.User(StartPresenceUpdate(message)) ->
+      on_start_presence_update(connection_state, connection, message)
+    stratus.User(StartSoundboardSoundsRequest(ids)) ->
+      on_start_soundboard_sounds_request(connection_state, connection, ids)
+    stratus.User(StartResume(resuming_info)) ->
+      on_start_resume(connection_state, connection, resuming_info)
   }
 }
 
-fn start_new_connection(state: State, connection: stratus.Connection) {
-  state.connection_holder
-  |> connection.set(to: connection)
+fn on_start_resume(
+  connection_state: Connection(user_state),
+  connection: stratus.Connection,
+  resuming_info: ResumingInfo,
+) -> stratus.Next(Connection(user_state), a) {
+  let message =
+    ResumeMessage(
+      token: connection_state.identify.token,
+      session_id: resuming_info.session_id,
+      // this seems to be a crime
+      last_sequence: resuming_info.sequence |> option.unwrap(0),
+    )
 
-  state.connection_holder
-  |> connection.set_pid(to: process.self())
+  let send_result =
+    message
+    |> resume_to_json
+    |> json.to_string
+    |> stratus.send_text_message(connection, _)
+    |> result.map_error(grom.CouldNotSendEvent)
 
-  stratus.continue(state)
+  case send_result {
+    Ok(_) -> stratus.continue(connection_state)
+    Error(err) -> send_error(err, connection_state)
+  }
 }
 
-fn start_guild_members_request(
-  state: State,
+fn on_start_guild_members_request(
+  connection_state: Connection(user_state),
   connection: stratus.Connection,
   msg: RequestGuildMembersMessage,
 ) {
-  let _ =
+  let send_result =
     msg
-    |> user_message.request_guild_members_message_to_json
+    |> request_guild_members_message_to_json
     |> json.to_string
     |> stratus.send_text_message(connection, _)
-    |> result.map_error(fn(error) {
-      actor.send(state.actor, ErrorEvent(grom.CouldNotSendEvent(error)))
-    })
+    |> result.map_error(grom.CouldNotSendEvent)
 
-  stratus.continue(state)
+  case send_result {
+    Ok(_) -> stratus.continue(connection_state)
+    Error(err) -> send_error(err, connection_state)
+  }
 }
 
-fn start_voice_state_update(
-  state: State,
+fn on_start_voice_state_update(
+  connection_state: Connection(user_state),
   connection: stratus.Connection,
   msg: UpdateVoiceStateMessage,
 ) {
-  let _ =
+  let send_result =
     msg
-    |> user_message.update_voice_state_message_to_json
+    |> update_voice_state_message_to_json
     |> json.to_string
     |> stratus.send_text_message(connection, _)
-    |> result.map_error(fn(error) {
-      actor.send(state.actor, ErrorEvent(grom.CouldNotSendEvent(error)))
-    })
+    |> result.map_error(grom.CouldNotSendEvent)
 
-  stratus.continue(state)
+  case send_result {
+    Ok(_) -> stratus.continue(connection_state)
+    Error(err) -> send_error(err, connection_state)
+  }
 }
 
-fn start_presence_update(
-  state: State,
+fn on_start_presence_update(
+  connection_state: Connection(user_state),
   connection: stratus.Connection,
   msg: UpdatePresenceMessage,
-) {
-  let _ =
+) -> stratus.Next(Connection(user_state), a) {
+  let send_result =
     msg
-    |> user_message.update_presence_to_json(True)
+    |> update_presence_to_json(True)
     |> json.to_string
     |> stratus.send_text_message(connection, _)
-    |> result.map_error(fn(error) {
-      actor.send(state.actor, ErrorEvent(grom.CouldNotSendEvent(error)))
-    })
+    |> result.map_error(grom.CouldNotSendEvent)
 
-  stratus.continue(state)
+  case send_result {
+    Ok(_) -> stratus.continue(connection_state)
+    Error(err) -> send_error(err, connection_state)
+  }
 }
 
-fn start_soundboard_sounds_request(
-  state: State,
+fn on_start_soundboard_sounds_request(
+  connection_state: Connection(user_state),
   connection: stratus.Connection,
   guild_ids: List(String),
-) {
+) -> stratus.Next(Connection(user_state), a) {
   let json =
     json.object([
       #("op", json.int(31)),
       #("d", json.object([#("guild_ids", json.array(guild_ids, json.string))])),
     ])
 
-  let _ =
+  let send_result =
     json
     |> json.to_string
     |> stratus.send_text_message(connection, _)
-    |> result.map_error(fn(error) {
-      actor.send(state.actor, ErrorEvent(grom.CouldNotSendEvent(error)))
-    })
+    |> result.map_error(grom.CouldNotSendEvent)
 
-  stratus.continue(state)
+  case send_result {
+    Ok(_) -> stratus.continue(connection_state)
+    Error(err) -> send_error(err, connection_state)
+  }
 }
 
 fn on_text_message(
-  state: InternalState(user_state),
+  connection_state: Connection(user_state),
   connection: stratus.Connection,
   text_message: String,
-) {
+) -> stratus.Next(Connection(user_state), UserMessage(user_state)) {
   use message <-
     fn(next) {
       case parse_message(text_message) {
         Ok(msg) -> next(msg)
-        Error(err) -> {
-          state.event_handler(
-            state.user_state,
-            ErrorEvent,
-            Connection(
-              todo as "what do i put here? `connection` is of the stratus.Connection type, not the actor",
-            ),
-          )
-          stratus.continue(state)
-        }
+        Error(err) -> send_error(err, connection_state)
       }
     }
 
   case message {
-    Hello(event) -> on_hello_event(state, connection, event)
-    Dispatch(sequence, message) -> on_dispatch(state, sequence, message)
-    HeartbeatAcknowledged -> on_heartbeat_acknowledged(state)
-    HeartbeatRequest -> on_heartbeat_request(state)
-    ReconnectRequest -> on_reconnect_request(state, connection)
+    Hello(event) -> on_hello_event(connection_state, event)
+    Dispatch(sequence, message) ->
+      on_dispatch(connection_state, sequence, message)
+    HeartbeatAcknowledged -> on_heartbeat_acknowledged(connection_state)
+    HeartbeatRequest -> on_heartbeat_request(connection_state)
+    ReconnectRequest -> on_reconnect_request(connection_state, connection)
     InvalidSession(can_reconnect) ->
-      on_invalid_session(state, connection, can_reconnect)
+      on_invalid_session(connection_state, can_reconnect)
   }
-
-  stratus.continue(state)
 }
 
 fn on_invalid_session(
-  state: State,
-  connection: stratus.Connection,
-  can_reconnect: Bool,
-) -> Nil {
-  let _ = stratus.close(connection, because: stratus.NotProvided)
-
-  let resuming_info = resuming.get_info(state.resuming_info_holder)
-
-  case resuming_info, can_reconnect {
-    Some(info), True -> {
-      resuming.set_info(
-        state.resuming_info_holder,
-        to: Some(
-          resuming.Info(
-            ..info,
-            last_received_close_reason: Some(stratus.NotProvided),
-          ),
+  connection_state: Connection(user_state),
+  can_resume: Bool,
+) -> stratus.Next(Connection(user_state), a) {
+  case can_resume, connection_state {
+    True, Identified(..) ->
+      resume(
+        connection_state,
+        ResumingInfo(
+          heartbeat_manager: connection_state.heartbeat_manager,
+          sequence: connection_state.sequence,
+          resume_gateway_url: connection_state.resume_gateway_url,
+          session_id: connection_state.session_id,
         ),
       )
-      on_close(state, stratus.NotProvided)
-    }
-    Some(info), False -> {
-      resuming.set_info(
-        state.resuming_info_holder,
-        to: Some(resuming.Info(..info, last_received_close_reason: None)),
-      )
-      on_close(state, stratus.UnexpectedCondition(<<>>))
-    }
-    _, _ -> Nil
+    _, _ -> reconnect(connection_state)
   }
+  stratus.stop()
+}
 
-  case connection.get_pid(state.connection_holder) {
-    Some(pid) -> process.kill(pid)
-    None -> Nil
+fn on_reconnect_request(
+  connection_state: Connection(user_state),
+  connection: stratus.Connection,
+) -> stratus.Next(a, b) {
+  let _ = stratus.close(connection, because: stratus.NotProvided)
+
+  try_resume(connection_state)
+  stratus.stop()
+}
+
+fn send_error(err: grom.Error, connection_state: Connection(user_state)) {
+  let next =
+    connection_state.event_handler(
+      connection_state.user_state,
+      ErrorEvent(err),
+      connection_state,
+    )
+
+  case connection_state, next {
+    GettingReady(..), Continue(user_state) ->
+      stratus.continue(GettingReady(..connection_state, user_state:))
+    Welcomed(..), Continue(user_state) ->
+      stratus.continue(Welcomed(..connection_state, user_state:))
+    Identified(..), Continue(user_state) ->
+      stratus.continue(Identified(..connection_state, user_state:))
+    _, Stop -> stratus.stop()
+    _, StopAbnormal(reason) -> stratus.stop_abnormal(reason)
   }
 }
 
-fn on_reconnect_request(state: State, connection: stratus.Connection) -> Nil {
-  let _ = stratus.close(connection, because: stratus.NotProvided)
+fn on_dispatch(
+  connection_state: Connection(user_state),
+  sequence: Int,
+  message: DispatchedMessage,
+) -> stratus.Next(Connection(user_state), a) {
+  case connection_state {
+    GettingReady(..) -> stratus.continue(connection_state)
+    Welcomed(..) ->
+      case message {
+        Ready(msg) -> on_ready(connection_state, sequence, msg)
+        _ -> stratus.continue(connection_state)
+      }
+    Identified(..) -> {
+      let event = case message {
+        // technically impossible
+        Ready(msg) -> ReadyEvent(msg)
 
-  let resuming_info = resuming.get_info(state.resuming_info_holder)
+        Resumed -> ResumedEvent
+        RateLimited(msg) -> RateLimitedEvent(msg)
+        ApplicationCommandPermissionsUpdated(perms) ->
+          ApplicationCommandPermissionsUpdatedEvent(perms)
+        AutoModerationRuleCreated(rule) -> AutoModerationRuleCreatedEvent(rule)
+        AutoModerationRuleUpdated(rule) -> AutoModerationRuleUpdatedEvent(rule)
+        AutoModerationRuleDeleted(rule) -> AutoModerationRuleDeletedEvent(rule)
+        AutoModerationActionExecuted(msg) ->
+          AutoModerationActionExecutedEvent(msg)
+        ChannelCreated(channel) -> ChannelCreatedEvent(channel)
+        ChannelUpdated(channel) -> ChannelUpdatedEvent(channel)
+        ChannelDeleted(channel) -> ChannelDeletedEvent(channel)
+        ThreadCreated(msg) -> ThreadCreatedEvent(msg)
+        ThreadUpdated(thread) -> ThreadUpdatedEvent(thread)
+        ThreadDeleted(msg) -> ThreadDeletedEvent(msg)
+        ThreadListSynced(msg) -> ThreadListSyncedEvent(msg)
+        ThreadMemberUpdated(msg) -> ThreadMemberUpdatedEvent(msg)
+        PresenceUpdated(msg) -> PresenceUpdatedEvent(msg)
+        ThreadMembersUpdated(msg) -> ThreadMembersUpdatedEvent(msg)
+        ChannelPinsUpdated(msg) -> ChannelPinsUpdatedEvent(msg)
+        EntitlementCreated(entitlement) -> EntitlementCreatedEvent(entitlement)
+        EntitlementUpdated(entitlement) -> EntitlementUpdatedEvent(entitlement)
+        EntitlementDeleted(entitlement) -> EntitlementDeletedEvent(entitlement)
+        GuildCreated(msg) -> GuildCreatedEvent(msg)
+        GuildUpdated(guild) -> GuildUpdatedEvent(guild)
+        GuildDeleted(guild) -> GuildDeletedEvent(guild)
+        AuditLogEntryCreated(msg) -> AuditLogEntryCreatedEvent(msg)
+        GuildBanCreated(msg) -> GuildBanCreatedEvent(msg)
+        GuildBanDeleted(msg) -> GuildBanDeletedEvent(msg)
+        GuildEmojisUpdated(msg) -> GuildEmojisUpdatedEvent(msg)
+        GuildStickersUpdated(msg) -> GuildStickersUpdatedEvent(msg)
+        GuildIntegrationsUpdated(msg) -> GuildIntegrationsUpdatedEvent(msg)
+        GuildMemberCreated(msg) -> GuildMemberCreatedEvent(msg)
+        GuildMemberDeleted(msg) -> GuildMemberDeletedEvent(msg)
+        GuildMemberUpdated(msg) -> GuildMemberUpdatedEvent(msg)
+        GuildMembersChunk(msg) -> GuildMembersChunkEvent(msg)
+        RoleCreated(msg) -> RoleCreatedEvent(msg)
+        RoleUpdated(msg) -> RoleUpdatedEvent(msg)
+        RoleDeleted(msg) -> RoleDeletedEvent(msg)
+        ScheduledEventCreated(event) -> ScheduledEventCreatedEvent(event)
+        ScheduledEventUpdated(event) -> ScheduledEventUpdatedEvent(event)
+        ScheduledEventDeleted(event) -> ScheduledEventDeletedEvent(event)
+        ScheduledEventUserCreated(msg) -> ScheduledEventUserCreatedEvent(msg)
+        ScheduledEventUserDeleted(msg) -> ScheduledEventUserDeletedEvent(msg)
+        GuildSoundboardSoundCreated(sound) ->
+          GuildSoundboardSoundCreatedEvent(sound)
+        GuildSoundboardSoundUpdated(sound) ->
+          GuildSoundboardSoundUpdatedEvent(sound)
+        GuildSoundboardSoundDeleted(msg) ->
+          GuildSoundboardSoundDeletedEvent(msg)
+        GuildSoundboardSoundsUpdated(msg) ->
+          GuildSoundboardSoundsUpdatedEvent(msg)
+        SoundboardSounds(msg) -> SoundboardSoundsEvent(msg)
+        IntegrationCreated(msg) -> IntegrationCreatedEvent(msg)
+        IntegrationUpdated(msg) -> IntegrationUpdatedEvent(msg)
+        IntegrationDeleted(msg) -> IntegrationDeletedEvent(msg)
+        InviteCreated(msg) -> InviteCreatedEvent(msg)
+        InviteDeleted(msg) -> InviteDeletedEvent(msg)
+        MessageCreated(msg) -> MessageCreatedEvent(msg)
+        MessageUpdated(msg) -> MessageUpdatedEvent(msg)
+        MessageDeleted(msg) -> MessageDeletedEvent(msg)
+        MessagesBulkDeleted(msg) -> MessagesBulkDeletedEvent(msg)
+        MessageReactionCreated(msg) -> MessageReactionCreatedEvent(msg)
+        MessageReactionDeleted(msg) -> MessageReactionDeletedEvent(msg)
+        MessageAllReactionsDeleted(msg) -> MessageAllReactionsDeletedEvent(msg)
+        MessageEmojiReactionsDeleted(msg) ->
+          MessageEmojiReactionsDeletedEvent(msg)
+        TypingStarted(msg) -> TypingStartedEvent(msg)
+        CurrentUserUpdated(user) -> CurrentUserUpdatedEvent(user)
+        VoiceChannelEffectSent(msg) -> VoiceChannelEffectSentEvent(msg)
+        VoiceStateUpdated(voice_state) -> VoiceStateUpdatedEvent(voice_state)
+        VoiceServerUpdated(msg) -> VoiceServerUpdatedEvent(msg)
+        InteractionCreated(interaction) -> InteractionCreatedEvent(interaction)
+        StageInstanceCreated(stage_instance) ->
+          StageInstanceCreatedEvent(stage_instance)
+        StageInstanceUpdated(stage_instance) ->
+          StageInstanceUpdatedEvent(stage_instance)
+        StageInstanceDeleted(stage_instance) ->
+          StageInstanceDeletedEvent(stage_instance)
+        SubscriptionCreated(subscription) ->
+          SubscriptionCreatedEvent(subscription)
+        SubscriptionUpdated(subscription) ->
+          SubscriptionUpdatedEvent(subscription)
+        SubscriptionDeleted(subscription) ->
+          SubscriptionDeletedEvent(subscription)
+        PollVoteCreated(msg) -> PollVoteCreatedEvent(msg)
+        PollVoteDeleted(msg) -> PollVoteDeletedEvent(msg)
+      }
 
-  case resuming_info {
-    Some(info) ->
-      resuming.set_info(
-        state.resuming_info_holder,
-        to: Some(
-          resuming.Info(
-            ..info,
-            last_received_close_reason: Some(stratus.NotProvided),
-          ),
-        ),
-      )
-    None -> Nil
-  }
+      let next =
+        connection_state.event_handler(
+          connection_state.user_state,
+          event,
+          connection_state,
+        )
 
-  on_close(state, stratus.NotProvided)
-
-  case connection.get_pid(state.connection_holder) {
-    Some(pid) -> process.kill(pid)
-    None -> Nil
+      case next {
+        Continue(user_state) ->
+          stratus.continue(Identified(..connection_state, user_state:))
+        Stop -> stratus.stop()
+        StopAbnormal(reason) -> stratus.stop_abnormal(reason)
+      }
+    }
   }
 }
 
-fn start_resume(
-  client: grom.Client,
-  state: State,
-  connection: stratus.Connection,
-) {
-  state.connection_holder
-  |> connection.set(to: connection)
+fn on_ready(
+  connection_state: Connection(user_state),
+  sequence: Int,
+  message: ReadyMessage,
+) -> stratus.Next(Connection(user_state), a) {
+  case connection_state {
+    Welcomed(..) ->
+      case
+        connection_state.event_handler(
+          connection_state.user_state,
+          ReadyEvent(message),
+          connection_state,
+        )
+      {
+        Continue(user_state) ->
+          stratus.continue(Identified(
+            gateway_url: connection_state.gateway_url,
+            identify: connection_state.identify,
+            user_state:,
+            event_handler: connection_state.event_handler,
+            manager: connection_state.manager,
+            heartbeat_manager: connection_state.heartbeat_manager,
+            sequence: Some(sequence),
+            session_id: message.session_id,
+            resume_gateway_url: message.resume_gateway_url,
+          ))
+        Stop -> stratus.stop()
+        StopAbnormal(reason) -> stratus.stop_abnormal(reason)
+      }
+    // technically impossible
+    _ -> stratus.stop()
+  }
+}
 
-  state.connection_holder
-  |> connection.set_pid(to: process.self())
+fn on_heartbeat_request(
+  connection_state: Connection(user_state),
+) -> stratus.Next(Connection(user_state), a) {
+  start_send_heartbeat(connection_state)
+  stratus.continue(connection_state)
+}
 
-  let resuming_info = resuming.get_info(state.resuming_info_holder)
-  let last_sequence = sequence.get(state.sequence_holder)
-
-  let _ =
-    case resuming_info, last_sequence {
-      Some(info), Some(sequence) ->
-        ResumeMessage(client.token, info.session_id, sequence)
-      // unreachable - we need to have gotten the ready event otherwise we wouldn't even get here
-      // really reconsidering my typing choices
-      _, _ -> ResumeMessage("", "", 0)
+fn on_heartbeat_acknowledged(
+  connection_state: Connection(user_state),
+) -> stratus.Next(Connection(user_state), a) {
+  case connection_state {
+    GettingReady(..) -> stratus.continue(connection_state)
+    Welcomed(heartbeat_manager:, ..) | Identified(heartbeat_manager:, ..) -> {
+      process.send(heartbeat_manager, HeartbeatAck)
+      stratus.continue(connection_state)
     }
-    |> resume_to_json
-    |> json.to_string
-    |> stratus.send_text_message(connection, _)
-    |> result.map_error(fn(error) {
-      actor.send(state.actor, ErrorEvent(grom.CouldNotSendEvent(error)))
-    })
+  }
+}
 
-  let heartbeat_interval =
-    state.heartbeat_interval_holder
-    |> heartbeat.get_interval
-
-  let initial_wait =
-    heartbeat_interval
-    |> duration.to_seconds
-    |> float.multiply(jitter())
-    |> float.round
-    |> duration.seconds
-
+fn on_hello_event(
+  connection_state: Connection(user_state),
+  event: HelloMessage,
+) -> stratus.Next(Connection(user_state), a) {
   let heartbeat_start_result =
-    heartbeat.start(
-      call: fn() {
-        case send_heartbeat(state) {
-          Ok(_) -> Nil
-          Error(err) -> {
-            state.actor
-            |> actor.send(ErrorEvent(err))
-          }
-        }
-      },
-      every: heartbeat_interval,
-      after: initial_wait,
+    start_heartbeats(
+      every: event.heartbeat_interval,
+      send_to: connection_state.manager,
     )
 
   case heartbeat_start_result {
-    Ok(_timer) -> stratus.continue(state)
+    Ok(heartbeat_manager) -> {
+      let state =
+        Welcomed(
+          gateway_url: connection_state.gateway_url,
+          identify: connection_state.identify,
+          user_state: connection_state.user_state,
+          event_handler: connection_state.event_handler,
+          manager: connection_state.manager,
+          heartbeat_manager: heartbeat_manager.data,
+          sequence: None,
+        )
+      send_identify(state)
+      stratus.continue(state)
+    }
     Error(err) -> {
-      state.actor
-      |> actor.send(ErrorEvent(err))
-
+      connection_state.event_handler(
+        connection_state.user_state,
+        ErrorEvent(err),
+        connection_state,
+      )
       stratus.stop()
     }
   }
 }
 
-fn on_dispatch(state: State, sequence: Int, message: DispatchedMessage) {
-  state.sequence_holder
-  |> sequence.set(to: Some(sequence))
-
-  case message {
-    Ready(msg) -> on_ready(state, msg)
-    Resumed -> actor.send(state.actor, ResumedEvent)
-    RateLimited(msg) -> actor.send(state.actor, RateLimitedEvent(msg))
-    ApplicationCommandPermissionsUpdated(perms) ->
-      actor.send(state.actor, ApplicationCommandPermissionsUpdatedEvent(perms))
-    AutoModerationRuleCreated(rule) ->
-      actor.send(state.actor, AutoModerationRuleCreatedEvent(rule))
-    AutoModerationRuleUpdated(rule) ->
-      actor.send(state.actor, AutoModerationRuleUpdatedEvent(rule))
-    AutoModerationRuleDeleted(rule) ->
-      actor.send(state.actor, AutoModerationRuleDeletedEvent(rule))
-    AutoModerationActionExecuted(msg) ->
-      actor.send(state.actor, AutoModerationActionExecutedEvent(msg))
-    ChannelCreated(channel) ->
-      actor.send(state.actor, ChannelCreatedEvent(channel))
-    ChannelUpdated(channel) ->
-      actor.send(state.actor, ChannelUpdatedEvent(channel))
-    ChannelDeleted(channel) ->
-      actor.send(state.actor, ChannelDeletedEvent(channel))
-    ThreadCreated(msg) -> actor.send(state.actor, ThreadCreatedEvent(msg))
-    ThreadUpdated(thread) -> actor.send(state.actor, ThreadUpdatedEvent(thread))
-    ThreadDeleted(msg) -> actor.send(state.actor, ThreadDeletedEvent(msg))
-    ThreadListSynced(msg) -> actor.send(state.actor, ThreadListSyncedEvent(msg))
-    ThreadMemberUpdated(msg) ->
-      actor.send(state.actor, ThreadMemberUpdatedEvent(msg))
-    PresenceUpdated(msg) -> actor.send(state.actor, PresenceUpdatedEvent(msg))
-    ThreadMembersUpdated(msg) ->
-      actor.send(state.actor, ThreadMembersUpdatedEvent(msg))
-    ChannelPinsUpdated(msg) ->
-      actor.send(state.actor, ChannelPinsUpdatedEvent(msg))
-    EntitlementCreated(entitlement) ->
-      actor.send(state.actor, EntitlementCreatedEvent(entitlement))
-    EntitlementUpdated(entitlement) ->
-      actor.send(state.actor, EntitlementUpdatedEvent(entitlement))
-    EntitlementDeleted(entitlement) ->
-      actor.send(state.actor, EntitlementDeletedEvent(entitlement))
-    GuildCreated(msg) -> actor.send(state.actor, GuildCreatedEvent(msg))
-    GuildUpdated(guild) -> actor.send(state.actor, GuildUpdatedEvent(guild))
-    GuildDeleted(guild) -> actor.send(state.actor, GuildDeletedEvent(guild))
-    AuditLogEntryCreated(msg) ->
-      actor.send(state.actor, AuditLogEntryCreatedEvent(msg))
-    GuildBanCreated(msg) -> actor.send(state.actor, GuildBanCreatedEvent(msg))
-    GuildBanDeleted(msg) -> actor.send(state.actor, GuildBanDeletedEvent(msg))
-    GuildEmojisUpdated(msg) ->
-      actor.send(state.actor, GuildEmojisUpdatedEvent(msg))
-    GuildStickersUpdated(msg) ->
-      actor.send(state.actor, GuildStickersUpdatedEvent(msg))
-    GuildIntegrationsUpdated(msg) ->
-      actor.send(state.actor, GuildIntegrationsUpdatedEvent(msg))
-    GuildMemberCreated(msg) ->
-      actor.send(state.actor, GuildMemberCreatedEvent(msg))
-    GuildMemberDeleted(msg) ->
-      actor.send(state.actor, GuildMemberDeletedEvent(msg))
-    GuildMemberUpdated(msg) ->
-      actor.send(state.actor, GuildMemberUpdatedEvent(msg))
-    GuildMembersChunk(msg) ->
-      actor.send(state.actor, GuildMembersChunkEvent(msg))
-    RoleCreated(msg) -> actor.send(state.actor, RoleCreatedEvent(msg))
-    RoleUpdated(msg) -> actor.send(state.actor, RoleUpdatedEvent(msg))
-    RoleDeleted(msg) -> actor.send(state.actor, RoleDeletedEvent(msg))
-    ScheduledEventCreated(event) ->
-      actor.send(state.actor, ScheduledEventCreatedEvent(event))
-    ScheduledEventUpdated(event) ->
-      actor.send(state.actor, ScheduledEventUpdatedEvent(event))
-    ScheduledEventDeleted(event) ->
-      actor.send(state.actor, ScheduledEventDeletedEvent(event))
-    ScheduledEventUserCreated(msg) ->
-      actor.send(state.actor, ScheduledEventUserCreatedEvent(msg))
-    ScheduledEventUserDeleted(msg) ->
-      actor.send(state.actor, ScheduledEventUserDeletedEvent(msg))
-    GuildSoundboardSoundCreated(sound) ->
-      actor.send(state.actor, GuildSoundboardSoundCreatedEvent(sound))
-    GuildSoundboardSoundUpdated(sound) ->
-      actor.send(state.actor, GuildSoundboardSoundUpdatedEvent(sound))
-    GuildSoundboardSoundDeleted(msg) ->
-      actor.send(state.actor, GuildSoundboardSoundDeletedEvent(msg))
-    GuildSoundboardSoundsUpdated(msg) ->
-      actor.send(state.actor, GuildSoundboardSoundsUpdatedEvent(msg))
-    SoundboardSounds(msg) -> actor.send(state.actor, SoundboardSoundsEvent(msg))
-    IntegrationCreated(msg) ->
-      actor.send(state.actor, IntegrationCreatedEvent(msg))
-    IntegrationUpdated(msg) ->
-      actor.send(state.actor, IntegrationUpdatedEvent(msg))
-    IntegrationDeleted(msg) ->
-      actor.send(state.actor, IntegrationDeletedEvent(msg))
-    InviteCreated(msg) -> actor.send(state.actor, InviteCreatedEvent(msg))
-    InviteDeleted(msg) -> actor.send(state.actor, InviteDeletedEvent(msg))
-    MessageCreated(msg) -> actor.send(state.actor, MessageCreatedEvent(msg))
-    MessageUpdated(msg) -> actor.send(state.actor, MessageUpdatedEvent(msg))
-    MessageDeleted(msg) -> actor.send(state.actor, MessageDeletedEvent(msg))
-    MessagesBulkDeleted(msg) ->
-      actor.send(state.actor, MessagesBulkDeletedEvent(msg))
-    MessageReactionCreated(msg) ->
-      actor.send(state.actor, MessageReactionCreatedEvent(msg))
-    MessageReactionDeleted(msg) ->
-      actor.send(state.actor, MessageReactionDeletedEvent(msg))
-    MessageAllReactionsDeleted(msg) ->
-      actor.send(state.actor, MessageAllReactionsDeletedEvent(msg))
-    MessageEmojiReactionsDeleted(msg) ->
-      actor.send(state.actor, MessageEmojiReactionsDeletedEvent(msg))
-    TypingStarted(msg) -> actor.send(state.actor, TypingStartedEvent(msg))
-    CurrentUserUpdated(user) ->
-      actor.send(state.actor, CurrentUserUpdatedEvent(user))
-    VoiceChannelEffectSent(msg) ->
-      actor.send(state.actor, VoiceChannelEffectSentEvent(msg))
-    VoiceStateUpdated(voice_state) ->
-      actor.send(state.actor, VoiceStateUpdatedEvent(voice_state))
-    VoiceServerUpdated(msg) ->
-      actor.send(state.actor, VoiceServerUpdatedEvent(msg))
-    InteractionCreated(interaction) ->
-      actor.send(state.actor, InteractionCreatedEvent(interaction))
-    StageInstanceCreated(stage_instance) ->
-      actor.send(state.actor, StageInstanceCreatedEvent(stage_instance))
-    StageInstanceUpdated(stage_instance) ->
-      actor.send(state.actor, StageInstanceUpdatedEvent(stage_instance))
-    StageInstanceDeleted(stage_instance) ->
-      actor.send(state.actor, StageInstanceDeletedEvent(stage_instance))
-    SubscriptionCreated(subscription) ->
-      actor.send(state.actor, SubscriptionCreatedEvent(subscription))
-    SubscriptionUpdated(subscription) ->
-      actor.send(state.actor, SubscriptionUpdatedEvent(subscription))
-    SubscriptionDeleted(subscription) ->
-      actor.send(state.actor, SubscriptionDeletedEvent(subscription))
-    PollVoteCreated(msg) -> actor.send(state.actor, PollVoteCreatedEvent(msg))
-    PollVoteDeleted(msg) -> actor.send(state.actor, PollVoteDeletedEvent(msg))
-  }
-}
-
-fn on_ready(state: State, message: ReadyMessage) {
-  state.resuming_info_holder
-  |> resuming.set_info(
-    to: Some(resuming.Info(
-      session_id: message.session_id,
-      resume_gateway_url: message.resume_gateway_url,
-      last_received_close_reason: Some(stratus.NotProvided),
-    )),
+fn send_identify(connection_state: Connection(user_state)) -> Nil {
+  process.send(
+    connection_state.manager,
+    SendUserMessage(StartIdentify(connection_state)),
   )
-
-  state.actor
-  |> actor.send(ReadyEvent(message))
 }
 
-fn on_heartbeat_request(state: State) -> Nil {
-  case send_heartbeat(state) {
-    Ok(_) -> Nil
-    Error(err) -> {
-      state.actor
-      |> actor.send(ErrorEvent(err))
-    }
-  }
-}
-
-fn on_heartbeat_acknowledged(state: State) -> Nil {
-  state.heartbeat_counter
-  |> heartbeat.acknowledged
-}
-
-fn on_hello_event(
-  state: State,
+fn on_start_identify(
+  connection_state: Connection(user_state),
   connection: stratus.Connection,
-  event: HelloMessage,
-) {
-  state.heartbeat_interval_holder
-  |> heartbeat.set_interval(to: event.heartbeat_interval)
-
-  let initial_wait =
-    event.heartbeat_interval
-    |> duration.to_seconds
-    |> float.multiply(jitter())
-    |> float.round
-    |> duration.seconds
-
-  let heartbeat_start_result =
-    heartbeat.start(
-      call: fn() {
-        case send_heartbeat(state) {
-          Ok(_) -> Nil
-          Error(err) -> actor.send(state.actor, ErrorEvent(err))
-        }
-      },
-      every: event.heartbeat_interval,
-      after: initial_wait,
-    )
-
-  case heartbeat_start_result {
-    Ok(_) -> send_identify(state, connection)
-    Error(_) -> {
-      let _ =
-        stratus.close(connection, because: stratus.UnexpectedCondition(<<>>))
-      on_close(state, stratus.UnexpectedCondition(<<>>))
-      Nil
-    }
-  }
-}
-
-fn send_identify(state: State, connection: stratus.Connection) {
-  let result =
-    state.identify
+) -> stratus.Next(Connection(user_state), a) {
+  let send_result =
+    connection_state.identify
     |> identify_to_json
     |> json.to_string
     |> stratus.send_text_message(connection, _)
     |> result.map_error(grom.CouldNotSendEvent)
 
-  case result {
-    Ok(_) -> Nil
-    Error(error) -> actor.send(state.actor, ErrorEvent(error))
+  case send_result {
+    Ok(_) -> stratus.continue(connection_state)
+    Error(err) -> {
+      connection_state.event_handler(
+        connection_state.user_state,
+        ErrorEvent(err),
+        connection_state,
+      )
+      stratus.stop()
+    }
   }
 }
 
-fn send_heartbeat(state: State) -> Result(Nil, grom.Error) {
-  use connection <-
+fn start_send_heartbeat(connection_state: Connection(user_state)) -> Nil {
+  process.send(connection_state.manager, SendUserMessage(StartSendHeartbeat))
+}
+
+fn on_start_send_heartbeat(
+  connection_state: Connection(user_state),
+  connection: stratus.Connection,
+) -> stratus.Next(Connection(user_state), a) {
+  use sequence <-
     fn(next) {
-      case state.connection_holder |> connection.get {
-        Some(connection) -> next(connection)
-        None -> Error(grom.NoConnectionFound)
+      case connection_state {
+        GettingReady(..) -> stratus.continue(connection_state)
+        Welcomed(sequence:, ..) | Identified(sequence:, ..) -> next(sequence)
       }
     }
 
-  let last_sequence = sequence.get(state.sequence_holder)
-
-  let counter = heartbeat.get_count(state.heartbeat_counter)
-
-  use <-
-    fn(next: fn() -> Result(Nil, grom.Error)) {
-      case counter.heartbeat == counter.heartbeat_ack {
-        True -> next()
-        False -> {
-          let result =
-            stratus.close(connection, stratus.UnexpectedCondition(<<>>))
-            |> result.map_error(grom.CouldNotCloseWebsocketConnection)
-          on_close(state, stratus.UnexpectedCondition(<<>>))
-          result
-        }
-      }
-    }
-
-  use _nil <- result.try(
-    last_sequence
+  let send_result =
+    sequence
     |> HeartbeatMessage
     |> heartbeat_to_json
     |> json.to_string
     |> stratus.send_text_message(connection, _)
-    |> result.map_error(grom.CouldNotSendEvent),
-  )
+    |> result.map_error(grom.CouldNotSendEvent)
 
-  state.heartbeat_counter
-  |> heartbeat.sent
-
-  Ok(Nil)
+  case send_result {
+    Ok(_) -> stratus.continue(connection_state)
+    Error(err) -> send_error(err, connection_state)
+  }
 }
 
 fn parse_message(text_message: String) -> Result(ReceivedMessage, grom.Error) {
@@ -2938,20 +3053,124 @@ fn parse_message(text_message: String) -> Result(ReceivedMessage, grom.Error) {
   |> result.map_error(grom.CouldNotDecode)
 }
 
-fn jitter() -> Float {
-  case float.random() {
-    0.0 -> jitter()
-    jitter -> jitter
+// HEARTBEATS ------------------------------------------------------------------
+
+type HeartbeatManagerMessage {
+  HeartbeatSent
+  HeartbeatAck
+  ResetHeartbeatCount
+  GetHeartbeatCount(reply_to: Subject(HeartbeatCount))
+  SendHeartbeat
+  StopHeartbeats
+}
+
+type HeartbeatState(user_state) {
+  HeartbeatState(
+    interval: Duration,
+    subject: Subject(HeartbeatManagerMessage),
+    count: HeartbeatCount,
+    connection_manager: Subject(ConnectionManagerMessage(user_state)),
+  )
+}
+
+type HeartbeatCount {
+  HeartbeatCount(heartbeat: Int, heartbeat_ack: Int)
+}
+
+fn start_heartbeats(
+  every interval: Duration,
+  send_to connection_manager: Subject(ConnectionManagerMessage(user_state)),
+) {
+  let initial_wait =
+    interval
+    |> duration.to_seconds
+    |> float.multiply(heartbeat_jitter())
+    |> float.round
+    |> duration.seconds
+
+  actor.new_with_initialiser(20, fn(subject) {
+    let selector =
+      process.new_selector()
+      |> process.select(subject)
+
+    subject
+    |> process.send_after(
+      initial_wait
+        |> duration.to_seconds
+        |> float.multiply(1000.0)
+        |> float.round,
+      SendHeartbeat,
+    )
+
+    actor.initialised(HeartbeatState(
+      interval:,
+      subject:,
+      connection_manager:,
+      count: HeartbeatCount(0, 0),
+    ))
+    |> actor.selecting(selector)
+    |> actor.returning(subject)
+    |> Ok
+  })
+  |> actor.on_message(on_heartbeat_manager_message)
+  |> actor.start
+  |> result.map_error(grom.CouldNotStartActor)
+}
+
+fn on_heartbeat_manager_message(
+  current: HeartbeatState(user_state),
+  message: HeartbeatManagerMessage,
+) {
+  case message {
+    HeartbeatSent ->
+      actor.continue(
+        HeartbeatState(
+          ..current,
+          count: HeartbeatCount(
+            ..current.count,
+            heartbeat: current.count.heartbeat + 1,
+          ),
+        ),
+      )
+    HeartbeatAck ->
+      actor.continue(
+        HeartbeatState(
+          ..current,
+          count: HeartbeatCount(
+            ..current.count,
+            heartbeat_ack: current.count.heartbeat_ack + 1,
+          ),
+        ),
+      )
+    SendHeartbeat -> {
+      // tell stratus to actually send it via the websocket
+      process.send(
+        current.connection_manager,
+        SendUserMessage(StartSendHeartbeat),
+      )
+
+      // schedule sending the next heartbeat
+      process.send_after(
+        current.subject,
+        current.interval
+          |> duration.to_seconds
+          |> float.multiply(1000.0)
+          |> float.round,
+        SendHeartbeat,
+      )
+
+      // count will be increased when it actually sends, this just tells stratus to send it, it can fail
+      actor.continue(current)
+    }
+    GetHeartbeatCount(reply_to: requester) -> {
+      actor.send(requester, current.count)
+      actor.continue(current)
+    }
+    ResetHeartbeatCount ->
+      actor.continue(HeartbeatState(..current, count: HeartbeatCount(0, 0)))
+    StopHeartbeats -> actor.stop()
   }
 }
 
-pub fn receive_opcode(event: ReceivedMessage) -> Int {
-  case event {
-    Dispatch(..) -> 0
-    Hello(..) -> 10
-    HeartbeatAcknowledged -> 11
-    HeartbeatRequest -> 1
-    ReconnectRequest -> 7
-    InvalidSession(..) -> 9
-  }
-}
+// sounds better
+const heartbeat_jitter = float.random
