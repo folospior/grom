@@ -11,6 +11,11 @@ internal_modules = [
   "grom/gateway/resuming"
 ]
 
+[documentation]
+pages = [
+  { title = "Your first bot", path = "01-your-first-bot.html", source = "./pages/01-your-first-bot.md"}
+]
+
 [dependencies]
 gleam_erlang = ">= 1.3.0 and < 2.0.0"
 gleam_http = ">= 4.0.0 and < 5.0.0"
