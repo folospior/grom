@@ -1,10 +1,12 @@
 # Unreleased
 * Add all missing type annotations (Filip Hoffmann)
+* Add newly added permissions (Filip Hoffmann)
+* Add the new get role member counts endpoint (Filip Hoffmann)
 
 # v1.0.1 (21/12/2025)
 * Update README.md (Filip Hoffmann)
 * Update grom.version/0 (Filip Hoffmann)
-* Create CHANGELOG.md
+* Create CHANGELOG.md (Filip Hoffmann)
 
 # v1.0.0 (21/12/2025)
 * Initial release. (Filip Hoffmann)
