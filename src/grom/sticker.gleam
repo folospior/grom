@@ -1,5 +1,6 @@
 import gleam/dynamic/decode
 import gleam/http
+import gleam/http/request.{type Request}
 import gleam/json
 import gleam/option.{type Option, None}
 import gleam/result
@@ -221,4 +222,25 @@ pub fn get_pack(
   response.body
   |> json.parse(using: pack_decoder())
   |> result.map_error(grom.CouldNotDecode)
+}
+
+/// You CANNOT convert between formats. If the sticker you're requesting has a content type of PNG, you must request it as a PNG.
+/// Additionally, please note that Lottie files are text (JSON), not binary.
+pub fn request(id id: String, format format: ContentType) -> Request(String) {
+  let extension = case format {
+    Png -> ".png"
+    Apng -> ".png"
+    Lottie -> ".json"
+    Gif -> ".gif"
+  }
+
+  let request =
+    rest.new_cdn_request(to: "/stickers/" <> id <> extension, query: [])
+
+  case format {
+    Gif ->
+      request
+      |> request.set_host("media.discordapp.net")
+    _ -> request
+  }
 }

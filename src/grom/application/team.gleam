@@ -1,5 +1,7 @@
 import gleam/dynamic/decode
+import gleam/http/request.{type Request}
 import gleam/option.{type Option}
+import grom/internal/rest
 import grom/user.{type User}
 
 // TYPES -----------------------------------------------------------------------
@@ -32,6 +34,12 @@ pub type MemberRole {
 pub type MembershipState {
   Invited
   Accepted
+}
+
+pub type IconFormat {
+  PngIcon
+  JpegIcon
+  WebpIcon
 }
 
 // DECODER ---------------------------------------------------------------------
@@ -77,4 +85,23 @@ pub fn membership_state_decoder() -> decode.Decoder(MembershipState) {
     2 -> decode.success(Accepted)
     _ -> decode.failure(Invited, "MembershipState")
   }
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+pub fn icon_request(
+  id id: String,
+  hash icon: String,
+  format format: IconFormat,
+) -> Request(String) {
+  let extension = case format {
+    PngIcon -> ".png"
+    JpegIcon -> ".jpeg"
+    WebpIcon -> ".webp"
+  }
+
+  rest.new_cdn_request(
+    to: "/team-icons/" <> id <> "/" <> icon <> extension,
+    query: [],
+  )
 }

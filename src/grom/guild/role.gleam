@@ -1,6 +1,6 @@
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request
+import gleam/http/request.{type Request}
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -75,6 +75,12 @@ pub type Modify {
     unicode_emoji: Modification(String),
     is_mentionable: Option(Bool),
   )
+}
+
+pub type IconFormat {
+  PngIcon
+  JpegIcon
+  WebpIcon
 }
 
 // FLAGS -----------------------------------------------------------------------
@@ -392,4 +398,21 @@ pub fn delete(
   )
 
   Ok(Nil)
+}
+
+pub fn icon_request(
+  id id: String,
+  hash icon: String,
+  format format: IconFormat,
+) -> Request(String) {
+  let extension = case format {
+    PngIcon -> ".png"
+    JpegIcon -> ".jpg"
+    WebpIcon -> ".webp"
+  }
+
+  rest.new_cdn_request(
+    to: "/role-icons/" <> id <> "/" <> icon <> extension,
+    query: [],
+  )
 }

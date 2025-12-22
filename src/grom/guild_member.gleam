@@ -1,11 +1,12 @@
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request
+import gleam/http/request.{type Request}
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/internal/flags
@@ -20,7 +21,11 @@ pub type GuildMember {
   Member(
     user: Option(User),
     nick: Option(String),
+    /// This is the per-guild avatar hash.
+    /// If you want the regular avatar hash, use member.user.avatar_hash.
     avatar_hash: Option(String),
+    /// This is the per-guild banner hash.
+    /// If you want the regular banner hash, use member.user.banner_hash.
     banner_hash: Option(String),
     roles: List(String),
     joined_at: Timestamp,
@@ -350,4 +355,88 @@ pub fn kick(
 
 pub fn new_modify() -> Modify {
   Modify(Skip, Skip, None, None, Skip, Skip, Skip)
+}
+
+/// Note that this will give you the per-guild avatar of the member.
+/// If you want the overall avatar - use `user.avatar_request(member.user)`.
+/// 
+/// If `format == user.GifAvatar` and the avatar isn't animated, will fallback to static WEBP.
+/// You can request animated WEBPs too, in which case, if it isn't animated, it will fallback to static WEBP.
+pub fn avatar_request(
+  in guild_id: String,
+  id member_id: String,
+  hash avatar: String,
+  format format: user.AvatarFormat,
+) -> Request(String) {
+  {
+    let is_animated =
+      avatar
+      |> string.starts_with("a_")
+
+    let extension = case format, is_animated {
+      user.PngAvatar, _ -> ".png"
+      user.JpegAvatar, _ -> ".jpg"
+      user.WebpAvatar, _ -> ".webp"
+      user.GifAvatar, True -> ".gif"
+      user.GifAvatar, False -> ".webp"
+    }
+
+    let query = case format, is_animated {
+      user.WebpAvatar, True -> [#("animated", "true")]
+      _, _ -> []
+    }
+
+    rest.new_cdn_request(
+      to: "/guilds/"
+        <> guild_id
+        <> "/users/"
+        <> member_id
+        <> "/avatars/"
+        <> avatar
+        <> extension,
+      query:,
+    )
+  }
+}
+
+/// Note that this will give you the per-guild banner of the member.
+/// If you want the overall banner - use `user.banner_request(member.user)`.
+/// 
+/// If `format == user.GifBanner` and the banner isn't animated, will fallback to static WEBP.
+/// You can request animated WEBPs too, in which case, if it isn't animated, it will fallback to static WEBP.
+pub fn banner_request(
+  in guild_id: String,
+  id member_id: String,
+  hash banner: String,
+  format format: user.BannerFormat,
+) -> Request(String) {
+  {
+    let is_animated =
+      banner
+      |> string.starts_with("a_")
+
+    let extension = case format, is_animated {
+      user.PngBanner, _ -> ".png"
+      user.JpegBanner, _ -> ".jpg"
+      user.WebpBanner, _ -> ".webp"
+      user.GifBanner, True -> ".gif"
+      user.GifBanner, False -> ".webp"
+    }
+
+    let query = case format, is_animated {
+      user.WebpBanner, True -> [#("animated", "true")]
+      _, _ -> []
+    }
+
+    rest.new_cdn_request(
+      to: "/guilds/"
+        <> guild_id
+        <> "/users/"
+        <> member_id
+        <> "/banners/"
+        <> banner
+        <> extension,
+      query:,
+    )
+  }
 }

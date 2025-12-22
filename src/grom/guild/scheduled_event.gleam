@@ -1,6 +1,6 @@
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request
+import gleam/http/request.{type Request}
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -88,6 +88,12 @@ pub type Create {
     image: Option(image.Data),
     recurrence_rule: Option(recurrence_rule.Create),
   )
+}
+
+pub type CoverImageFormat {
+  PngCoverImage
+  JpegCoverImage
+  WebpCoverImage
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -340,4 +346,21 @@ pub fn get(
   response.body
   |> json.parse(using: decoder())
   |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn cover_image_request(
+  id id: String,
+  hash cover_image: String,
+  format format: CoverImageFormat,
+) -> Request(String) {
+  let extension = case format {
+    PngCoverImage -> ".png"
+    JpegCoverImage -> ".jpg"
+    WebpCoverImage -> ".webp"
+  }
+
+  rest.new_cdn_request(
+    to: "/guild-events/" <> id <> "/" <> cover_image <> extension,
+    query: [],
+  )
 }

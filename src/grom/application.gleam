@@ -2,7 +2,7 @@ import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request
+import gleam/http/request.{type Request}
 import gleam/int
 import gleam/json.{type Json}
 import gleam/option.{type Option, None}
@@ -102,6 +102,13 @@ pub type GetEntitlementsQuery {
   GuildId(String)
   ExcludeEnded(Bool)
   ExcludeDeleted(Bool)
+}
+
+/// Unlike `user` or `guild`, all `application` images have the same possible formats.
+pub type ImageFormat {
+  PngImage
+  JpegImage
+  WebpImage
 }
 
 // FLAGS -----------------------------------------------------------------------
@@ -558,4 +565,32 @@ pub fn get_skus(
   response.body
   |> json.parse(using: decode.list(of: sku.decoder()))
   |> result.map_error(grom.CouldNotDecode)
+}
+
+pub fn icon_request(
+  id id: String,
+  hash icon: String,
+  format format: ImageFormat,
+) -> Request(String) {
+  let extension = case format {
+    PngImage -> ".png"
+    JpegImage -> ".jpg"
+    WebpImage -> ".webp"
+  }
+
+  rest.new_cdn_request(
+    to: "/app-icons/" <> id <> "/" <> icon <> extension,
+    query: [],
+  )
+}
+
+pub fn cover_image_request(
+  id id: String,
+  hash cover_image: String,
+  format format: ImageFormat,
+) -> Request(String) {
+  // Yes, it uses the exact same endpoint
+  // 
+  // Don't blame me, hate the game not the player 🤷
+  icon_request(id, cover_image, format)
 }

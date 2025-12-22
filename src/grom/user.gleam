@@ -1,9 +1,13 @@
 import gleam/dynamic/decode
+import gleam/http/request.{type Request}
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
+import gleam/string
 import grom/internal/flags
+import grom/internal/rest
 
 // TYPES ----------------------------------------------------------------------
 
@@ -73,6 +77,20 @@ pub type PrimaryGuild {
     tag: Option(String),
     badge_hash: Option(String),
   )
+}
+
+pub type BannerFormat {
+  PngBanner
+  JpegBanner
+  WebpBanner
+  GifBanner
+}
+
+pub type AvatarFormat {
+  PngAvatar
+  JpegAvatar
+  WebpAvatar
+  GifAvatar
 }
 
 // CONSTANTS ------------------------------------------------------------------
@@ -389,4 +407,98 @@ pub fn primary_guild_to_json(primary_guild: PrimaryGuild) -> Json {
     #("tag", json.nullable(primary_guild.tag, json.string)),
     #("badge", json.nullable(primary_guild.badge_hash, json.string)),
   ])
+}
+
+// PUBLIC API FUNCTIONS --------------------------------------------------------
+
+/// Used to get the default user avatar.
+/// If it returns an error - you got lucky - the user's ID/discriminator somehow isn't an integer.
+pub fn index(of user: User) -> Result(Int, Nil) {
+  case user.discriminator {
+    "0" -> {
+      use id <- result.map(int.parse(user.id))
+      int.bitwise_shift_right(id, 22) % 6
+    }
+    _ -> {
+      use discriminator <- result.map(int.parse(user.discriminator))
+      discriminator % 5
+    }
+  }
+}
+
+/// If `format == GifBanner` and the banner isn't animated, will fallback to static WEBP.
+/// You can request animated WEBPs too, in which case, if it isn't animated, it will fallback to static WEBP.
+pub fn banner_request(
+  id id: String,
+  hash banner: String,
+  format format: BannerFormat,
+) -> Request(String) {
+  let is_animated =
+    banner
+    |> string.starts_with("a_")
+
+  let extension = case format, is_animated {
+    PngBanner, _ -> ".png"
+    JpegBanner, _ -> ".jpg"
+    WebpBanner, _ -> ".webp"
+    GifBanner, True -> ".gif"
+    GifBanner, False -> ".webp"
+  }
+
+  let query = case format, is_animated {
+    WebpBanner, True -> [#("animated", "true")]
+    _, _ -> []
+  }
+
+  rest.new_cdn_request(
+    to: "/banners/" <> id <> "/" <> banner <> extension,
+    query:,
+  )
+}
+
+/// Use `index(user)` to get the index.
+/// Returns the HTTP GET request to the default avatar as a PNG.
+pub fn default_avatar_request(index index: Int) -> Request(String) {
+  rest.new_cdn_request(
+    "/embed/avatars/" <> int.to_string(index) <> ".png",
+    query: [],
+  )
+}
+
+/// If `format == GifAvatar` and the avatar isn't animated, will fallback to static WEBP.
+/// You can request animated WEBPs too, in which case, if it isn't animated, it will fallback to static WEBP.
+pub fn avatar_request(
+  id id: String,
+  hash avatar: String,
+  format format: AvatarFormat,
+) -> Request(String) {
+  let is_animated =
+    avatar
+    |> string.starts_with("a_")
+
+  let extension = case format, is_animated {
+    PngAvatar, _ -> ".png"
+    JpegAvatar, _ -> ".jpg"
+    WebpAvatar, _ -> ".webp"
+    GifAvatar, True -> ".gif"
+    GifAvatar, False -> ".webp"
+  }
+
+  let query = case format, is_animated {
+    WebpAvatar, True -> [#("animated", "true")]
+    _, _ -> []
+  }
+
+  rest.new_cdn_request(
+    to: "/avatars/" <> id <> "/" <> avatar <> extension,
+    query:,
+  )
+}
+
+/// Returns a HTTP GET request to the avatar decoration as a PNG.
+pub fn avatar_decoration_request(asset asset: String) -> Request(String) {
+  rest.new_cdn_request(
+    to: "/avatar-decoration-presets/" <> asset <> ".png",
+    query: [],
+  )
 }

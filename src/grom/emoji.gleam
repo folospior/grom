@@ -1,7 +1,9 @@
 import gleam/dynamic/decode
+import gleam/http/request.{type Request}
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import grom/internal/rest
 import grom/user.{type User}
 
 // TYPES ----------------------------------------------------------------------
@@ -95,4 +97,14 @@ pub fn to_json(emoji: Emoji) -> Json {
   ]
   |> list.flatten
   |> json.object
+}
+
+/// Returns the HTTP GET request to the image URL in WEBP format.
+/// Only available for custom emojis, not built-in (unicode) ones.
+pub fn request(id id: String) -> Request(String) {
+  rest.new_cdn_request(to: "/emojis/" <> id <> ".webp", query: [
+    // we can do that, if `animated=true`, and the emoji isn't actually animated
+    // it'll just give us the static version
+    #("animated", "true"),
+  ])
 }

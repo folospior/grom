@@ -20,6 +20,8 @@ const discord_url: String = "discord.com"
 
 const discord_api_path: String = "api/v10"
 
+const cdn_url: String = "cdn.discordapp.com"
+
 // INTERNAL FUNCTIONS ----------------------------------------------------------
 
 @internal
@@ -118,6 +120,19 @@ pub fn with_reason(request: Request(a), reason: Option(String)) -> Request(a) {
       |> request.prepend_header("x-audit-log-reason", reason)
     None -> request
   }
+}
+
+@internal
+pub fn new_cdn_request(
+  to path: String,
+  query query: List(#(String, String)),
+) -> Request(String) {
+  request.new()
+  |> request.set_scheme(http.Https)
+  |> request.set_host(cdn_url)
+  |> request.set_path(path)
+  |> request.set_query(query)
+  |> request.set_method(http.Get)
 }
 
 // PRIVATE FUNCTIONS -----------------------------------------------------------

@@ -2,12 +2,13 @@ import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request
+import gleam/http/request.{type Request}
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom
@@ -332,6 +333,32 @@ pub type ModifySticker {
     description: Modification(String),
     tags: Option(String),
   )
+}
+
+pub type IconFormat {
+  PngIcon
+  JpegIcon
+  WebpIcon
+  GifIcon
+}
+
+pub type SplashFormat {
+  PngSplash
+  JpegSplash
+  WebpSplash
+}
+
+pub type BannerFormat {
+  PngBanner
+  JpegBanner
+  WebpBanner
+  GifBanner
+}
+
+pub type TagBadgeFormat {
+  PngTagBadge
+  JpegTagBadge
+  WebpTagBadge
 }
 
 // FLAGS ------------------------------------------------------------------
@@ -2068,4 +2095,115 @@ pub fn get_role_member_counts(
   response.body
   |> json.parse(using: decode.dict(decode.string, decode.int))
   |> result.map_error(grom.CouldNotDecode)
+}
+
+/// You probably want to use `guild.icon`, not `guild.icon_hash`.
+/// `guild.icon_hash` is `None` in 90% of cases.
+///
+/// If `format == GifIcon` and the icon isn't animated, will fallback to WEBP.
+/// You can request animated WEBPs too, in which case, if it isn't animated, it will fallback to static WEBP.
+pub fn icon_request(
+  id id: String,
+  icon icon: String,
+  format format: IconFormat,
+) -> Request(String) {
+  let is_animated =
+    icon
+    |> string.starts_with("a_")
+
+  let extension = case format, is_animated {
+    PngIcon, _ -> ".png"
+    JpegIcon, _ -> ".jpg"
+    WebpIcon, _ -> ".webp"
+    GifIcon, True -> ".gif"
+    GifIcon, False -> ".webp"
+  }
+
+  let query = case format, is_animated {
+    WebpIcon, True -> [#("animated", "true")]
+    _, _ -> []
+  }
+
+  rest.new_cdn_request(to: "/icons/" <> id <> "/" <> icon <> extension, query:)
+}
+
+pub fn splash_request(
+  id id: String,
+  splash splash: String,
+  format format: SplashFormat,
+) -> Request(String) {
+  let extension = case format {
+    PngSplash -> ".png"
+    JpegSplash -> ".jpg"
+    WebpSplash -> ".webp"
+  }
+
+  rest.new_cdn_request(
+    to: "/splashes/" <> id <> "/" <> splash <> extension,
+    query: [],
+  )
+}
+
+pub fn discovery_splash_request(
+  id id: String,
+  splash discovery_splash: String,
+  format format: SplashFormat,
+) -> Request(String) {
+  let extension = case format {
+    PngSplash -> ".png"
+    JpegSplash -> ".jpg"
+    WebpSplash -> ".webp"
+  }
+
+  rest.new_cdn_request(
+    to: "/discovery-splashes/" <> id <> "/" <> discovery_splash <> extension,
+    query: [],
+  )
+}
+
+/// If `format == GifBanner` and the banner isn't animated, will fallback to static WEBP.
+/// You can request animated WEBPs too, in which case, if it isn't animated, it will fallback to static WEBP.
+pub fn banner_request(
+  id id: String,
+  banner banner: String,
+  format format: BannerFormat,
+) -> Request(String) {
+  let is_animated =
+    banner
+    |> string.starts_with("a_")
+
+  let extension = case format, is_animated {
+    PngBanner, _ -> ".png"
+    JpegBanner, _ -> ".jpg"
+    WebpBanner, _ -> ".webp"
+    GifBanner, True -> ".gif"
+    GifBanner, False -> ".webp"
+  }
+
+  let query = case format, is_animated {
+    WebpBanner, True -> [#("animated", "true")]
+    _, _ -> []
+  }
+
+  rest.new_cdn_request(
+    to: "/banners/" <> id <> "/" <> banner <> extension,
+    query:,
+  )
+}
+
+pub fn tag_badge_request(
+  id id: String,
+  hash badge: String,
+  format format: TagBadgeFormat,
+) -> Request(String) {
+  let extension = case format {
+    PngTagBadge -> ".png"
+    JpegTagBadge -> ".jpeg"
+    WebpTagBadge -> ".webp"
+  }
+
+  rest.new_cdn_request(
+    to: "/guild-tag-badges/" <> id <> "/" <> badge <> extension,
+    query: [],
+  )
 }
