@@ -1,3 +1,6 @@
+# Unreleased
+* Add CDN endpoints for various images (Filip Hoffmann)
+
 # v2.0.0 (22/12/2025)
 * Add all missing type annotations (Filip Hoffmann)
 * Add newly added permissions (Filip Hoffmann)
