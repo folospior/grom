@@ -2,11 +2,13 @@ import gleam/http
 import gleam/http/request
 import gleam/json
 import gleam/option.{Some}
+import gleam/time/timestamp
 import gleeunit
 import gleeunit/should
 import grom
 import grom/file.{File}
 import grom/internal/rest
+import grom/snowflake
 import grom/user/current_user
 
 pub fn main() {
@@ -54,4 +56,10 @@ pub fn multipart_request_test() {
 
   result
   |> should.equal(expected)
+}
+
+pub fn get_creation_timestamp_test() {
+  let expected = timestamp.from_unix_seconds(1_612_894_569)
+  let assert Ok(actual) = snowflake.get_creation_timestamp("808763186811633735")
+  assert actual == expected
 }
