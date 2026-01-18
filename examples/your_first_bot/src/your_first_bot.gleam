@@ -29,8 +29,10 @@ pub fn main() -> Nil {
 
   let state = State(client:)
 
+  let assert Ok(data) = gateway.get_data(client)
+
   let gateway_start_result =
-    gateway.new(identify, state)
+    gateway.new(state, identify, data)
     |> gateway.on_event(do: on_event)
     |> gateway.start
 
@@ -48,28 +50,20 @@ pub fn main() -> Nil {
   }
 }
 
-fn on_event(
-  state: State,
-  event: gateway.Event,
-  connection: gateway.Connection(State),
-) {
+fn on_event(state: State, event: gateway.Event) {
   case event {
     gateway.ErrorEvent(error) -> {
       logging.log(logging.Warning, string.inspect(error))
       gateway.continue(state)
     }
-    gateway.ReadyEvent(ready) -> on_ready(state, ready, connection)
+    gateway.ReadyEvent(ready) -> on_ready(state, ready)
     gateway.InteractionCreatedEvent(interaction) ->
-      on_interaction_created(state, interaction, connection)
+      on_interaction_created(state, interaction)
     _ -> gateway.continue(state)
   }
 }
 
-fn on_ready(
-  state: State,
-  ready: gateway.ReadyMessage,
-  connection: gateway.Connection(State),
-) {
+fn on_ready(state: State, ready: gateway.ReadyMessage) {
   logging.log(logging.Info, "Ready!")
 
   let global_commands = [

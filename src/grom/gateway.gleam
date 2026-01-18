@@ -175,7 +175,7 @@ pub type ClientStatus {
 
 // RECEIVE EVENTS --------------------------------------------------------------
 
-pub type ReceivedMessage {
+type ReceivedMessage {
   Hello(HelloMessage)
   Dispatch(sequence: Int, message: DispatchedMessage)
   HeartbeatAcknowledged
@@ -184,13 +184,13 @@ pub type ReceivedMessage {
   InvalidSession(can_reconnect: Bool)
 }
 
-pub type HelloMessage {
+type HelloMessage {
   HelloMessage(heartbeat_interval: Duration)
 }
 
 // RECEIVED DISPATCH EVENTS ----------------------------------------------------
 
-pub type DispatchedMessage {
+type DispatchedMessage {
   Ready(ReadyMessage)
   Resumed
   RateLimited(RateLimitedMessage)
@@ -877,8 +877,7 @@ pub fn session_start_limits_decoder() -> decode.Decoder(SessionStartLimits) {
   ))
 }
 
-@internal
-pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
+fn message_decoder() -> decode.Decoder(ReceivedMessage) {
   use opcode <- decode.field("op", decode.int)
   case opcode {
     0 -> {
@@ -903,8 +902,7 @@ pub fn message_decoder() -> decode.Decoder(ReceivedMessage) {
   }
 }
 
-@internal
-pub fn dispatched_message_decoder(
+fn dispatched_message_decoder(
   type_: String,
 ) -> decode.Decoder(DispatchedMessage) {
   case type_ {
@@ -1232,8 +1230,7 @@ pub fn request_guild_members_rate_limited_decoder() -> decode.Decoder(
   decode.success(RequestGuildMembersRateLimited(guild_id:, nonce:))
 }
 
-@internal
-pub fn hello_event_decoder() -> decode.Decoder(HelloMessage) {
+fn hello_event_decoder() -> decode.Decoder(HelloMessage) {
   use heartbeat_interval <- decode.field(
     "heartbeat_interval",
     time_duration.from_milliseconds_decoder(),
