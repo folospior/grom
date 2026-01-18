@@ -18,7 +18,7 @@ Features:
 * [x] Components v2, along with modal components.
 * [x] Using the Erlang target, along with its amazing OTP library.
 * [x] Monetization. (untested, hic sunt dracones)
-* [ ] Sharding.
+* [x] Sharding.
 * [ ] Voice support.
 * [ ] Bearer token authentication.
 
