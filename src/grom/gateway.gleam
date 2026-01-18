@@ -772,12 +772,19 @@ pub opaque type Builder(state) {
   )
 }
 
-pub opaque type ConnectionManagerMessage {
+type ConnectionManagerMessage {
   UpdateWebsocket(to: Subject(stratus.InternalMessage(StratusUserMessage)))
   SendUserMessage(message: StratusUserMessage)
 }
 
-pub opaque type Connection {
+type ConnectionManagerState {
+  ConnectionManagerState(
+    websocket: Option(Subject(stratus.InternalMessage(StratusUserMessage))),
+    queued_messages: List(StratusUserMessage),
+  )
+}
+
+type Connection {
   GettingReady(
     gateway_url: String,
     manager: Subject(ConnectionManagerMessage),
@@ -812,7 +819,7 @@ type StratusUserMessage {
   UserMessage(UserMessage)
 }
 
-pub opaque type UserMessage {
+type UserMessage {
   StartPresenceUpdate(UpdatePresenceMessage)
   StartVoiceStateUpdate(UpdateVoiceStateMessage)
   StartGuildMembersRequest(RequestGuildMembersMessage)
@@ -2384,11 +2391,12 @@ pub fn start(
     Some(count) -> count
     None -> builder.data.recommended_shards
   }
+
   let max_concurrency =
     builder.data.session_start_limits.max_identify_requests_per_5_seconds
   let supervisor = static_supervisor.new(static_supervisor.OneForOne)
 
-  let shard_ids = list.range(from: 0, to: shard_count)
+  let shard_ids = list.range(from: 0, to: shard_count - 1)
   let shards =
     shard_ids
     |> list.map(fn(id) { Shard(id, shard_count) })
@@ -2399,7 +2407,7 @@ pub fn start(
     |> list.index_map(fn(shards, bucket) {
       shards
       |> list.map(fn(shard) {
-        BucketedShard(duration.seconds(max_concurrency * bucket), shard)
+        BucketedShard(duration.seconds(5 * bucket), shard)
       })
     })
 
@@ -2422,10 +2430,10 @@ pub fn start(
       process.new_selector()
       |> process.select(subject)
 
-    bucketed_shards
-    |> list.each(fn(shards) {
-      shards
-      |> list.each(fn(shard) {
+    let supervisor =
+      bucketed_shards
+      |> list.flatten
+      |> list.fold(supervisor, fn(supervisor, shard) {
         supervisor
         |> static_supervisor.add(supervised_shard_spawner(
           builder,
@@ -2433,7 +2441,6 @@ pub fn start(
           subject,
         ))
       })
-    })
 
     use _supervisor <- result.try(
       supervisor
@@ -2647,7 +2654,7 @@ fn start_connection(
   )
 
   use connection_manager <- result.try(
-    actor.new(None)
+    actor.new(ConnectionManagerState(None, []))
     |> actor.on_message(on_connection_manager_message)
     |> actor.start
     |> result.map_error(grom.CouldNotStartActor),
@@ -2848,26 +2855,36 @@ fn reconnect(connection_state: Connection) -> Nil {
 }
 
 fn on_connection_manager_message(
-  current: Option(Subject(stratus.InternalMessage(StratusUserMessage))),
+  current: ConnectionManagerState,
   message: ConnectionManagerMessage,
-) -> actor.Next(Option(Subject(stratus.InternalMessage(StratusUserMessage))), a) {
-  case current {
-    Some(manager) -> {
-      case message {
-        SendUserMessage(user_message) -> {
-          user_message
-          |> stratus.to_user_message
-          |> process.send(manager, _)
+) {
+  case message {
+    UpdateWebsocket(to: new) -> {
+      list.each(current.queued_messages, fn(msg) {
+        msg
+        |> stratus.to_user_message
+        |> process.send(new, _)
+      })
 
+      actor.continue(
+        ConnectionManagerState(websocket: Some(new), queued_messages: []),
+      )
+    }
+    SendUserMessage(msg) ->
+      case current.websocket {
+        Some(ws) -> {
+          msg
+          |> stratus.to_user_message
+          |> process.send(ws, _)
           actor.continue(current)
         }
-        UpdateWebsocket(to: new) -> actor.continue(Some(new))
-      }
-    }
-    None ->
-      case message {
-        SendUserMessage(_) -> actor.continue(current)
-        UpdateWebsocket(to: new) -> actor.continue(Some(new))
+        None ->
+          actor.continue(
+            ConnectionManagerState(..current, queued_messages: [
+              msg,
+              ..current.queued_messages
+            ]),
+          )
       }
   }
 }

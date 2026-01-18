@@ -1,10 +1,9 @@
 import dotenv_gleam
 import envoy
-import gleam/erlang/process.{type Subject}
-import gleam/option.{None, Some}
+import gleam/erlang/process
+import gleam/option.{Some}
 import gleam/string
 import grom
-import grom/activity
 import grom/command
 import grom/gateway
 import grom/gateway/intent
@@ -12,7 +11,7 @@ import grom/interaction.{type Interaction}
 import logging
 
 type State {
-  State(client: grom.Client, gateway: Subject(gateway.Message))
+  State(client: grom.Client)
 }
 
 pub fn main() -> Nil {
@@ -30,14 +29,7 @@ pub fn main() -> Nil {
   let assert Ok(data) = gateway.get_data(client)
 
   let gateway_start_result =
-    gateway.new_with_initializer(
-      fn(subject) {
-        let state = State(client, subject)
-        Ok(state)
-      },
-      identify,
-      data,
-    )
+    gateway.new(State(client), identify, data)
     |> gateway.on_event(do: on_event)
     |> gateway.start
 
@@ -61,14 +53,14 @@ fn on_event(state: State, event: gateway.Event) {
       logging.log(logging.Warning, string.inspect(error))
       gateway.continue(state)
     }
-    gateway.ReadyEvent(ready) -> on_ready(state, ready)
+    gateway.AllShardsReadyEvent(ready) -> on_ready(state, ready)
     gateway.InteractionCreatedEvent(interaction) ->
       on_interaction_created(state, interaction)
     _ -> gateway.continue(state)
   }
 }
 
-fn on_ready(state: State, ready: gateway.ReadyMessage) {
+fn on_ready(state: State, ready: gateway.AllShardsReadyMessage) {
   logging.log(logging.Info, "Ready!")
 
   let global_commands = [
@@ -100,16 +92,6 @@ fn on_ready(state: State, ready: gateway.ReadyMessage) {
     }
   }
 
-  state.gateway
-  |> gateway.update_presence(using: gateway.UpdatePresenceMessage(
-    status: gateway.Online,
-    since: None,
-    activities: [
-      activity.new(named: "the gateway connection", type_: activity.Watching),
-    ],
-    is_afk: False,
-  ))
-
   gateway.continue(state)
 }
 
@@ -140,59 +122,8 @@ fn on_slash_command_executed(
 ) {
   case command.name {
     "ping" -> on_ping_command(state, interaction)
-    "soundboards" -> on_soundboards_command(state, interaction)
-    "join" -> on_join_command(state, interaction)
     _ -> gateway.continue(state)
   }
-}
-
-fn on_join_command(
-  state: State,
-  interaction: Interaction,
-) -> gateway.Next(State) {
-  state.gateway
-  |> gateway.update_voice_state(using: gateway.UpdateVoiceStateMessage(
-    "1155216444691325049",
-    Some("1155216445211422795"),
-    False,
-    False,
-  ))
-
-  let _response_result =
-    state.client
-    |> interaction.respond(
-      to: interaction,
-      using: interaction.RespondWithChannelMessageWithSource(
-        interaction.ResponseMessage(
-          ..interaction.new_response_message(),
-          content: Some("Joined!"),
-        ),
-      ),
-    )
-
-  gateway.continue(state)
-}
-
-fn on_soundboards_command(
-  state: State,
-  interaction: Interaction,
-) -> gateway.Next(State) {
-  state.gateway
-  |> gateway.request_soundboard_sounds(for: ["1155216444691325049"])
-
-  let _response_result =
-    state.client
-    |> interaction.respond(
-      to: interaction,
-      using: interaction.RespondWithChannelMessageWithSource(
-        interaction.ResponseMessage(
-          ..interaction.new_response_message(),
-          content: Some("See the console!"),
-        ),
-      ),
-    )
-
-  gateway.continue(state)
 }
 
 fn on_ping_command(state: State, interaction: Interaction) {
