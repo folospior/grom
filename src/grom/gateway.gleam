@@ -37,7 +37,7 @@ import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/internal/time_timestamp
 import grom/invite
-import grom/message.{type Message}
+import grom/message
 import grom/message/reaction
 import grom/modification.{type Modification, Skip}
 import grom/soundboard
@@ -69,6 +69,7 @@ pub type Shard {
 
 pub type Event {
   ReadyEvent(ReadyMessage)
+  AllShardsReadyEvent(AllShardsReadyMessage)
   ErrorEvent(grom.Error)
   ResumedEvent
   RateLimitedEvent(RateLimitedMessage)
@@ -279,6 +280,16 @@ pub type ReadyMessage {
     resume_gateway_url: String,
     shard: Option(Shard),
     application: ReadyApplication,
+  )
+}
+
+pub type AllShardsReadyMessage {
+  AllShardsReadyMessage(
+    api_version: Int,
+    user: User,
+    guilds: List(guild.UnavailableGuild),
+    application: ReadyApplication,
+    shard_count: Int,
   )
 }
 
@@ -529,7 +540,7 @@ pub type InviteDeletedMessage {
 
 pub type MessageCreatedMessage {
   MessageCreatedMessage(
-    message: Message,
+    message: message.Message,
     guild_id: Option(String),
     member: Option(GuildMember),
     mentions: List(User),
@@ -538,7 +549,7 @@ pub type MessageCreatedMessage {
 
 pub type MessageUpdatedMessage {
   MessageUpdatedMessage(
-    message: Message,
+    message: message.Message,
     guild_id: Option(String),
     member: Option(GuildMember),
     mentions: List(User),
@@ -754,7 +765,7 @@ pub opaque type Builder(state) {
   Builder(
     identify: BaseIdentifyMessage,
     data: Data,
-    init: fn() -> state,
+    init: fn(Subject(Message)) -> Result(state, String),
     handler: fn(state, Event) -> Next(state),
     close: fn(state) -> Nil,
     shard_count: Option(Int),
@@ -770,13 +781,13 @@ pub opaque type Connection {
   GettingReady(
     gateway_url: String,
     manager: Subject(ConnectionManagerMessage),
-    subject: Subject(GatewayMessage),
+    subject: Subject(Message),
     identify: IdentifyMessage,
   )
   Welcomed(
     gateway_url: String,
     manager: Subject(ConnectionManagerMessage),
-    subject: Subject(GatewayMessage),
+    subject: Subject(Message),
     identify: IdentifyMessage,
     heartbeat_manager: Subject(HeartbeatManagerMessage),
     sequence: Option(Int),
@@ -784,7 +795,7 @@ pub opaque type Connection {
   Identified(
     gateway_url: String,
     manager: Subject(ConnectionManagerMessage),
-    subject: Subject(GatewayMessage),
+    subject: Subject(Message),
     identify: IdentifyMessage,
     heartbeat_manager: Subject(HeartbeatManagerMessage),
     sequence: Option(Int),
@@ -824,6 +835,7 @@ type Gateway(user_state) {
     shard_count: Int,
     event_handler: fn(user_state, Event) -> Next(user_state),
     shards: List(#(Shard, Subject(ConnectionManagerMessage))),
+    all_ready: Option(AllShardsReadyMessage),
   )
 }
 
@@ -835,7 +847,7 @@ type NextForShards {
   ShardStopAbnormal(reason: String)
 }
 
-pub opaque type GatewayMessage {
+pub opaque type Message {
   MessageFromUser(UserMessage)
   MessageFromDiscord(event: Event, reply_to: Subject(NextForShards))
   RegisterShard(#(Shard, Subject(ConnectionManagerMessage)))
@@ -2304,6 +2316,11 @@ pub fn stop_abnormal(reason: String) -> Next(state) {
   StopAbnormal(reason:)
 }
 
+/// Only use this function if you have no intention of sending user messages, such as:
+/// * `UpdatePresence`
+/// * `UpdateVoiceState`
+/// * `RequestGuildMembers`
+/// * `RequestSoundboardSounds`
 pub fn new(
   state: state,
   identify: BaseIdentifyMessage,
@@ -2312,7 +2329,24 @@ pub fn new(
   Builder(
     identify:,
     data:,
-    init: fn() { state },
+    init: fn(_) { Ok(state) },
+    handler: fn(state, _event) { continue(state) },
+    close: fn(_state) { Nil },
+    shard_count: None,
+  )
+}
+
+/// You should hold the gateway subject in your state.
+/// You'll send user messages to that subject.
+pub fn new_with_initializer(
+  init: fn(Subject(Message)) -> Result(user_state, String),
+  identify: BaseIdentifyMessage,
+  data: Data,
+) -> Builder(user_state) {
+  Builder(
+    identify:,
+    data:,
+    init:,
     handler: fn(state, _event) { continue(state) },
     close: fn(_state) { Nil },
     shard_count: None,
@@ -2324,6 +2358,13 @@ pub fn on_event(
   do handler: fn(state, Event) -> Next(state),
 ) -> Builder(state) {
   Builder(..builder, handler:)
+}
+
+pub fn on_close(
+  builder: Builder(state),
+  do handler: fn(state) -> Nil,
+) -> Builder(state) {
+  Builder(..builder, close: handler)
 }
 
 /// Use this to force the amount of shards to a set number.
@@ -2338,7 +2379,7 @@ pub fn with_shards(
 
 pub fn start(
   builder: Builder(state),
-) -> Result(actor.Started(Subject(GatewayMessage)), actor.StartError) {
+) -> Result(actor.Started(Subject(Message)), actor.StartError) {
   let shard_count = case builder.shard_count {
     Some(count) -> count
     None -> builder.data.recommended_shards
@@ -2346,16 +2387,6 @@ pub fn start(
   let max_concurrency =
     builder.data.session_start_limits.max_identify_requests_per_5_seconds
   let supervisor = static_supervisor.new(static_supervisor.OneForOne)
-
-  let state =
-    Gateway(
-      user_state: builder.init(),
-      identify: builder.identify,
-      data: builder.data,
-      event_handler: builder.handler,
-      shard_count:,
-      shards: [],
-    )
 
   let shard_ids = list.range(from: 0, to: shard_count)
   let shards =
@@ -2373,6 +2404,19 @@ pub fn start(
     })
 
   actor.new_with_initialiser(1000, fn(subject) {
+    use user_state <- result.try(builder.init(subject))
+
+    let state =
+      Gateway(
+        user_state:,
+        identify: builder.identify,
+        data: builder.data,
+        event_handler: builder.handler,
+        shard_count:,
+        shards: [],
+        all_ready: None,
+      )
+
     // i have no idea whether this is actually required
     let selector =
       process.new_selector()
@@ -2436,7 +2480,7 @@ fn get_guild_ids_from_user_message(
 
 fn on_gateway_message(
   gateway: Gateway(user_state),
-  message: GatewayMessage,
+  message: Message,
 ) -> actor.Next(Gateway(user_state), a) {
   case message {
     MessageFromUser(msg) -> {
@@ -2465,6 +2509,50 @@ fn on_gateway_message(
 
       actor.continue(gateway)
     }
+    MessageFromDiscord(ReadyEvent(ready), reply_to) -> {
+      let all_ready = case gateway.all_ready {
+        Some(old) ->
+          AllShardsReadyMessage(
+            ..old,
+            guilds: list.append(old.guilds, ready.guilds),
+            shard_count: old.shard_count + 1,
+          )
+        None ->
+          AllShardsReadyMessage(
+            api_version: ready.api_version,
+            user: ready.user,
+            guilds: ready.guilds,
+            application: ready.application,
+            shard_count: 1,
+          )
+      }
+
+      let next = case all_ready.shard_count == gateway.shard_count {
+        True ->
+          gateway.event_handler(
+            gateway.user_state,
+            AllShardsReadyEvent(all_ready),
+          )
+        False -> gateway.event_handler(gateway.user_state, ReadyEvent(ready))
+      }
+
+      case next {
+        Continue(state) -> {
+          process.send(reply_to, ShardContinue)
+          actor.continue(
+            Gateway(..gateway, user_state: state, all_ready: Some(all_ready)),
+          )
+        }
+        Stop -> {
+          process.send(reply_to, ShardStop)
+          actor.stop()
+        }
+        StopAbnormal(reason) -> {
+          process.send(reply_to, ShardStopAbnormal(reason))
+          actor.stop_abnormal(reason)
+        }
+      }
+    }
     MessageFromDiscord(msg, reply_to) -> {
       let next = gateway.event_handler(gateway.user_state, msg)
       case next {
@@ -2492,7 +2580,7 @@ fn on_gateway_message(
 fn supervised_shard_spawner(
   builder: Builder(user_state),
   shard: BucketedShard,
-  subject: Subject(GatewayMessage),
+  subject: Subject(Message),
 ) -> supervision.ChildSpecification(Subject(ShardSpawnerMessage)) {
   supervision.supervisor(fn() { new_shard_spawner(builder, shard, subject) })
 }
@@ -2500,7 +2588,7 @@ fn supervised_shard_spawner(
 fn new_shard_spawner(
   builder: Builder(user_state),
   shard: BucketedShard,
-  subject: Subject(GatewayMessage),
+  subject: Subject(Message),
 ) -> Result(actor.Started(Subject(ShardSpawnerMessage)), actor.StartError) {
   actor.new_with_initialiser(50, fn(subject) {
     let selector =
@@ -2528,7 +2616,7 @@ fn new_shard_spawner(
 fn on_shard_spawner_message(
   builder: Builder(user_state),
   shard: BucketedShard,
-  subject: Subject(GatewayMessage),
+  subject: Subject(Message),
 ) -> fn(a, ShardSpawnerMessage) -> actor.Next(Nil, b) {
   fn(_state, message: ShardSpawnerMessage) {
     case message {
@@ -2546,7 +2634,7 @@ fn on_shard_spawner_message(
 fn start_connection(
   builder: Builder(user_state),
   shard: BucketedShard,
-  subject: Subject(GatewayMessage),
+  subject: Subject(Message),
 ) -> Result(Nil, grom.Error) {
   let request_url =
     builder.data.url
@@ -2810,21 +2898,21 @@ pub fn identify_with_presence(
 }
 
 pub fn update_presence(
-  gateway: Subject(GatewayMessage),
+  gateway: Subject(Message),
   using message: UpdatePresenceMessage,
 ) -> Nil {
   process.send(gateway, MessageFromUser(StartPresenceUpdate(message)))
 }
 
 pub fn update_voice_state(
-  gateway: Subject(GatewayMessage),
+  gateway: Subject(Message),
   using message: UpdateVoiceStateMessage,
 ) -> Nil {
   process.send(gateway, MessageFromUser(StartVoiceStateUpdate(message)))
 }
 
 pub fn request_guild_members(
-  gateway: Subject(GatewayMessage),
+  gateway: Subject(Message),
   using message: RequestGuildMembersMessage,
 ) -> Nil {
   process.send(gateway, MessageFromUser(StartGuildMembersRequest(message)))
@@ -2836,7 +2924,7 @@ pub fn request_guild_members(
 /// b) receive multiple SoundboardSounds events with different data based on the guild-shard relationship
 /// Please report any usage of this function with multiple shards in issues.
 pub fn request_soundboard_sounds(
-  gateway: Subject(GatewayMessage),
+  gateway: Subject(Message),
   for guild_ids: List(String),
 ) -> Nil {
   process.send(

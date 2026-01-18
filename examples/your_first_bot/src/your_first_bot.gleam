@@ -1,6 +1,6 @@
 import dotenv_gleam
 import envoy
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject}
 import gleam/option.{None, Some}
 import gleam/string
 import grom
@@ -12,7 +12,7 @@ import grom/interaction.{type Interaction}
 import logging
 
 type State {
-  State(client: grom.Client)
+  State(client: grom.Client, gateway: Subject(gateway.Message))
 }
 
 pub fn main() -> Nil {
@@ -27,12 +27,17 @@ pub fn main() -> Nil {
     client
     |> gateway.identify(intents: intent.all)
 
-  let state = State(client:)
-
   let assert Ok(data) = gateway.get_data(client)
 
   let gateway_start_result =
-    gateway.new(state, identify, data)
+    gateway.new_with_initializer(
+      fn(subject) {
+        let state = State(client, subject)
+        Ok(state)
+      },
+      identify,
+      data,
+    )
     |> gateway.on_event(do: on_event)
     |> gateway.start
 
@@ -95,7 +100,7 @@ fn on_ready(state: State, ready: gateway.ReadyMessage) {
     }
   }
 
-  connection
+  state.gateway
   |> gateway.update_presence(using: gateway.UpdatePresenceMessage(
     status: gateway.Online,
     since: None,
@@ -108,14 +113,10 @@ fn on_ready(state: State, ready: gateway.ReadyMessage) {
   gateway.continue(state)
 }
 
-fn on_interaction_created(
-  state: State,
-  interaction: Interaction,
-  connection: gateway.Connection(State),
-) {
+fn on_interaction_created(state: State, interaction: Interaction) {
   case interaction.data {
     interaction.CommandExecuted(command) ->
-      on_command_executed(state, interaction, command, connection)
+      on_command_executed(state, interaction, command)
     _ -> gateway.continue(state)
   }
 }
@@ -124,11 +125,10 @@ fn on_command_executed(
   state: State,
   interaction: Interaction,
   command: interaction.CommandExecution,
-  connection: gateway.Connection(State),
 ) {
   case command {
     interaction.SlashCommandExecuted(command) ->
-      on_slash_command_executed(state, interaction, command, connection)
+      on_slash_command_executed(state, interaction, command)
     _ -> gateway.continue(state)
   }
 }
@@ -137,12 +137,11 @@ fn on_slash_command_executed(
   state: State,
   interaction: Interaction,
   command: interaction.SlashCommandExecution,
-  connection: gateway.Connection(State),
 ) {
   case command.name {
     "ping" -> on_ping_command(state, interaction)
-    "soundboards" -> on_soundboards_command(state, interaction, connection)
-    "join" -> on_join_command(state, interaction, connection)
+    "soundboards" -> on_soundboards_command(state, interaction)
+    "join" -> on_join_command(state, interaction)
     _ -> gateway.continue(state)
   }
 }
@@ -150,9 +149,8 @@ fn on_slash_command_executed(
 fn on_join_command(
   state: State,
   interaction: Interaction,
-  connection: gateway.Connection(State),
 ) -> gateway.Next(State) {
-  connection
+  state.gateway
   |> gateway.update_voice_state(using: gateway.UpdateVoiceStateMessage(
     "1155216444691325049",
     Some("1155216445211422795"),
@@ -178,9 +176,8 @@ fn on_join_command(
 fn on_soundboards_command(
   state: State,
   interaction: Interaction,
-  connection: gateway.Connection(State),
 ) -> gateway.Next(State) {
-  connection
+  state.gateway
   |> gateway.request_soundboard_sounds(for: ["1155216444691325049"])
 
   let _response_result =
