@@ -1,5 +1,5 @@
 name = "grom"
-version = "3.0.0"
+version = "3.0.1"
 description = "A Gleamy library for the Discord API 🌟"
 licenses = ["MIT"]
 repository = { type = "gitlab", user = "grom-gleam", repo = "grom" }
