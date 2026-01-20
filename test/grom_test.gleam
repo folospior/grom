@@ -17,7 +17,7 @@ pub fn main() {
 
 pub fn encode_modify_current_test() {
   current_user.Modify(..current_user.new_modify(), username: Some("fo1o"))
-  |> current_user.modify_encode
+  |> current_user.modify_to_json
   |> json.to_string
   |> should.equal("{\"username\":\"fo1o\"}")
 }
