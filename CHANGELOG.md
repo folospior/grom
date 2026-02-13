@@ -1,4 +1,7 @@
-# Unreleased
+# v4.0.0 (20/01/2026)
+* Fix bug regarding the decoding of current_user.get_guilds (Filip Hoffmann)
+
+# v3.0.0 (18/01/2026)
 * Add CDN endpoints for various images (Filip Hoffmann)
 * Create snowflake module for getting creation dates (Filip Hoffmann)
 * Sharding, complete overhaul of gateway API (Filip Hoffmann)
