@@ -90,6 +90,11 @@ pub type SubmittedModalComponent {
   TextDisplaySubmitted(TextDisplaySubmission)
   LabelSubmitted(LabelSubmission)
   FileUploadSubmitted(FileUploadSubmission)
+  RadioGroupSubmitted(RadioGroupSubmission)
+}
+
+pub type RadioGroupSubmission {
+  RadioGroupSubmission(id: Int, custom_id: String, value: Option(String))
 }
 
 pub type ButtonExecution {
@@ -597,12 +602,21 @@ pub fn submitted_modal_component_decoder() -> decode.Decoder(
     10 -> decode.map(text_display_submission_decoder(), TextDisplaySubmitted)
     18 -> decode.map(label_submission_decoder(), LabelSubmitted)
     19 -> decode.map(file_upload_submission_decoder(), FileUploadSubmitted)
+    21 -> decode.map(radio_group_submission_decoder(), RadioGroupSubmitted)
     _ ->
       decode.failure(
         StringSelectSubmitted(StringSelectExecution("", [], None)),
         "SubmittedModalComponent",
       )
   }
+}
+
+fn radio_group_submission_decoder() -> decode.Decoder(RadioGroupSubmission) {
+  use id <- decode.field("id", decode.int)
+  use custom_id <- decode.field("custom_id", decode.string)
+  use value <- decode.field("value", decode.optional(decode.string))
+
+  decode.success(RadioGroupSubmission(id:, custom_id:, value:))
 }
 
 @internal
@@ -1185,18 +1199,6 @@ pub fn response_message_decoder() -> decode.Decoder(ResponseMessage) {
     files: None,
     poll:,
   ))
-}
-
-@internal
-pub fn modal_response_decoder() -> decode.Decoder(ModalResponse) {
-  use custom_id <- decode.field("custom_id", decode.string)
-  use title <- decode.field("title", decode.string)
-  use components <- decode.field(
-    "components",
-    decode.list(of: modal.component_decoder()),
-  )
-
-  decode.success(ModalResponse(custom_id:, title:, components:))
 }
 
 // ENCODERS --------------------------------------------------------------------

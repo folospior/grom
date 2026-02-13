@@ -1,9 +1,9 @@
-import gleam/dynamic/decode
 import gleam/json.{type Json}
 import grom/component/channel_select.{type ChannelSelect}
 import grom/component/file_upload.{type FileUpload}
 import grom/component/label.{type Label}
 import grom/component/mentionable_select.{type MentionableSelect}
+import grom/component/radio_group.{type RadioGroup}
 import grom/component/role_select.{type RoleSelect}
 import grom/component/string_select.{type StringSelect}
 import grom/component/text_display.{type TextDisplay}
@@ -24,25 +24,7 @@ pub type Component {
   FileUpload(FileUpload)
   TextDisplay(TextDisplay)
   Label(Label)
-}
-
-// DECODERS --------------------------------------------------------------------
-
-@internal
-pub fn component_decoder() -> decode.Decoder(Component) {
-  use type_ <- decode.field("type", decode.int)
-  case type_ {
-    3 -> decode.map(string_select.decoder(), StringSelect)
-    4 -> decode.map(text_input.decoder(), TextInput)
-    5 -> decode.map(user_select.decoder(), UserSelect)
-    6 -> decode.map(role_select.decoder(), RoleSelect)
-    7 -> decode.map(mentionable_select.decoder(), MentionableSelect)
-    8 -> decode.map(channel_select.decoder(), ChannelSelect)
-    10 -> decode.map(text_display.decoder(), TextDisplay)
-    18 -> decode.map(label.decoder(), Label)
-    19 -> decode.map(file_upload.decoder(), FileUpload)
-    _ -> decode.failure(FileUpload(file_upload.new("")), "Component")
-  }
+  RadioGroup(RadioGroup)
 }
 
 // ENCODERS --------------------------------------------------------------------
@@ -60,5 +42,6 @@ pub fn component_to_json(component: Component) -> Json {
     FileUpload(file_upload) -> file_upload.to_json(file_upload)
     TextDisplay(text_display) -> text_display.to_json(text_display)
     Label(label) -> label.to_json(label)
+    RadioGroup(radio_group) -> radio_group.to_json(radio_group)
   }
 }
