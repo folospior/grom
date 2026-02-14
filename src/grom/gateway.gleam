@@ -2396,7 +2396,10 @@ pub fn start(
     builder.data.session_start_limits.max_identify_requests_per_5_seconds
   let supervisor = static_supervisor.new(static_supervisor.OneForOne)
 
-  let shard_ids = list.range(from: 0, to: shard_count - 1)
+  let shard_ids =
+    int.range(from: 0, to: shard_count - 1, with: [], run: list.prepend)
+    |> list.reverse
+
   let shards =
     shard_ids
     |> list.map(fn(id) { Shard(id, shard_count) })
