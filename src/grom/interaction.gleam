@@ -81,16 +81,8 @@ pub type ModalSubmission {
 }
 
 pub type SubmittedModalComponent {
-  StringSelectSubmitted(StringSelectExecution)
-  TextInputSubmitted(TextInputSubmission)
-  UserSelectSubmitted(UserSelectExecution)
-  RoleSelectSubmitted(RoleSelectExecution)
-  MentionableSelectSubmitted(MentionableSelectExecution)
-  ChannelSelectSubmitted(ChannelSelectExecution)
   TextDisplaySubmitted(TextDisplaySubmission)
   LabelSubmitted(LabelSubmission)
-  FileUploadSubmitted(FileUploadSubmission)
-  RadioGroupSubmitted(RadioGroupSubmission)
 }
 
 pub type RadioGroupSubmission {
@@ -125,6 +117,7 @@ pub type SubmittedLabelComponent {
   LabelMentionableSelectSubmitted(MentionableSelectExecution)
   LabelChannelSelectSubmitted(ChannelSelectExecution)
   LabelFileUploadSubmitted(FileUploadSubmission)
+  LabelRadioGroupSubmitted(RadioGroupSubmission)
 }
 
 pub type TextDisplaySubmission {
@@ -589,23 +582,11 @@ pub fn submitted_modal_component_decoder() -> decode.Decoder(
 ) {
   use type_ <- decode.field("type", decode.int)
   case type_ {
-    3 -> decode.map(string_select_execution_decoder(), StringSelectSubmitted)
-    4 -> decode.map(text_input_submission_decoder(), TextInputSubmitted)
-    5 -> decode.map(user_select_execution_decoder(), UserSelectSubmitted)
-    6 -> decode.map(role_select_execution_decoder(), RoleSelectSubmitted)
-    7 ->
-      decode.map(
-        mentionable_select_execution_decoder(),
-        MentionableSelectSubmitted,
-      )
-    8 -> decode.map(channel_select_execution_decoder(), ChannelSelectSubmitted)
     10 -> decode.map(text_display_submission_decoder(), TextDisplaySubmitted)
     18 -> decode.map(label_submission_decoder(), LabelSubmitted)
-    19 -> decode.map(file_upload_submission_decoder(), FileUploadSubmitted)
-    21 -> decode.map(radio_group_submission_decoder(), RadioGroupSubmitted)
     _ ->
       decode.failure(
-        StringSelectSubmitted(StringSelectExecution("", [], None)),
+        TextDisplaySubmitted(TextDisplaySubmission(0)),
         "SubmittedModalComponent",
       )
   }
@@ -680,6 +661,7 @@ pub fn submitted_label_component_decoder() -> decode.Decoder(
         LabelChannelSelectSubmitted,
       )
     19 -> decode.map(file_upload_submission_decoder(), LabelFileUploadSubmitted)
+    21 -> decode.map(radio_group_submission_decoder(), LabelRadioGroupSubmitted)
     _ ->
       decode.failure(
         LabelStringSelectSubmitted(StringSelectExecution("", [], None)),
