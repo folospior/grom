@@ -1,4 +1,5 @@
 # Unreleased
+* Remove deprecated use of `list.range` function (Filip Hoffmann)
 * Add Radio Group component (Filip Hoffmann)
 * Add Checkbox Group component (Filip Hoffmann)
 * Add Checkbox component (Filip Hoffmann)
