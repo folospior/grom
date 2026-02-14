@@ -118,6 +118,15 @@ pub type SubmittedLabelComponent {
   LabelChannelSelectSubmitted(ChannelSelectExecution)
   LabelFileUploadSubmitted(FileUploadSubmission)
   LabelRadioGroupSubmitted(RadioGroupSubmission)
+  LabelCheckboxGroupSubmitted(CheckboxGroupSubmission)
+}
+
+pub type CheckboxGroupSubmission {
+  CheckboxGroupSubmission(
+    id: Int,
+    custom_id: String,
+    selected_values: List(String),
+  )
 }
 
 pub type TextDisplaySubmission {
@@ -662,12 +671,27 @@ pub fn submitted_label_component_decoder() -> decode.Decoder(
       )
     19 -> decode.map(file_upload_submission_decoder(), LabelFileUploadSubmitted)
     21 -> decode.map(radio_group_submission_decoder(), LabelRadioGroupSubmitted)
+    22 ->
+      decode.map(
+        checkbox_group_submission_decoder(),
+        LabelCheckboxGroupSubmitted,
+      )
     _ ->
       decode.failure(
         LabelStringSelectSubmitted(StringSelectExecution("", [], None)),
         "SubmittedLabelComponent",
       )
   }
+}
+
+fn checkbox_group_submission_decoder() -> decode.Decoder(
+  CheckboxGroupSubmission,
+) {
+  use id <- decode.field("id", decode.int)
+  use custom_id <- decode.field("custom_id", decode.string)
+  use selected_values <- decode.field("values", decode.list(of: decode.string))
+
+  decode.success(CheckboxGroupSubmission(id, custom_id, selected_values))
 }
 
 @internal

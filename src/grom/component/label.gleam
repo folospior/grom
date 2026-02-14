@@ -3,6 +3,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import grom/component/channel_select.{type ChannelSelect}
+import grom/component/checkbox_group.{type CheckboxGroup}
 import grom/component/file_upload.{type FileUpload}
 import grom/component/mentionable_select.{type MentionableSelect}
 import grom/component/radio_group.{type RadioGroup}
@@ -31,6 +32,7 @@ pub type Component {
   ChannelSelect(ChannelSelect)
   FileUpload(FileUpload)
   RadioGroup(RadioGroup)
+  CheckboxGroup(CheckboxGroup)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -98,6 +100,7 @@ pub fn component_to_json(component: Component) -> Json {
     ChannelSelect(channel_select) -> channel_select.to_json(channel_select)
     FileUpload(file_upload) -> file_upload.to_json(file_upload)
     RadioGroup(radio_group) -> radio_group.to_json(radio_group)
+    CheckboxGroup(checkbox_group) -> checkbox_group.to_json(checkbox_group)
   }
 }
 
