@@ -119,6 +119,11 @@ pub type SubmittedLabelComponent {
   LabelFileUploadSubmitted(FileUploadSubmission)
   LabelRadioGroupSubmitted(RadioGroupSubmission)
   LabelCheckboxGroupSubmitted(CheckboxGroupSubmission)
+  LabelCheckboxSubmitted(CheckboxSubmission)
+}
+
+pub type CheckboxSubmission {
+  CheckboxSubmission(id: Int, custom_id: String, is_selected: Bool)
 }
 
 pub type CheckboxGroupSubmission {
@@ -648,6 +653,14 @@ pub fn label_submission_decoder() -> decode.Decoder(LabelSubmission) {
   decode.success(LabelSubmission(id:, component:))
 }
 
+fn checkbox_submission_decoder() -> decode.Decoder(CheckboxSubmission) {
+  use id <- decode.field("id", decode.int)
+  use custom_id <- decode.field("custom_id", decode.string)
+  use is_selected <- decode.field("value", decode.bool)
+
+  decode.success(CheckboxSubmission(id, custom_id, is_selected))
+}
+
 @internal
 pub fn submitted_label_component_decoder() -> decode.Decoder(
   SubmittedLabelComponent,
@@ -676,6 +689,7 @@ pub fn submitted_label_component_decoder() -> decode.Decoder(
         checkbox_group_submission_decoder(),
         LabelCheckboxGroupSubmitted,
       )
+    23 -> decode.map(checkbox_submission_decoder(), LabelCheckboxSubmitted)
     _ ->
       decode.failure(
         LabelStringSelectSubmitted(StringSelectExecution("", [], None)),
