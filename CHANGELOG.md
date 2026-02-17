@@ -3,6 +3,7 @@
 * Add Radio Group component (Filip Hoffmann)
 * Add Checkbox Group component (Filip Hoffmann)
 * Add Checkbox component (Filip Hoffmann)
+* Add new invite endpoints and fields (Filip Hoffmann)
 
 # v4.0.0 (20/01/2026)
 * Fix bug regarding the decoding of current_user.get_guilds (Filip Hoffmann)
