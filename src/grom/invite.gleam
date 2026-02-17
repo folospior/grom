@@ -13,12 +13,13 @@ import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/application.{type Application}
 import grom/channel.{type Channel}
-import grom/file
 import grom/guild.{type Guild}
 import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/user.{type User, User}
+import multipart_form
+import multipart_form/field
 import splitter.{type Splitter}
 
 // TYPES -----------------------------------------------------------------------
@@ -397,8 +398,12 @@ pub fn create(
       let ids_csv = ids |> string.join("\n") |> bit_array.from_string
 
       client
-      |> rest.new_multipart_request(http.Post, path, json, [
-        file.File("target_users.csv", "text/csv", ids_csv),
+      |> rest.new_request(http.Post, path)
+      |> multipart_form.to_request([
+        #(
+          "target_users_file",
+          field.File("target_users.csv", "text/csv", ids_csv),
+        ),
       ])
     }
     None -> {
@@ -494,4 +499,21 @@ fn split_endlines_loop(
       |> list.drop(1)
     #(id, _, rest) -> split_endlines_loop(rest, splitter, [id, ..acc])
   }
+}
+
+/// Supply the full list of users that can use the invite, not just the new users.
+pub fn update_target_users(
+  client: grom.Client,
+  for_code code: String,
+  users_ids ids: List(String),
+) -> Result(Nil, grom.Error) {
+  let ids_csv = ids |> string.join("\n") |> bit_array.from_string
+
+  client
+  |> rest.new_request(http.Put, "/invites/" <> code <> "/target-users")
+  |> multipart_form.to_request([
+    #("target_users_file", field.File("target_users.csv", "text/csv", ids_csv)),
+  ])
+  |> rest.execute_bytes
+  |> result.replace(Nil)
 }
