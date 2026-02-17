@@ -3,6 +3,7 @@ import gleam/bool
 import gleam/dynamic/decode
 import gleam/http
 import gleam/http/request
+import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -14,6 +15,8 @@ import grom
 import grom/application.{type Application}
 import grom/channel.{type Channel}
 import grom/guild.{type Guild}
+import grom/guild/role
+import grom/internal/flags
 import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
@@ -40,7 +43,45 @@ pub type WithoutMetadata {
     approximate_presence_count: Option(Int),
     approximate_member_count: Option(Int),
     expires_at: Option(Timestamp),
+    flags: Option(List(Flag)),
+    roles: Option(List(PartialRole)),
   )
+}
+
+pub type PartialRole {
+  PartialRole(
+    id: String,
+    name: String,
+    position: Int,
+    colors: role.Colors,
+    icon_hash: Option(String),
+    unicode_emoji: Option(String),
+  )
+}
+
+fn partial_role_decoder() -> decode.Decoder(PartialRole) {
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use position <- decode.field("position", decode.int)
+  use colors <- decode.field("colors", role.colors_decoder())
+  use icon_hash <- decode.optional_field(
+    "icon",
+    None,
+    decode.optional(decode.string),
+  )
+  use unicode_emoji <- decode.optional_field(
+    "unicode_emoji",
+    None,
+    decode.optional(decode.string),
+  )
+  decode.success(PartialRole(
+    id:,
+    name:,
+    position:,
+    colors:,
+    icon_hash:,
+    unicode_emoji:,
+  ))
 }
 
 pub type WithMetadata {
@@ -59,7 +100,17 @@ pub type WithMetadata {
     max_age: Duration,
     is_temporary: Bool,
     created_at: Timestamp,
+    flags: Option(List(Flag)),
+    roles: Option(List(PartialRole)),
   )
+}
+
+pub type Flag {
+  IsGuestInvite
+}
+
+fn bits_flags() -> List(#(Int, Flag)) {
+  [#(int.bitwise_shift_left(1, 0), IsGuestInvite)]
 }
 
 pub type Create {
@@ -183,6 +234,16 @@ pub fn without_metadata_decoder() -> decode.Decoder(WithoutMetadata) {
     None,
     decode.optional(time_rfc3339.decoder()),
   )
+  use flags <- decode.optional_field(
+    "flags",
+    None,
+    decode.optional(flags.decoder(bits_flags())),
+  )
+  use roles <- decode.optional_field(
+    "roles",
+    None,
+    decode.optional(decode.list(of: partial_role_decoder())),
+  )
   decode.success(WithoutMetadata(
     type_:,
     code:,
@@ -193,6 +254,8 @@ pub fn without_metadata_decoder() -> decode.Decoder(WithoutMetadata) {
     approximate_presence_count:,
     approximate_member_count:,
     expires_at:,
+    flags:,
+    roles:,
   ))
 }
 
@@ -281,6 +344,16 @@ pub fn with_metadata_decoder() -> decode.Decoder(WithMetadata) {
   )
   use is_temporary <- decode.field("temporary", decode.bool)
   use created_at <- decode.field("created_at", time_rfc3339.decoder())
+  use flags <- decode.optional_field(
+    "flags",
+    None,
+    decode.optional(flags.decoder(bits_flags())),
+  )
+  use roles <- decode.optional_field(
+    "roles",
+    None,
+    decode.optional(decode.list(of: partial_role_decoder())),
+  )
 
   decode.success(WithMetadata(
     type_:,
@@ -297,6 +370,8 @@ pub fn with_metadata_decoder() -> decode.Decoder(WithMetadata) {
     max_age:,
     is_temporary:,
     created_at:,
+    flags:,
+    roles:,
   ))
 }
 
