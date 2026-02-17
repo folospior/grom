@@ -19,6 +19,7 @@ import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
 import grom/user.{type User, User}
+import splitter.{type Splitter}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -460,4 +461,37 @@ pub fn delete(
 
 pub fn new_create() -> Create {
   Create(None, None, False, False, None, None, None)
+}
+
+pub fn get_target_users_ids(
+  client: grom.Client,
+  for_code code: String,
+) -> Result(List(String), grom.Error) {
+  use response <- result.try(
+    client
+    |> rest.new_request(http.Get, "/invites/" <> code <> "/target-users")
+    |> rest.execute,
+  )
+
+  Ok(split_endlines(response.body))
+}
+
+// Cursed CSV handling, because this is a cursed CSV.
+fn split_endlines(string: String) -> List(String) {
+  let splitter = splitter.new(["\r\n", "\n"])
+  split_endlines_loop(string, splitter, [])
+}
+
+fn split_endlines_loop(
+  string: String,
+  splitter: Splitter,
+  acc: List(String),
+) -> List(String) {
+  case splitter.split(splitter, string) {
+    #(last, "", "") ->
+      [last, ..acc]
+      |> list.reverse
+      |> list.drop(1)
+    #(id, _, rest) -> split_endlines_loop(rest, splitter, [id, ..acc])
+  }
 }
