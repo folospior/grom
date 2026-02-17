@@ -48,7 +48,7 @@ pub fn from_int_hours_decoder() -> decode.Decoder(Duration) {
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn to_int_seconds_encode(duration: Duration) -> Json {
+pub fn to_int_seconds_json(duration: Duration) -> Json {
   duration
   |> to_int_seconds
   |> json.int

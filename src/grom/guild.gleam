@@ -1590,10 +1590,7 @@ pub fn create_ban(
   let json =
     case delete_message_duration {
       Some(duration) -> [
-        #(
-          "delete_message_seconds",
-          time_duration.to_int_seconds_encode(duration),
-        ),
+        #("delete_message_seconds", time_duration.to_int_seconds_json(duration)),
       ]
       None -> []
     }
@@ -1644,7 +1641,7 @@ pub fn bulk_ban(
         Some(duration) -> [
           #(
             "delete_message_seconds",
-            time_duration.to_int_seconds_encode(duration),
+            time_duration.to_int_seconds_json(duration),
           ),
         ]
         None -> []

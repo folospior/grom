@@ -899,7 +899,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.rate_limit_per_user
         |> modification.to_json(
           "rate_limit_per_user",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let permission_overwrites =
@@ -918,7 +918,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         |> modification.to_json(
           "default_auto_archive_duration",
           // FIXME: THIS IS SUPPOSED TO BE MINUTES!!!
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let default_thread_rate_limit_per_user = case
@@ -927,7 +927,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         Some(limit) -> [
           #(
             "default_thread_rate_limit_per_user",
-            time_duration.to_int_seconds_encode(limit),
+            time_duration.to_int_seconds_json(limit),
           ),
         ]
         None -> []
@@ -967,7 +967,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.rate_limit_per_user
         |> modification.to_json(
           "rate_limit_per_user",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let bitrate =
@@ -1075,7 +1075,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.default_auto_archive_duration
         |> modification.to_json(
           "default_auto_archive_duration",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       [
@@ -1106,7 +1106,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         Some(duration) -> [
           #(
             "auto_archive_duration",
-            time_duration.to_int_seconds_encode(duration),
+            time_duration.to_int_seconds_json(duration),
           ),
         ]
         None -> []
@@ -1126,7 +1126,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.rate_limit_per_user
         |> modification.to_json(
           "rate_limit_per_user",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let flags = case modify.flags {
@@ -1171,7 +1171,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.rate_limit_per_user
         |> modification.to_json(
           "rate_limit_per_user",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let bitrate =
@@ -1242,7 +1242,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.rate_limit_per_user
         |> modification.to_json(
           "rate_limit_per_user",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let permission_overwrites =
@@ -1260,7 +1260,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.default_auto_archive_duration
         |> modification.to_json(
           "default_auto_archive_duration",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let flags = case modify.flags {
@@ -1286,7 +1286,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         Some(limit) -> [
           #(
             "default_thread_rate_limit_per_user",
-            time_duration.to_int_seconds_encode(limit),
+            time_duration.to_int_seconds_json(limit),
           ),
         ]
         None -> []
@@ -1340,7 +1340,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.rate_limit_per_user
         |> modification.to_json(
           "rate_limit_per_user",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let permission_overwrites =
@@ -1354,7 +1354,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         modify.default_auto_archive_duration
         |> modification.to_json(
           "default_auto_archive_duration",
-          time_duration.to_int_seconds_encode,
+          time_duration.to_int_seconds_json,
         )
 
       let flags = case modify.flags {
@@ -1380,7 +1380,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
         Some(limit) -> [
           #(
             "default_thread_rate_limit_per_user",
-            time_duration.to_int_seconds_encode(limit),
+            time_duration.to_int_seconds_json(limit),
           ),
         ]
         None -> []
@@ -1462,7 +1462,7 @@ pub fn create_text_to_json(create_text: CreateText) -> Json {
 
   let rate_limit_per_user = case create_text.rate_limit_per_user {
     Some(limit) -> [
-      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+      #("rate_limit_per_user", time_duration.to_int_seconds_json(limit)),
     ]
     None -> []
   }
@@ -1492,7 +1492,7 @@ pub fn create_text_to_json(create_text: CreateText) -> Json {
     Some(limit) -> [
       #(
         "default_thread_rate_limit_per_user",
-        time_duration.to_int_seconds_encode(limit),
+        time_duration.to_int_seconds_json(limit),
       ),
     ]
     None -> []
@@ -1549,7 +1549,7 @@ pub fn create_voice_to_json(create_voice: CreateVoice) -> Json {
 
   let rate_limit_per_user = case create_voice.rate_limit_per_user {
     Some(limit) -> [
-      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+      #("rate_limit_per_user", time_duration.to_int_seconds_json(limit)),
     ]
     None -> []
   }
@@ -1663,7 +1663,7 @@ pub fn create_announcement_to_json(
     Some(limit) -> [
       #(
         "default_thread_rate_limit_per_user",
-        time_duration.to_int_seconds_encode(limit),
+        time_duration.to_int_seconds_json(limit),
       ),
     ]
     None -> []
@@ -1714,7 +1714,7 @@ pub fn create_stage_to_json(create_stage: CreateStage) -> Json {
 
   let rate_limit_per_user = case create_stage.rate_limit_per_user {
     Some(limit) -> [
-      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+      #("rate_limit_per_user", time_duration.to_int_seconds_json(limit)),
     ]
     None -> []
   }
@@ -1778,7 +1778,7 @@ pub fn create_forum_to_json(create_forum: CreateForum) -> Json {
 
   let rate_limit_per_user = case create_forum.rate_limit_per_user {
     Some(limit) -> [
-      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+      #("rate_limit_per_user", time_duration.to_int_seconds_json(limit)),
     ]
     None -> []
   }
@@ -1833,7 +1833,7 @@ pub fn create_forum_to_json(create_forum: CreateForum) -> Json {
     Some(limit) -> [
       #(
         "default_thread_rate_limit_per_user",
-        time_duration.to_int_seconds_encode(limit),
+        time_duration.to_int_seconds_json(limit),
       ),
     ]
     None -> []
@@ -1884,7 +1884,7 @@ pub fn create_media_to_json(create_media: CreateMedia) -> Json {
 
   let rate_limit_per_user = case create_media.rate_limit_per_user {
     Some(limit) -> [
-      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+      #("rate_limit_per_user", time_duration.to_int_seconds_json(limit)),
     ]
     None -> []
   }
@@ -1932,7 +1932,7 @@ pub fn create_media_to_json(create_media: CreateMedia) -> Json {
     Some(limit) -> [
       #(
         "default_thread_rate_limit_per_user",
-        time_duration.to_int_seconds_encode(limit),
+        time_duration.to_int_seconds_json(limit),
       ),
     ]
     None -> []

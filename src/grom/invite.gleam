@@ -1,3 +1,4 @@
+import gleam/bit_array
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/http
@@ -6,16 +7,18 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/application.{type Application}
 import grom/channel.{type Channel}
+import grom/file
 import grom/guild.{type Guild}
 import grom/internal/rest
 import grom/internal/time_duration
 import grom/internal/time_rfc3339
-import grom/user.{type User}
+import grom/user.{type User, User}
 
 // TYPES -----------------------------------------------------------------------
 
@@ -32,8 +35,6 @@ pub type WithoutMetadata {
     channel: Option(Channel),
     inviter: Option(User),
     target_type: Option(TargetType),
-    target_user: Option(User),
-    target_application: Option(Application),
     approximate_presence_count: Option(Int),
     approximate_member_count: Option(Int),
     expires_at: Option(Timestamp),
@@ -48,8 +49,6 @@ pub type WithMetadata {
     channel: Option(Channel),
     inviter: Option(User),
     target_type: Option(TargetType),
-    target_user: Option(User),
-    target_application: Option(Application),
     approximate_presence_count: Option(Int),
     approximate_member_count: Option(Int),
     expires_at: Option(Timestamp),
@@ -65,22 +64,29 @@ pub type Create {
   Create(
     max_age: Option(Duration),
     max_uses: Option(Int),
-    is_temporary: Option(Bool),
-    target_type: Option(TargetType),
-    target_user_id: Option(String),
-    target_application_id: Option(String),
+    is_temporary: Bool,
+    is_unique: Bool,
+    target_type: Option(CreateTargetType),
+    target_users_ids: Option(List(String)),
+    /// Automatically given roles to users accepting this invite.
+    role_ids: Option(List(String)),
   )
 }
 
 pub type Type {
-  Guild
-  GroupDm
-  Friend
+  ToGuild
+  ToGroupDm
+  ToFriend
+}
+
+pub type CreateTargetType {
+  CreateForStream(streaming_user_id: String)
+  CreateForEmbeddedApplication(application_id: String)
 }
 
 pub type TargetType {
-  Stream
-  EmbeddedApplication
+  ForStream(streaming_user: User)
+  ForEmbeddedApplication(application: Application)
 }
 
 // DECODERS --------------------------------------------------------------------
@@ -118,18 +124,48 @@ pub fn without_metadata_decoder() -> decode.Decoder(WithoutMetadata) {
   use target_type <- decode.optional_field(
     "target_type",
     None,
-    decode.optional(target_type_decoder()),
+    decode.optional(decode.int),
   )
-  use target_user <- decode.optional_field(
-    "target_user",
-    None,
-    decode.optional(user.decoder()),
-  )
-  use target_application <- decode.optional_field(
-    "target_application",
-    None,
-    decode.optional(application.decoder()),
-  )
+
+  use target_type <- decode.then(case target_type {
+    Some(1) -> {
+      use streaming_user <- decode.field("target_user", user.decoder())
+      decode.success(Some(ForStream(streaming_user:)))
+    }
+    Some(2) -> {
+      use application <- decode.field(
+        "target_application",
+        application.decoder(),
+      )
+      decode.success(Some(ForEmbeddedApplication(application:)))
+    }
+    Some(_) ->
+      decode.failure(
+        Some(
+          ForStream(User(
+            "",
+            "",
+            "",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+          )),
+        ),
+        "TargetType",
+      )
+    None -> decode.success(None)
+  })
   use approximate_presence_count <- decode.optional_field(
     "approximate_presence_count",
     None,
@@ -152,8 +188,6 @@ pub fn without_metadata_decoder() -> decode.Decoder(WithoutMetadata) {
     channel:,
     inviter:,
     target_type:,
-    target_user:,
-    target_application:,
     approximate_presence_count:,
     approximate_member_count:,
     expires_at:,
@@ -175,21 +209,53 @@ pub fn with_metadata_decoder() -> decode.Decoder(WithMetadata) {
     None,
     decode.optional(user.decoder()),
   )
+
   use target_type <- decode.optional_field(
     "target_type",
     None,
-    decode.optional(target_type_decoder()),
+    decode.optional(decode.int),
   )
-  use target_user <- decode.optional_field(
-    "target_user",
-    None,
-    decode.optional(user.decoder()),
-  )
-  use target_application <- decode.optional_field(
-    "target_application",
-    None,
-    decode.optional(application.decoder()),
-  )
+
+  use target_type <- decode.then(case target_type {
+    Some(1) -> {
+      use streaming_user <- decode.field("target_user", user.decoder())
+      decode.success(Some(ForStream(streaming_user:)))
+    }
+    Some(2) -> {
+      use application <- decode.field(
+        "target_application",
+        application.decoder(),
+      )
+      decode.success(Some(ForEmbeddedApplication(application:)))
+    }
+    Some(_) ->
+      decode.failure(
+        Some(
+          ForStream(User(
+            "",
+            "",
+            "",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+          )),
+        ),
+        "TargetType",
+      )
+    None -> decode.success(None)
+  })
+
   use approximate_presence_count <- decode.optional_field(
     "approximate_presence_count",
     None,
@@ -221,8 +287,6 @@ pub fn with_metadata_decoder() -> decode.Decoder(WithMetadata) {
     channel:,
     inviter:,
     target_type:,
-    target_user:,
-    target_application:,
     approximate_presence_count:,
     approximate_member_count:,
     expires_at:,
@@ -238,70 +302,51 @@ pub fn with_metadata_decoder() -> decode.Decoder(WithMetadata) {
 pub fn type_decoder() -> decode.Decoder(Type) {
   use variant <- decode.then(decode.int)
   case variant {
-    0 -> decode.success(Guild)
-    1 -> decode.success(GroupDm)
-    2 -> decode.success(Friend)
-    _ -> decode.failure(Guild, "Type")
-  }
-}
-
-@internal
-pub fn target_type_decoder() -> decode.Decoder(TargetType) {
-  use variant <- decode.then(decode.int)
-  case variant {
-    1 -> decode.success(Stream)
-    2 -> decode.success(EmbeddedApplication)
-    _ -> decode.failure(Stream, "TargetType")
+    0 -> decode.success(ToGuild)
+    1 -> decode.success(ToGroupDm)
+    2 -> decode.success(ToFriend)
+    _ -> decode.failure(ToGuild, "Type")
   }
 }
 
 // ENCODERS --------------------------------------------------------------------
 
 @internal
-pub fn target_type_encode(target_type: TargetType) -> Json {
-  case target_type {
-    Stream -> 1
-    EmbeddedApplication -> 2
+pub fn create_to_json(create: Create) -> Json {
+  let max_age = case create.max_age {
+    Some(age) -> [#("max_age", time_duration.to_int_seconds_json(age))]
+    None -> []
   }
-  |> json.int
-}
 
-@internal
-pub fn create_encode(create: Create) -> Json {
-  let Create(
-    max_age:,
-    max_uses:,
-    is_temporary:,
-    target_type:,
-    target_user_id:,
-    target_application_id:,
-  ) = create
-  json.object([
-    #("max_age", case max_age {
-      None -> json.null()
-      Some(value) -> time_duration.to_int_seconds_encode(value)
-    }),
-    #("max_uses", case max_uses {
-      None -> json.null()
-      Some(value) -> json.int(value)
-    }),
-    #("is_temporary", case is_temporary {
-      None -> json.null()
-      Some(value) -> json.bool(value)
-    }),
-    #("target_type", case target_type {
-      None -> json.null()
-      Some(value) -> target_type_encode(value)
-    }),
-    #("target_user_id", case target_user_id {
-      None -> json.null()
-      Some(value) -> json.string(value)
-    }),
-    #("target_application_id", case target_application_id {
-      None -> json.null()
-      Some(value) -> json.string(value)
-    }),
-  ])
+  let max_uses = case create.max_uses {
+    Some(uses) -> [#("max_uses", json.int(uses))]
+    None -> []
+  }
+
+  let is_temporary = [#("temporary", json.bool(create.is_temporary))]
+
+  let is_unique = [#("unique", json.bool(create.is_unique))]
+
+  let target_type = case create.target_type {
+    Some(CreateForStream(streaming_user_id)) -> [
+      #("target_type", json.int(1)),
+      #("target_user_id", json.string(streaming_user_id)),
+    ]
+    Some(CreateForEmbeddedApplication(application_id)) -> [
+      #("target_type", json.int(2)),
+      #("target_application_id", json.string(application_id)),
+    ]
+    None -> []
+  }
+
+  let role_ids = case create.role_ids {
+    Some(ids) -> [#("role_ids", json.array(ids, json.string))]
+    None -> []
+  }
+
+  [max_age, max_uses, is_temporary, is_unique, target_type, role_ids]
+  |> list.flatten
+  |> json.object
 }
 
 // PUBLIC API FUNCTIONS --------------------------------------------------------
@@ -342,14 +387,30 @@ pub fn create(
   with create: Create,
   reason reason: Option(String),
 ) -> Result(WithoutMetadata, grom.Error) {
-  let json = create |> create_encode
+  let json = create |> create_to_json
+
+  let path = "/channels/" <> channel_id <> "/invites"
+
+  let request = case create.target_users_ids {
+    Some(ids) -> {
+      let ids_csv = ids |> string.join("\n") |> bit_array.from_string
+
+      client
+      |> rest.new_multipart_request(http.Post, path, json, [
+        file.File("target_users.csv", "text/csv", ids_csv),
+      ])
+    }
+    None -> {
+      client
+      |> rest.new_request(http.Post, path)
+      |> request.set_body(json |> json.to_string |> bit_array.from_string)
+    }
+  }
 
   use response <- result.try(
-    client
-    |> rest.new_request(http.Post, "/channels/" <> channel_id <> "/invites")
+    request
     |> rest.with_reason(reason)
-    |> request.set_body(json |> json.to_string)
-    |> rest.execute,
+    |> rest.execute_bytes,
   )
 
   response.body
@@ -398,5 +459,5 @@ pub fn delete(
 }
 
 pub fn new_create() -> Create {
-  Create(None, None, None, None, None, None)
+  Create(None, None, False, False, None, None, None)
 }

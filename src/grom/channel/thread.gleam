@@ -259,7 +259,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
 
   let auto_archive_duration = case modify.auto_archive_duration {
     Some(duration) -> [
-      #("auto_archive_duration", time_duration.to_int_seconds_encode(duration)),
+      #("auto_archive_duration", time_duration.to_int_seconds_json(duration)),
     ]
     None -> []
   }
@@ -278,7 +278,7 @@ pub fn modify_to_json(modify: Modify) -> Json {
     modify.rate_limit_per_user
     |> modification.to_json(
       "rate_limit_per_user",
-      time_duration.to_int_seconds_encode,
+      time_duration.to_int_seconds_json,
     )
 
   let flags =
@@ -313,14 +313,14 @@ pub fn start_from_message_to_json(start_from_message: StartFromMessage) -> Json 
 
   let auto_archive_duration = case start_from_message.auto_archive_duration {
     Some(duration) -> [
-      #("auto_archive_duration", time_duration.to_int_seconds_encode(duration)),
+      #("auto_archive_duration", time_duration.to_int_seconds_json(duration)),
     ]
     None -> []
   }
 
   let rate_limit_per_user = case start_from_message.rate_limit_per_user {
     Some(limit) -> [
-      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+      #("rate_limit_per_user", time_duration.to_int_seconds_json(limit)),
     ]
     None -> []
   }
@@ -338,7 +338,7 @@ pub fn start_without_message_to_json(
 
   let auto_archive_duration = case start_without_message.auto_archive_duration {
     Some(duration) -> [
-      #("auto_archive_duration", time_duration.to_int_seconds_encode(duration)),
+      #("auto_archive_duration", time_duration.to_int_seconds_json(duration)),
     ]
     None -> []
   }
@@ -355,7 +355,7 @@ pub fn start_without_message_to_json(
 
   let rate_limit_per_user = case start_without_message.rate_limit_per_user {
     Some(limit) -> [
-      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+      #("rate_limit_per_user", time_duration.to_int_seconds_json(limit)),
     ]
     None -> []
   }

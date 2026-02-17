@@ -1085,14 +1085,14 @@ pub fn start_thread_in_forum_or_media_to_json(
 
   let auto_archive_duration = case start_thread.auto_archive_duration {
     Some(duration) -> [
-      #("auto_archive_duration", time_duration.to_int_seconds_encode(duration)),
+      #("auto_archive_duration", time_duration.to_int_seconds_json(duration)),
     ]
     None -> []
   }
 
   let rate_limit_per_user = case start_thread.rate_limit_per_user {
     Some(limit) -> [
-      #("rate_limit_per_user", time_duration.to_int_seconds_encode(limit)),
+      #("rate_limit_per_user", time_duration.to_int_seconds_json(limit)),
     ]
     None -> []
   }

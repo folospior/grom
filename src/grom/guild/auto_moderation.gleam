@@ -356,7 +356,7 @@ pub fn action_to_json(action: Action) -> Json {
           json.object([
             #(
               "duration_seconds",
-              time_duration.to_int_seconds_encode(action.duration),
+              time_duration.to_int_seconds_json(action.duration),
             ),
           ]),
         ),
