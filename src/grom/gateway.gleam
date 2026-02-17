@@ -16,7 +16,7 @@ import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import grom
 import grom/activity.{type Activity}
-import grom/application.{type Application}
+import grom/application
 import grom/channel.{type Channel}
 import grom/channel/thread.{type Thread}
 import grom/command
@@ -44,7 +44,7 @@ import grom/soundboard
 import grom/stage_instance.{type StageInstance}
 import grom/sticker.{type Sticker}
 import grom/subscription.{type Subscription}
-import grom/user.{type User}
+import grom/user.{type User, User}
 import grom/voice
 import operating_system
 import stratus
@@ -522,8 +522,6 @@ pub type InviteCreatedMessage {
     max_age: Duration,
     max_uses: Int,
     target_type: Option(invite.TargetType),
-    target_user: Option(User),
-    target_application: Option(Application),
     is_temporary: Bool,
     uses: Int,
     expires_at: Option(Timestamp),
@@ -1763,18 +1761,48 @@ pub fn invite_created_message_decoder() -> decode.Decoder(InviteCreatedMessage) 
   use target_type <- decode.optional_field(
     "target_type",
     None,
-    decode.optional(invite.target_type_decoder()),
+    decode.optional(decode.int),
   )
-  use target_user <- decode.optional_field(
-    "target_user",
-    None,
-    decode.optional(user.decoder()),
-  )
-  use target_application <- decode.optional_field(
-    "target_application",
-    None,
-    decode.optional(application.decoder()),
-  )
+
+  use target_type <- decode.then(case target_type {
+    Some(1) -> {
+      use streaming_user <- decode.field("target_user", user.decoder())
+      decode.success(Some(invite.ForStream(streaming_user:)))
+    }
+    Some(2) -> {
+      use application <- decode.field(
+        "target_application",
+        application.decoder(),
+      )
+      decode.success(Some(invite.ForEmbeddedApplication(application:)))
+    }
+    Some(_) ->
+      decode.failure(
+        Some(
+          invite.ForStream(User(
+            "",
+            "",
+            "",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+          )),
+        ),
+        "TargetType",
+      )
+    None -> decode.success(None)
+  })
   use is_temporary <- decode.field("temporary", decode.bool)
   use uses <- decode.field("uses", decode.int)
   use expires_at <- decode.field(
@@ -1790,8 +1818,6 @@ pub fn invite_created_message_decoder() -> decode.Decoder(InviteCreatedMessage) 
     max_age:,
     max_uses:,
     target_type:,
-    target_user:,
-    target_application:,
     is_temporary:,
     uses:,
     expires_at:,
