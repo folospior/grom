@@ -4,11 +4,7 @@ description = "A Gleamy library for the Discord API 🌟"
 licenses = ["MIT"]
 repository = { type = "gitlab", user = "grom-gleam", repo = "grom" }
 internal_modules = [
-  "grom/internal/*",
-  "grom/gateway/connection_pid",
-  "grom/gateway/heartbeat",
-  "grom/gateway/sequence",
-  "grom/gateway/resuming"
+  "grom/internal/*"
 ]
 
 [documentation]
