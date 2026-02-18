@@ -2423,7 +2423,7 @@ pub fn start(
   let supervisor = static_supervisor.new(static_supervisor.OneForOne)
 
   let shard_ids =
-    int.range(from: 0, to: shard_count - 1, with: [], run: list.prepend)
+    int.range(from: 0, to: shard_count, with: [], run: list.prepend)
     |> list.reverse
 
   let shards =
