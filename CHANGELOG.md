@@ -1,3 +1,7 @@
+# v5.1.0 (18/02/2026)
+* Fix an off-by-one bug during the creation of shards (Filip Hoffmann)
+* Add gateway.get_shard_for_guild function to public API (Filip Hoffmann)
+
 # v5.0.0 (17/02/2026)
 * Remove deprecated use of `list.range` function (Filip Hoffmann)
 * Add Radio Group component (Filip Hoffmann)
