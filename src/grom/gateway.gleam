@@ -2486,7 +2486,15 @@ pub fn start(
   |> actor.start
 }
 
-fn get_shard_for_guild(id: Int, shard_count: Int) -> Int {
+/// Returns the ID of the shard that will handle an event from a specified guild.
+/// Some things to mind:
+/// * You can get the shard count from `gateway.Data` (for the recommended amount of shards), or it could be a number you specified when you created the gateway.
+/// * Events which do not have any guild (DMs, presence updates, etc.) will always be handled by shard 0.
+/// * The process of distributing events to shards is automated by grom. You can, however, use this function for a health check command.
+pub fn get_shard_for_guild(
+  guild_id id: Int,
+  shard_count shard_count: Int,
+) -> Int {
   { id |> int.bitwise_shift_right(22) } % shard_count
 }
 
