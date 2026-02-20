@@ -2833,11 +2833,6 @@ fn resume(connection_state: Connection, resuming_info: ResumingInfo) -> Nil {
     }
 
   process.send(connection_state.manager, UpdateWebsocket(to: websocket.data))
-  process.send(
-    connection_state.manager,
-    SendUserMessage(StartSendResume(resuming_info)),
-  )
-  process.send(resuming_info.heartbeat_manager, ResetHeartbeatCount)
 }
 
 fn reconnect(connection_state: Connection) -> Nil {
@@ -3392,19 +3387,39 @@ fn on_hello_event(
     )
 
   case heartbeat_start_result {
-    Ok(heartbeat_manager) -> {
-      let state =
-        Welcomed(
-          gateway_url: connection_state.gateway_url,
-          identify: connection_state.identify,
-          subject: connection_state.subject,
-          manager: connection_state.manager,
-          heartbeat_manager: heartbeat_manager.data,
-          sequence: None,
-        )
-      send_identify(state)
-      stratus.continue(state)
-    }
+    Ok(heartbeat_manager) ->
+      case connection_state {
+        Identified(heartbeat_manager: old_heartbeat_manager, ..) -> {
+          // Resuming: stop the old heartbeat manager and send RESUME instead of IDENTIFY
+          process.send(old_heartbeat_manager, StopHeartbeats)
+          let state =
+            Identified(..connection_state, heartbeat_manager: heartbeat_manager.data)
+          process.send(
+            state.manager,
+            SendUserMessage(StartSendResume(ResumingInfo(
+              heartbeat_manager: state.heartbeat_manager,
+              sequence: state.sequence,
+              resume_gateway_url: state.resume_gateway_url,
+              session_id: state.session_id,
+            ))),
+          )
+          stratus.continue(state)
+        }
+        _ -> {
+          // Fresh connection: send IDENTIFY
+          let state =
+            Welcomed(
+              gateway_url: connection_state.gateway_url,
+              identify: connection_state.identify,
+              subject: connection_state.subject,
+              manager: connection_state.manager,
+              heartbeat_manager: heartbeat_manager.data,
+              sequence: None,
+            )
+          send_identify(state)
+          stratus.continue(state)
+        }
+      }
     Error(err) -> send_error(err, connection_state)
   }
 }
