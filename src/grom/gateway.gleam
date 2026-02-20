@@ -2735,15 +2735,16 @@ fn try_reconnect(
   reason: stratus.CloseReason,
 ) -> Nil {
   let can_reconnect = case reason {
-    stratus.NotProvided -> True
     stratus.Custom(custom_reason) -> {
       let code = stratus.get_custom_code(custom_reason)
-      let allowed_codes = [4000, 4001, 4002, 4003, 4005, 4007, 4008, 4009]
+      // 4004: Authentication failed, 4010: Invalid shard,
+      // 4011: Sharding required, 4012: Invalid API version,
+      // 4013: Invalid intent(s), 4014: Disallowed intent(s)
+      let disallowed_codes = [4004, 4010, 4011, 4012, 4013, 4014]
 
-      allowed_codes
-      |> list.contains(code)
+      !list.contains(disallowed_codes, code)
     }
-    _ -> False
+    _ -> True
   }
 
   case can_reconnect, connection_state {
@@ -2849,9 +2850,14 @@ fn reconnect(connection_state: Connection) -> Nil {
 
   // yes, i know this was done before in start
   // cry about it or make a PR lol, it's too late for me to do ts
+  let request_url =
+    connection_state.gateway_url
+    |> string.replace(each: "wss://", with: "https://")
+    |> string.append(suffix: "?v=10&encoding=json")
+
   let request_result =
-    request.to(connection_state.gateway_url)
-    |> result.replace_error(grom.InvalidGatewayUrl(connection_state.gateway_url))
+    request.to(request_url)
+    |> result.replace_error(grom.InvalidGatewayUrl(request_url))
 
   use request <-
     fn(next) {
