@@ -1,3 +1,6 @@
+# v5.1.1 (20/02/2026)
+* Fix bugs related to reconnects failing (Copilot/Filip Hoffmann)
+
 # v5.1.0 (18/02/2026)
 * Fix an off-by-one bug during the creation of shards (Filip Hoffmann)
 * Add gateway.get_shard_for_guild function to public API (Filip Hoffmann)
