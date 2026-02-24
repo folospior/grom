@@ -1,13 +1,37 @@
+import gleam/bit_array
+import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
+import gleam/http
+import gleam/http/request.{type Request}
+import gleam/http/response.{type Response}
+import gleam/httpc
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
+import gleam/time/timestamp.{type Timestamp}
+import status_code
+
+const version: String = "v6.0.0"
 
 /// A snowflake is another name for an ID.
 /// It is possible to retrieve an object's creation date from its snowflake.
 pub opaque type Snowflake(a) {
   Snowflake(id: Int)
+}
+
+/// An error that is returned if something goes wrong using REST (HTTP) API calls.
+/// Examples include:
+/// * No internet connection -> CouldNotReceiveResponse
+/// * A Discord internal server error -> ReceivedUnsuccessfulStatusCode
+/// * A bad request (e.g. message content too long) -> ReceivedErrorResponse
+/// * A response decoding failure due to a breaking change with the Discord API -> CouldNotDecodeResponse
+pub type RestError(body) {
+  CouldNotReceiveResponse(httpc.HttpError)
+  ReceivedUnsuccessfulStatusCode(Response(body))
+  ReceivedErrorResponse(ErrorResponse)
+  CouldNotDecodeResponse(json.DecodeError)
 }
 
 /// An image hash is used to download images from Discord.
@@ -395,4 +419,424 @@ fn user_nameplate_palette_decoder() -> Decoder(UserNameplatePalette) {
     "white" -> decode.success(WhiteUserNameplate)
     _ -> decode.failure(CrimsonUserNameplate, "UserNameplatePalette")
   }
+}
+
+/// Used to get the default user avatar.
+/// If it returns an error - you got lucky - the user still has a discriminator and it somehow isn't an integer.
+pub fn get_user_index(of user: User) -> Result(Int, Nil) {
+  case user.discriminator {
+    "0" -> {
+      let id = user.id |> snowflake_to_int
+      Ok(int.bitwise_shift_right(id, 22) % 6)
+    }
+    _ -> {
+      use discriminator <- result.map(int.parse(user.discriminator))
+      discriminator % 5
+    }
+  }
+}
+
+const discord_api_url: String = "discord.com"
+
+const discord_api_path: String = "api/v10"
+
+fn new_api_request(
+  token token: String,
+  to path: String,
+  method method: http.Method,
+) -> Request(String) {
+  request.new()
+  |> request.set_scheme(http.Https)
+  |> request.set_host(discord_api_url)
+  |> request.set_path(discord_api_path <> path)
+  |> request.set_method(method)
+  |> request.prepend_header("authorization", "Bot " <> token)
+  |> request.prepend_header(
+    "user-agent",
+    "DiscordBot (https://github.com/folospior/grom, " <> version <> ")",
+  )
+  |> request.prepend_header("content-type", "application/json")
+}
+
+fn send_request(
+  request: Request(String),
+  decode_with decoder: Decoder(a),
+) -> Result(a, RestError(String)) {
+  request
+  |> httpc.send
+  // If httpc.send failed, put the error into this
+  |> result.map_error(CouldNotReceiveResponse)
+  // If httpc.send succeeded, check if the response is an error response.
+  // If it is - return an Error with the ErrorResponse inside.
+  |> result.try(parse_error_response)
+  // If the response isn't errorneous - check if the response has a successful status code.
+  // If it doesn't - return an Error with the Response object inside
+  |> result.try(ensure_status_code_success)
+  // If all of the checks above succeeded - parse the response body based on the provided decoder.
+  // If parsing fails - return an Error with the DecodeError inside.
+  |> result.try(fn(response) {
+    response.body
+    |> json.parse(using: decoder)
+    |> result.map_error(CouldNotDecodeResponse)
+  })
+}
+
+fn request_with_reason(
+  request: Request(a),
+  reason: Option(String),
+) -> Request(a) {
+  case reason {
+    Some(reason) ->
+      request
+      |> request.prepend_header("x-audit-log-reason", reason)
+    None -> request
+  }
+}
+
+pub type ErrorResponse {
+  ErrorResponse(
+    /// See the list of error codes: [link](https://docs.discord.com/developers/topics/opcodes-and-status-codes#json)
+    code: Int,
+    /// User-friendly message briefly explaining what error happened.
+    message: String,
+    /// This is a dynamic object that is best not parsed. I recommend just printing it if needed.
+    /// It contains detailed information regarding what error happened.
+    /// It would be nearly impossible to properly parse it. It is also sometimes absent from the response.
+    errors: Option(Dynamic),
+  )
+}
+
+fn error_response_decoder() -> Decoder(ErrorResponse) {
+  use code <- decode.field("code", decode.int)
+  use message <- decode.field("message", decode.string)
+  use errors <- decode.optional_field(
+    "errors",
+    None,
+    decode.optional(decode.dynamic),
+  )
+  decode.success(ErrorResponse(code:, message:, errors:))
+}
+
+fn ensure_status_code_success(
+  response: Response(body),
+) -> Result(Response(body), RestError(body)) {
+  case status_code.is_successful(response.status) {
+    True -> Ok(response)
+    False -> Error(ReceivedUnsuccessfulStatusCode(response))
+  }
+}
+
+fn parse_error_response(
+  response: Response(String),
+) -> Result(Response(String), RestError(String)) {
+  let result =
+    response.body
+    |> json.parse(using: error_response_decoder())
+
+  case result {
+    Ok(error) -> Error(ReceivedErrorResponse(error))
+    Error(_) -> Ok(response)
+  }
+}
+
+pub fn get_current_user(token token: String) -> Result(User, RestError(String)) {
+  new_api_request(token:, to: "/users/@me", method: http.Get)
+  |> send_request(decode_with: user_decoder())
+}
+
+pub fn get_user(
+  token token: String,
+  id id: Snowflake(User),
+) -> Result(User, RestError(String)) {
+  new_api_request(
+    token:,
+    to: "/users/" <> snowflake_to_string(id),
+    method: http.Get,
+  )
+  |> send_request(decode_with: user_decoder())
+}
+
+/// This type is used to diffrentiate between the ways of modifying an object.
+/// Some parts of an object can be changed to a different value, but not deleted - for this, grom uses the Option type.
+/// Other parts can be changed to a different value or deleted - for this, grom uses the Modification type.
+/// 
+/// The default behavior of modify functions is to not modify anything - for options: `None`, for modifications: `Skip`
+pub type Modification(a) {
+  /// Will modify the value to the new, provided value
+  Modify(a)
+  /// Will set the value to `null`, deleting it
+  Delete
+  /// Will not modify the value
+  Skip
+}
+
+/// Used for uploading images to Discord.
+/// You'll encounter this type in modify and create functions.
+/// Use [image_data_from_bit_array](#image_data_from_bit_array) to create this.
+pub opaque type ImageData {
+  ImageData(data: String)
+}
+
+pub type ImageDataContentType {
+  JpegImageData
+  PngImageData
+  GifImageData
+}
+
+pub fn image_data_from_bit_array(
+  image data: BitArray,
+  content_type content_type: ImageDataContentType,
+) -> ImageData {
+  let mime = case content_type {
+    JpegImageData -> "image/jpeg"
+    PngImageData -> "image/png"
+    GifImageData -> "image/gif"
+  }
+
+  let base64 = bit_array.base64_encode(data, False)
+
+  ImageData("data:" <> mime <> ";base64," <> base64)
+}
+
+fn image_data_to_json(image_data: ImageData) -> Json {
+  image_data.data
+  |> json.string
+}
+
+pub type ModifyCurrentUser {
+  ModifyCurrentUser(
+    /// May cause the discriminator to randomize if changed (mostly applies to bots).
+    username: Option(String),
+    avatar: Modification(ImageData),
+    banner: Modification(ImageData),
+  )
+}
+
+pub fn modify_current_user(
+  token token: String,
+  using modify: ModifyCurrentUser,
+) -> Result(User, RestError(String)) {
+  let body = modify |> modify_current_user_to_json |> json.to_string
+
+  new_api_request(token:, to: "/users/@me", method: http.Patch)
+  |> request.set_body(body)
+  |> send_request(decode_with: user_decoder())
+}
+
+pub fn new_modify_current_user() -> ModifyCurrentUser {
+  ModifyCurrentUser(None, Skip, Skip)
+}
+
+pub fn modify_current_user_username(
+  modify: ModifyCurrentUser,
+  new username: String,
+) -> ModifyCurrentUser {
+  ModifyCurrentUser(..modify, username: Some(username))
+}
+
+pub fn modify_current_user_avatar(
+  modify: ModifyCurrentUser,
+  new avatar: Modification(ImageData),
+) -> ModifyCurrentUser {
+  ModifyCurrentUser(..modify, avatar:)
+}
+
+pub fn modify_current_user_banner(
+  modify: ModifyCurrentUser,
+  new banner: Modification(ImageData),
+) -> ModifyCurrentUser {
+  ModifyCurrentUser(..modify, banner:)
+}
+
+fn modify_current_user_to_json(modify: ModifyCurrentUser) -> Json {
+  let username = case modify.username {
+    Some(new) -> [#("username", json.string(new))]
+    None -> []
+  }
+
+  let avatar = modification_to_json(modify.avatar, "avatar", image_data_to_json)
+
+  let banner = modification_to_json(modify.banner, "banner", image_data_to_json)
+
+  [username, avatar, banner]
+  |> list.flatten
+  |> json.object
+}
+
+fn modification_to_json(
+  modification: Modification(a),
+  key: String,
+  success_encoder: fn(a) -> Json,
+) -> List(#(String, Json)) {
+  case modification {
+    Modify(value) -> [#(key, success_encoder(value))]
+    Delete -> [#(key, json.null())]
+    Skip -> []
+  }
+}
+
+// TODO: GET RID OF ME! USE ACTUAL ROLES
+pub type Role
+
+// MESSAGE_CREATE && MESSAGE_UPDATE: DO NOT USE THIS TYPE
+// CREATE A NEW TYPE FOR THESE EVENTS: THEY WILL NOT HAVE THE USER FIELD
+// 
+// VOICE_STATE_UPDATE: DO NOT USE THIS TYPE
+// CREATE A NEW TYPE FOR THIS EVENT: IT WILL NOT HAVE THE JOINED_AT FIELD IF THE MEMBER WAS INVITED AS A GUEST
+//
+// INTERACTIONS: DO NOT USE THIS TYPE
+// CREATE A NEW TYPE FOR INTERACTIONS: IT WILL HAVE THE PERMISSIONS FIELD
+pub type GuildMember {
+  GuildMember(
+    /// Corresponding user object.
+    user: User,
+    /// Guild-specific nickname.
+    /// Is `None` when the member doesn't have a guild-specific nickname. 
+    nick: Option(String),
+    /// Guild-specific avatar hash.
+    /// Is `None` if the member chose not to use a guild-specific avatar.
+    avatar_hash: Option(ImageHash),
+    /// Guild-specific banner hash.
+    /// Is `None` if the member chose not to use a guild-specific banner.
+    banner_hash: Option(ImageHash),
+    /// List of the member's roles in this guild.
+    role_ids: List(Snowflake(Role)),
+    /// When the member joined the guild.
+    joined_at: Timestamp,
+    /// Since when the member is boosting the guild.
+    /// Is `None` if the member chose not to boost the guild.
+    boosting_since: Option(Timestamp),
+    /// Whether the member is deafened in voice channels for this guild.
+    is_deafened: Bool,
+    /// Whether the member is muted in voice channels for this guild.
+    is_muted: Bool,
+    flags: List(GuildMemberFlag),
+    /// Whether the member has not yet passed the membership screening requirements.
+    is_pending: Bool,
+    /// When the member's timeout will expire, returning their ability to communicate in the guild.
+    /// IMPORTANT: the member is not timed out if this field is `None` **or a time in the past**.
+    communication_disabled_until: Option(Timestamp),
+    /// Guild-specific avatar decoration.
+    /// Is `None` if the member chose not to use guild-specific avatar decorations.
+    avatar_decoration: Option(UserAvatarDecoration),
+  )
+}
+
+fn rfc3339_decoder() -> Decoder(Timestamp) {
+  use rfc3339 <- decode.then(decode.string)
+  case timestamp.parse_rfc3339(rfc3339) {
+    Ok(ts) -> decode.success(ts)
+    Error(_) -> decode.failure(timestamp.from_unix_seconds(0), "Timestamp")
+  }
+}
+
+fn guild_member_decoder() -> Decoder(GuildMember) {
+  use user <- decode.field("user", user_decoder())
+  use nick <- decode.field("nick", decode.optional(decode.string))
+  use avatar_hash <- decode.field(
+    "avatar",
+    decode.optional(image_hash_decoder()),
+  )
+  use banner_hash <- decode.field(
+    "banner",
+    decode.optional(image_hash_decoder()),
+  )
+  use role_ids <- decode.field("roles", decode.list(snowflake_decoder()))
+  use joined_at <- decode.field("joined_at", rfc3339_decoder())
+  use boosting_since <- decode.optional_field(
+    "premium_since",
+    None,
+    decode.optional(rfc3339_decoder()),
+  )
+  use is_deafened <- decode.field("deaf", decode.bool)
+  use is_muted <- decode.field("mute", decode.bool)
+  use flags <- decode.field("flags", flags_decoder(bits_guild_member_flags()))
+  use is_pending <- decode.optional_field("pending", False, decode.bool)
+  use communication_disabled_until <- decode.optional_field(
+    "communication_disabled_until",
+    None,
+    decode.optional(rfc3339_decoder()),
+  )
+  use avatar_decoration <- decode.optional_field(
+    "avatar_decoration_data",
+    None,
+    decode.optional(user_avatar_decoration_decoder()),
+  )
+  decode.success(GuildMember(
+    user:,
+    nick:,
+    avatar_hash:,
+    banner_hash:,
+    role_ids:,
+    joined_at:,
+    boosting_since:,
+    is_deafened:,
+    is_muted:,
+    flags:,
+    is_pending:,
+    communication_disabled_until:,
+    avatar_decoration:,
+  ))
+}
+
+pub type GuildMemberFlag {
+  /// Member left and rejoined the guild
+  GuildMemberRejoined
+  /// Member completed onboarding
+  GuildMemberCompletedOnboarding
+  /// Member is exempt from guild verification requirements
+  GuildMemberBypassesVerification
+  /// Member has started onboarding
+  GuildMemberStartedOnboarding
+  /// Member is a guest and can only access the voice channel they were invited to
+  GuildMemberIsGuest
+  /// Member has started Server Guide new member actions
+  GuildMemberStartedHomeActions
+  /// Member has completed Server Guide new member actions
+  GuildMemberCompletedHomeActions
+  /// Member's username, display name or nickname is blocked by AutoMod
+  GuildMemberUsernameQuarantinedByAutomod
+  /// Member has dismissed the DM settings upsell
+  GuildMemberAcknowledgedDmSettingsUpsell
+  /// Member's guild tag is blocked by AutoMod
+  GuildMemberGuildTagQuarantinedByAutomod
+}
+
+fn bits_guild_member_flags() -> List(#(Int, GuildMemberFlag)) {
+  [
+    #(int.bitwise_shift_left(1, 0), GuildMemberRejoined),
+    #(int.bitwise_shift_left(1, 1), GuildMemberCompletedOnboarding),
+    #(int.bitwise_shift_left(1, 2), GuildMemberBypassesVerification),
+    #(int.bitwise_shift_left(1, 3), GuildMemberStartedOnboarding),
+    #(int.bitwise_shift_left(1, 4), GuildMemberIsGuest),
+    #(int.bitwise_shift_left(1, 5), GuildMemberStartedHomeActions),
+    #(int.bitwise_shift_left(1, 6), GuildMemberCompletedHomeActions),
+    #(int.bitwise_shift_left(1, 7), GuildMemberUsernameQuarantinedByAutomod),
+    #(int.bitwise_shift_left(1, 9), GuildMemberAcknowledgedDmSettingsUpsell),
+    #(int.bitwise_shift_left(1, 10), GuildMemberGuildTagQuarantinedByAutomod),
+  ]
+}
+
+pub fn get_current_user_as_guild_member(
+  token token: String,
+  for guild_id: Snowflake(Guild),
+) -> Result(GuildMember, RestError(String)) {
+  new_api_request(
+    token:,
+    to: "/users/@me/guilds/" <> snowflake_to_string(guild_id) <> "/member",
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_member_decoder())
+}
+
+pub fn leave_guild(
+  token token: String,
+  id guild_id: Snowflake(Guild),
+) -> Result(Nil, RestError(String)) {
+  new_api_request(
+    token:,
+    to: "/users/@me/guilds/" <> snowflake_to_string(guild_id),
+    method: http.Delete,
+  )
+  |> send_request(decode_with: decode.success(Nil))
 }
