@@ -217,6 +217,7 @@ fn permissions_to_json(permissions: List(Permission)) -> Json {
   |> flags_to_int(bits_permissions())
   |> int.to_string
   |> json.string
+  json.int(permissions |> flags_to_int(bits_permissions()))
 }
 
 pub type User {
@@ -248,6 +249,9 @@ pub type User {
     /// The user's chosen locale.
     /// Discord hasn't disclosed when this field could be `None`. 
     locale: Option(Locale),
+    /// The user's banner accent color in RGB hexadecimal format.
+    /// Is `None` when the user uses a default color based on avatar.
+    accent_color: Option(Int),
     flags: List(UserFlag),
     /// Is `None` if the user's premium type isn't known.
     premium_type: Option(UserPremiumType),
@@ -298,6 +302,11 @@ fn user_decoder() -> Decoder(User) {
     None,
     decode.optional(hex_colour_decoder()),
   )
+  use accent_color <- decode.optional_field(
+    "accent_color",
+    None,
+    decode.optional(decode.int),
+  )
   use locale <- decode.optional_field(
     "locale",
     None,
@@ -344,6 +353,7 @@ fn user_decoder() -> Decoder(User) {
     has_mfa_enabled:,
     banner_hash:,
     accent_colour:,
+    accent_color:,
     locale:,
     flags:,
     premium_type:,
