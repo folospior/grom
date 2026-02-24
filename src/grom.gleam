@@ -27,9 +27,9 @@ pub opaque type Snowflake(a) {
 /// * A Discord internal server error -> ReceivedUnsuccessfulStatusCode
 /// * A bad request (e.g. message content too long) -> ReceivedErrorResponse
 /// * A response decoding failure due to a breaking change with the Discord API -> CouldNotDecodeResponse
-pub type RestError(body) {
+pub type RestError {
   CouldNotReceiveResponse(httpc.HttpError)
-  ReceivedUnsuccessfulStatusCode(Response(body))
+  ReceivedUnsuccessfulStatusCode(Response(String))
   ReceivedErrorResponse(ErrorResponse)
   CouldNotDecodeResponse(json.DecodeError)
 }
@@ -461,7 +461,7 @@ fn new_api_request(
 fn send_request(
   request: Request(String),
   decode_with decoder: Decoder(a),
-) -> Result(a, RestError(String)) {
+) -> Result(a, RestError) {
   request
   |> httpc.send
   // If httpc.send failed, put the error into this
@@ -518,8 +518,8 @@ fn error_response_decoder() -> Decoder(ErrorResponse) {
 }
 
 fn ensure_status_code_success(
-  response: Response(body),
-) -> Result(Response(body), RestError(body)) {
+  response: Response(String),
+) -> Result(Response(String), RestError) {
   case status_code.is_successful(response.status) {
     True -> Ok(response)
     False -> Error(ReceivedUnsuccessfulStatusCode(response))
@@ -528,7 +528,7 @@ fn ensure_status_code_success(
 
 fn parse_error_response(
   response: Response(String),
-) -> Result(Response(String), RestError(String)) {
+) -> Result(Response(String), RestError) {
   let result =
     response.body
     |> json.parse(using: error_response_decoder())
@@ -539,7 +539,7 @@ fn parse_error_response(
   }
 }
 
-pub fn get_current_user(token token: String) -> Result(User, RestError(String)) {
+pub fn get_current_user(token token: String) -> Result(User, RestError) {
   new_api_request(token:, to: "/users/@me", method: http.Get)
   |> send_request(decode_with: user_decoder())
 }
@@ -547,7 +547,7 @@ pub fn get_current_user(token token: String) -> Result(User, RestError(String)) 
 pub fn get_user(
   token token: String,
   id id: Snowflake(User),
-) -> Result(User, RestError(String)) {
+) -> Result(User, RestError) {
   new_api_request(
     token:,
     to: "/users/" <> snowflake_to_string(id),
@@ -615,7 +615,7 @@ pub type ModifyCurrentUser {
 pub fn modify_current_user(
   token token: String,
   using modify: ModifyCurrentUser,
-) -> Result(User, RestError(String)) {
+) -> Result(User, RestError) {
   let body = modify |> modify_current_user_to_json |> json.to_string
 
   new_api_request(token:, to: "/users/@me", method: http.Patch)
@@ -820,7 +820,7 @@ fn bits_guild_member_flags() -> List(#(Int, GuildMemberFlag)) {
 pub fn get_current_user_as_guild_member(
   token token: String,
   for guild_id: Snowflake(Guild),
-) -> Result(GuildMember, RestError(String)) {
+) -> Result(GuildMember, RestError) {
   new_api_request(
     token:,
     to: "/users/@me/guilds/" <> snowflake_to_string(guild_id) <> "/member",
@@ -832,7 +832,7 @@ pub fn get_current_user_as_guild_member(
 pub fn leave_guild(
   token token: String,
   id guild_id: Snowflake(Guild),
-) -> Result(Nil, RestError(String)) {
+) -> Result(Nil, RestError) {
   new_api_request(
     token:,
     to: "/users/@me/guilds/" <> snowflake_to_string(guild_id),
