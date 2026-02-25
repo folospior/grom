@@ -10,7 +10,9 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
+import gleam_community/colour.{type Colour}
 import status_code
 
 const version: String = "v6.0.0"
@@ -73,6 +75,14 @@ fn snowflake_decoder() -> Decoder(Snowflake(a)) {
   }
 }
 
+/// Used for creating arbitary snowflakes.
+/// This should only be used for hardcoding values or retrieving IDs from a database.
+/// Don't use this function to change `Snowflake(a)` to a `Snowflake(b)`.
+///
+/// Example usage:
+/// ```
+/// let guild_id: Snowflake(Guild) = new_snowflake(768594524158427167)
+/// ```
 pub fn new_snowflake(from id: Int) -> Snowflake(a) {
   Snowflake(id)
 }
@@ -131,9 +141,9 @@ pub type User {
     has_mfa_enabled: Option(Bool),
     /// Is `None` when the user doesn't use a custom banner.
     banner_hash: Option(ImageHash),
-    /// The user's banner accent color in RGB hexadecimal format.
+    /// The user's banner accent colour in RGB hexadecimal format.
     /// Is `None` when the user uses a default color based on avatar.
-    accent_color: Option(Int),
+    accent_colour: Option(Colour),
     /// The user's chosen locale.
     /// Full list of locales: [link](https://docs.discord.com/developers/reference#locales)
     /// Discord hasn't disclosed when this field could be `None`. 
@@ -151,6 +161,15 @@ pub type User {
     /// Is `None` if the user never had a primary guild.
     primary_guild: Option(UserPrimaryGuild),
   )
+}
+
+fn hex_colour_decoder() -> Decoder(Colour) {
+  use hex <- decode.then(decode.int)
+
+  case colour.from_rgb_hex(hex) {
+    Ok(colour) -> decode.success(colour)
+    Error(_) -> decode.failure(colour.black, "Colour")
+  }
 }
 
 fn user_decoder() -> Decoder(User) {
@@ -174,10 +193,10 @@ fn user_decoder() -> Decoder(User) {
     None,
     decode.optional(image_hash_decoder()),
   )
-  use accent_color <- decode.optional_field(
+  use accent_colour <- decode.optional_field(
     "accent_color",
     None,
-    decode.optional(decode.int),
+    decode.optional(hex_colour_decoder()),
   )
   use locale <- decode.optional_field(
     "locale",
@@ -224,7 +243,7 @@ fn user_decoder() -> Decoder(User) {
     is_system:,
     has_mfa_enabled:,
     banner_hash:,
-    accent_color:,
+    accent_colour:,
     locale:,
     flags:,
     premium_type:,
@@ -285,9 +304,6 @@ pub type UserPrimaryGuild {
 
 // TODO: GET RID OF ME, ACTUALLY USE SKUs
 pub type Sku
-
-// TODO: GET RID OF ME, ACTUALLY USE GUILDS
-pub type Guild
 
 pub type UserAvatarDecoration {
   UserAvatarDecoration(hash: ImageHash, sku_id: Snowflake(Sku))
@@ -479,6 +495,21 @@ fn send_request(
     |> json.parse(using: decoder)
     |> result.map_error(CouldNotDecodeResponse)
   })
+}
+
+fn send_no_content_request(request: Request(String)) -> Result(Nil, RestError) {
+  request
+  |> httpc.send
+  // If httpc.send failed, put the error into this
+  |> result.map_error(CouldNotReceiveResponse)
+  // If httpc.send succeeded, check if the response is an error response.
+  // If it is - return an Error with the ErrorResponse inside.
+  |> result.try(parse_error_response)
+  // If the response isn't errorneous - check if the response has a successful status code.
+  // If it doesn't - return an Error with the Response object inside
+  |> result.try(ensure_status_code_success)
+  // If all the checks above succeeded, return Ok(Nil)
+  |> result.replace(Nil)
 }
 
 fn request_with_reason(
@@ -675,8 +706,159 @@ fn modification_to_json(
   }
 }
 
-// TODO: GET RID OF ME! USE ACTUAL ROLES
-pub type Role
+pub type Role {
+  Role(
+    id: Snowflake(Role),
+    name: String,
+    colours: RoleColours,
+    /// Whether the role is pinned in the guild user list.
+    is_hoisted: Bool,
+    /// Is `None` if the role doesn't have an icon.
+    icon_hash: Option(ImageHash),
+    /// Is `None` if the role doesn't have an associated emoji.
+    unicode_emoji: Option(String),
+    /// Position of this role in the hierarchy.
+    /// Roles with the same position are sorted by ID.
+    position: Int,
+    /// Permissions given to members with this role.
+    permissions: List(Permission),
+    /// Whether this role is managed by an integration.
+    /// Example: All bots added to a guild are given an integration-managed role.
+    is_integration_managed: Bool,
+    /// Whether this role is mentionable in text channels.
+    is_mentionable: Bool,
+    /// The ID of the bot user associated with this role.
+    /// Is `None` if the role isn't a bot's rle.
+    bot_id: Option(Snowflake(User)),
+    /// The ID of the integration associated with this role.
+    /// Is `None` if the role isn't an integration's role.
+    integration_id: Option(Snowflake(Integration)),
+    /// Whether this role is the role automatically given to the guild's boosters.
+    is_booster_role: Bool,
+    /// The ID of the subscription SKU for this role.
+    /// Is `None` if the role isn't a subscription-based role.
+    subscription_listing_id: Option(Snowflake(Sku)),
+    is_available_for_purchase: Bool,
+    /// Whether this role is linked to a Discord connection.
+    /// Learn more: [link](https://support.discord.com/hc/en-us/articles/10388356626711-Connections-Linked-Roles-Admins)
+    is_linked_role: Bool,
+    flags: List(RoleFlag),
+  )
+}
+
+pub type RoleFlag {
+  RoleCanBeSeletedInOnboardingPrompt
+}
+
+fn bits_role_flags() -> List(#(Int, RoleFlag)) {
+  [#(int.bitwise_shift_left(1, 0), RoleCanBeSeletedInOnboardingPrompt)]
+}
+
+// TODO: GET RID OF ME! USE ACTUAL INTEGRATIONS!
+pub type Integration
+
+pub type Permission {
+  AllowCreatingInstantInvites
+  AllowKickingMembers
+  AllowBanningMembers
+  /// Allows all permissions and bypasses channel permission overrides.
+  AdministratorPermission
+  /// Allows management and editing of channels
+  AllowManagingChannels
+  /// Allows management and editing of the guild
+  AllowManagingGuild
+  /// Allows adding new reactions to messages.
+  /// Does not change the ability to react with an existing reaction.
+  AllowAddingReactions
+  AllowViewingAuditLog
+  AllowPrioritySpeakingInVoiceChannels
+  AllowStreamingInVoiceChannels
+  /// Implicitly enabled by default.
+  AllowViewingChannels
+  /// Implicitly enabled by default.
+  AllowSendingMessages
+  /// Allows sending text-to-speech messages, read out loud by default to all readers.
+  AllowSendingTtsMessages
+  /// Allows deleting others' messages.
+  AllowManagingMessages
+  /// Automatically shows embeds of links sent by the permission's owner.
+  AutoEmbedLinksPermission
+  AllowAttachingFiles
+  AllowReadingMessageHistory
+  /// Allows mentioning `@everyone` - everyone in the guild and `@here` - every online person in the guild.
+  AllowMentioningEveryone
+  /// Allows using custom emojis from other servers.
+  AllowUsingExternalEmojis
+  AllowViewingGuildInsights
+  AllowConnectingToVoiceChannels
+  AllowSpeakingInVoiceChannels
+  AllowMutingMembersInVoiceChannels
+  AllowDeafeningMembersInVoiceChannels
+  AllowMovingMembersBetweenVoiceChannels
+  AllowUsingVoiceActivityDetection
+  AllowChangingOwnNickname
+  /// Allows modifying others' nicknames.
+  AllowManagingNicknames
+  /// Allows modifying others' roles.
+  AllowManagingRoles
+  AllowManagingWebhooks
+  /// Allows editing and deleting the guild's custom emojis, stickers and soundboard sounds.
+  AllowManagingGuildExpressions
+  /// Allows using slash/context-menu commands.
+  AllowUsingCommands
+  AllowRequestingToSpeakInStageChannels
+  /// Allows editing and deleting the guild's scheduled events.
+  AllowManagingEvents
+  /// Allows creating public and announcement threads.
+  AllowCreatingPublicThreads
+  AllowCreatingPrivateThreads
+  /// Allows using custom stickers from other guilds.
+  AllowUsingExternalStickers
+  AllowSendingMessagesInThreads
+  AllowUsingEmbeddedActivities
+  /// Allows timing-out other members.
+  AllowModeratingMembers
+  /// Allows viewing role subscription insights.
+  AllowViewingCreatorMonetizationAnalytics
+  AllowUsingSoundboard
+  /// Allows creating custom emojis, stickers and soundboard sounds.
+  /// Also allows editing and deleting the aforementioned expressions created by the permission's owner.
+  AllowCreatingGuildExpressions
+  /// Allows creating scheduled events.
+  /// Also allows editing and deleting events created by the permission's owner.
+  AllowCreatingEvents
+  /// Allows using soundboard sounds from other guilds.
+  AllowUsingExternalSoundboardSounds
+  AllowSendingVoiceMessages
+  AllowSendingPolls
+  /// Allows user-installed applications to send public responses.
+  /// 
+  /// When disabled, users will still be able to use their apps, but their responses will be ephemeral.
+  /// This only applies to apps that are not installed at the guild level.
+  AllowUsingExternalApplications
+  AllowPinningMessages
+  AllowBypassingSlowmode
+}
+
+pub type RoleColours {
+  RoleColours(
+    /// The primary colour of the role.
+    primary_colour: Colour,
+    /// The secondary colour of the role.
+    /// If present, this will make the role colour a gradient between the provided colours.
+    /// Can only be set to `Some(colour)` if the guild has the `GuildCanUseEnhancedRoleColours` feature.
+    secondary_colour: Option(Colour),
+    /// The tertiary colour of the role.
+    /// If present, this will turn the gradient into a holographic style.
+    /// Can only be set to `Some(colour)` if the guild has the `GuildCanUseEnhancedRoleColours` feature.
+    ///
+    /// Note: When sending `tertiary_colour`, the API enforces the role colour to be a holographic style with the values:
+    /// - `primary_colour = 0xA9C9FF`
+    /// - `secondary_colour = 0xFFBBEC`
+    /// - `tertiary_colour = 0xFFC3A0`
+    tertiary_colour: Option(Colour),
+  )
+}
 
 // MESSAGE_CREATE && MESSAGE_UPDATE: DO NOT USE THIS TYPE
 // CREATE A NEW TYPE FOR THESE EVENTS: THEY WILL NOT HAVE THE USER FIELD
@@ -838,5 +1020,300 @@ pub fn leave_guild(
     to: "/users/@me/guilds/" <> snowflake_to_string(guild_id),
     method: http.Delete,
   )
-  |> send_request(decode_with: decode.success(Nil))
+  |> send_no_content_request
+}
+
+// TODO: GET RID OF ME! USE ACTUAL CHANNELS
+pub type Channel
+
+pub type Guild {
+  Guild(
+    id: Snowflake(Guild),
+    name: String,
+    /// Image hash of the guild icon.
+    /// An icon is the picture shown in the server list.
+    /// Is `None` when the guild doesn't have an icon.
+    icon_hash: Option(ImageHash),
+    /// Image hash of the guild splash.
+    /// A splash is the picture shown when a user joins a guild, at the "Accept Invite" UI.
+    /// Is `None` when the guild doesn't have a splash. 
+    splash_hash: Option(ImageHash),
+    /// Image hash of the guild discovery splash.
+    /// A discovery splash is the picture shown when a user clicks on a guild in the "Server Discovery" UI.
+    /// Is `None` when the guild isn't discoverable or doesn't have a discovery splash.
+    discovery_splash_hash: Option(ImageHash),
+    owner_id: Snowflake(User),
+    /// The "AFK channel" is the channel to which inactive voice channel users are moved.
+    /// Is `None` when the guild doesn't have a configured AFK channel.
+    afk_channel_id: Option(Snowflake(Channel)),
+    /// The time of inactivity after a voice channel user is marked as AFK in this guild.
+    afk_timeout: Duration,
+    /// Whether the "server widget" is enabled.
+    /// The server widget is a feature allowing guild advertisements on websites.
+    is_widget_enabled: Bool,
+    /// The channel to which the widget will generate an invite to.
+    /// Is `None` if the widget was configured to not generate invites or is disabled.
+    widget_channel_id: Option(Snowflake(Channel)),
+    /// The verification level required for a guild member to be able to communicate in a guild.
+    required_verification_level: GuildMemberVerificationLevel,
+    /// The default setting regarding sending push notifications to members' devices.
+    /// Note that this can be overriden on a per-member basis.
+    default_message_notification_setting: GuildDefaultMessageNotificationSetting,
+    explicit_content_filter_setting: GuildExplicitContentFilterSetting,
+    roles: List(Role),
+    emojis: List(Emoji),
+    features: List(GuildFeature),
+    /// MFA = multi-factor authentication
+    required_mfa_level: GuildRequiredMfaLevel,
+    application_id: Option(String),
+    system_channel_id: Option(String),
+    system_channel_flags: List(SystemChannelFlag),
+    rules_channel_id: Option(String),
+    max_presences: Option(Int),
+    max_members: Option(Int),
+    vanity_url_code: Option(String),
+    description: Option(String),
+    banner_hash: Option(String),
+    premium_tier: PremiumTier,
+    premium_subscription_count: Option(Int),
+    preferred_locale: String,
+    public_updates_channel_id: Option(String),
+    max_video_channel_users: Option(Int),
+    max_stage_video_channel_users: Option(Int),
+    approximate_member_count: Option(Int),
+    approximate_presence_count: Option(Int),
+    welcome_screen: Option(WelcomeScreen),
+    nsfw_level: NsfwLevel,
+    stickers: Option(List(Sticker)),
+    is_premium_progress_bar_enabled: Bool,
+    safety_alerts_channel_id: Option(String),
+    incidents_data: Option(IncidentsData),
+  )
+}
+
+pub type GuildFeature {
+  GuildCanUseAnimatedBanner
+  GuildCanUseAnimatedIcon
+  /// Guild uses the [old permission configuration behavior](https://docs.discord.com/developers/change-log#upcoming-application-command-permission-changes).
+  GuildUsesOldPermissionConfigurationBehavior
+  /// Guild has set up auto-moderation rules.
+  /// This does not guarantee that the guild currently has auto-moderation rules set-up.
+  GuildCreatedAutoModerationRules
+  GuildCanUseBanner
+  /// Guild can use the welcome screen, Membership Screening, stage channels, and server discovery and receives community updates.
+  GuildIsCommunity
+  GuildUsesMonetization
+  GuildUsesRoleSubscriptionPromoPage
+  /// Guild has been set as a support server on the App Directory.
+  GuildIsDeveloperSupportServer
+  /// Guild can be discovered in the discovery tab.
+  GuildIsDiscoverable
+  /// Guild can be featured in the discovery tab.
+  GuildIsFeaturable
+  /// Guild has currently paused invites as an anti-raid measure.
+  GuildHasPausedInvites
+  GuildCanUseInviteSplash
+  GuildUsesMembershipScreening
+  GuildHasMoreSoundboardSoundSlots
+  GuildHasMoreStickerSlots
+  GuildCanCreateAnnouncementChannels
+  /// Guild is partnered with Discord.
+  GuildIsPartnered
+  GuildCanBePreviewed
+  GuildDisabledRaidAlerts
+  GuildCanUseRoleIcons
+  GuildHasPurchasableRoleSubscriptions
+  GuildUsesRoleSubscriptions
+  /// Guild has created soundboard sounds.
+  /// This does not guarantee that the guild currently has any soundboard sounds.
+  GuildCreatedSoundboardSounds
+  GuildUsesTicketedEvents
+  GuildCanUseVanityUrl
+  /// Guild is verified by Discord.
+  GuildIsVerified
+  GuildCanUse384KbpsVoiceBitrate
+  GuildUsesWelcomeScreen
+  GuildCanUseGuestInvites
+  GuildCanUseGuildTags
+  GuildCanUseEnhancedRoleColours
+}
+
+// i love this function - filip
+fn guild_features_decoder() -> Decoder(List(GuildFeature)) {
+  use strings <- decode.then(decode.list(decode.string))
+
+  strings
+  |> list.map(fn(string) {
+    case string {
+      "ANIMATED_BANNER" -> [GuildCanUseAnimatedBanner]
+      "ANIMATED_ICON" -> [GuildCanUseAnimatedIcon]
+      "APPLICATION_COMMAND_PERMISSIONS_V2" -> [
+        GuildUsesOldPermissionConfigurationBehavior,
+      ]
+      "AUTO_MODERATION" -> [GuildCreatedAutoModerationRules]
+      "BANNER" -> [GuildCanUseBanner]
+      "COMMUNITY" -> [GuildIsCommunity]
+      "CREATOR_MONETIZABLE_PROVISIONAL" -> [GuildUsesMonetization]
+      "CREATOR_STORE_PAGE" -> [GuildUsesRoleSubscriptionPromoPage]
+      "DEVELOPER_SUPPORT_SERVER" -> [GuildIsDeveloperSupportServer]
+      "DISCOVERABLE" -> [GuildIsDiscoverable]
+      "FEATURABLE" -> [GuildIsFeaturable]
+      "INVITES_DISABLED" -> [GuildHasPausedInvites]
+      "INVITE_SPLASH" -> [GuildCanUseInviteSplash]
+      "MEMBER_VERIFICATION_GATE_ENABLED" -> [GuildUsesMembershipScreening]
+      "MORE_SOUNDBOARD" -> [GuildHasMoreSoundboardSoundSlots]
+      "MORE_STICKERS" -> [GuildHasMoreStickerSlots]
+      "NEWS" -> [GuildCanCreateAnnouncementChannels]
+      "PARTNERED" -> [GuildIsPartnered]
+      "PREVIEW_ENABLED" -> [GuildCanBePreviewed]
+      "RAID_ALERTS_DISABLED" -> [GuildDisabledRaidAlerts]
+      "ROLE_ICONS" -> [GuildCanUseRoleIcons]
+      "ROLE_SUBSCRIPTIONS_AVAILABLE_FOR_PURCHASE" -> [
+        GuildHasPurchasableRoleSubscriptions,
+      ]
+      "ROLE_SUBSCRIPTIONS_ENABLED" -> [GuildUsesRoleSubscriptions]
+      "SOUNDBOARD" -> [GuildCreatedSoundboardSounds]
+      "TICKETED_EVENTS_ENABLED" -> [GuildUsesTicketedEvents]
+      "VANITY_URL" -> [GuildCanUseVanityUrl]
+      "VIP_REGIONS" -> [GuildCanUse384KbpsVoiceBitrate]
+      "WELCOME_SCREEN_ENABLED" -> [GuildUsesWelcomeScreen]
+      "GUESTS_ENABLED" -> [GuildCanUseGuestInvites]
+      "GUILD_TAGS" -> [GuildCanUseGuildTags]
+      "ENHANCED_ROLE_COLORS" -> [GuildCanUseEnhancedRoleColours]
+      _ -> []
+    }
+  })
+  |> list.flatten
+  |> decode.success
+}
+
+// REACTIONS: DO NOT USE THIS OBJECT, IT WILL NOT HAVE THE NAME FIELD
+pub type Emoji {
+  UnicodeEmoji(character: String)
+  CustomEmoji(CustomEmojiData)
+  ApplicationEmoji(ApplicationEmojiData)
+}
+
+pub type CustomEmojiData {
+  CustomEmojiData(
+    id: Snowflake(Emoji),
+    name: String,
+    /// Is `None` if the emoji is not restricted on a per-role basis.
+    allowed_roles_ids: Option(List(Snowflake(Role))),
+    /// Whether this emoji must be wrapped in colons.
+    requires_colons: Bool,
+    /// Whether this emoji is managed by an integration.
+    is_integration_managed: Bool,
+    is_animated: Bool,
+    /// May be `False` when a server loses boosts.
+    is_available: Bool,
+  )
+}
+
+pub type ApplicationEmojiData {
+  ApplicationEmojiData(
+    id: Snowflake(Emoji),
+    name: String,
+    creator: User,
+    /// Is `None` if the emoji is not restricted on a per-role basis.
+    allowed_roles_ids: Option(List(Snowflake(Role))),
+    /// Whether this emoji must be wrapped in colons.
+    requires_colons: Bool,
+    /// Whether this emoji is managed by an integration.
+    is_integration_managed: Bool,
+    is_animated: Bool,
+    is_available: Bool,
+  )
+}
+
+fn emoji_decoder() -> Decoder(Emoji) {
+  use id <- decode.field("id", decode.optional(snowflake_decoder()))
+  case id {
+    None -> {
+      use character <- decode.field("name", decode.string)
+      decode.success(UnicodeEmoji(character:))
+    }
+    Some(id) -> {
+      use name <- decode.field("name", decode.string)
+      use allowed_roles_ids <- decode.optional_field(
+        "roles",
+        None,
+        decode.optional(decode.list(of: snowflake_decoder())),
+      )
+      use creator <- decode.optional_field(
+        "user",
+        None,
+        decode.optional(user_decoder()),
+      )
+      use requires_colons <- decode.optional_field(
+        "require_colons",
+        True,
+        decode.bool,
+      )
+      use is_integration_managed <- decode.optional_field(
+        "managed",
+        False,
+        decode.bool,
+      )
+      use is_animated <- decode.optional_field("animated", False, decode.bool)
+      use is_available <- decode.optional_field("available", True, decode.bool)
+
+      case creator {
+        Some(creator) ->
+          decode.success(
+            ApplicationEmoji(ApplicationEmojiData(
+              id:,
+              name:,
+              creator:,
+              allowed_roles_ids:,
+              requires_colons:,
+              is_integration_managed:,
+              is_animated:,
+              is_available:,
+            )),
+          )
+        None ->
+          decode.success(
+            CustomEmoji(CustomEmojiData(
+              id:,
+              name:,
+              allowed_roles_ids:,
+              requires_colons:,
+              is_integration_managed:,
+              is_animated:,
+              is_available:,
+            )),
+          )
+      }
+    }
+  }
+}
+
+pub type GuildMemberVerificationLevel {
+  /// Access to the guild is unrestricted.
+  NoGuildMemberVerification
+  /// Access to the guild is granted to those who have verified their email with Discord.
+  LowGuildMemberVerification
+  /// Access to the guild is granted to those who have been registered on Discord for longer than 5 minutes.
+  MediumGuildMemberVerification
+  /// Access to the guild is granted to those who have been a member of the guild for longer than 10 minutes.
+  HighGuildMemberVerification
+  /// Access to the guild is granted to those who have verified their phone number with Discord.
+  VeryHighGuildMemberVerification
+}
+
+pub type GuildDefaultMessageNotificationSetting {
+  /// By default, notifications will be sent for all messages in the guild.
+  NotifyForAllMessages
+  /// By default, notifications will be sent only for messages in which the user was mentioned.
+  NotifyOnlyForMentions
+}
+
+pub type GuildExplicitContentFilterSetting {
+  /// Media will not be scanned for explicit content.
+  GuildExplicitContentFilterDisabled
+  /// Only media sent by members who do not have any roles will be scanned for explicit content.
+  GuildExplicitContentFilterForMembersWithoutRoles
+  /// Media sent by all members will be scanned for explicit content.
+  GuildExplicitContentFilterForAllMembers
 }
