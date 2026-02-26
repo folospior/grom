@@ -1065,16 +1065,26 @@ pub type Guild {
     features: List(GuildFeature),
     /// MFA = multi-factor authentication
     required_mfa_level: GuildRequiredMfaLevel,
-    application_id: Option(String),
-    system_channel_id: Option(String),
-    system_channel_flags: List(SystemChannelFlag),
-    rules_channel_id: Option(String),
+    /// Application ID of the guild creator if it is created by a bot.
+    application_id: Option(Snowflake(Application)),
+    /// The system channel is the channel where certain notifications, such as on-boost messages are sent.
+    /// Is `None` if the guild does not use system messages.
+    system_channel_id: Option(Snowflake(Channel)),
+    system_channel_flags: List(GuildSystemChannelFlag),
+    /// Is `None` if the guild doesn't have a rules channel.
+    rules_channel_id: Option(Snowflake(Channel)),
+    /// The maximum number of presences for the guild.
+    /// Is always `None`, apart from the largest of guilds.
     max_presences: Option(Int),
+    /// According to [discord.py](https://discordpy.readthedocs.io/en/latest/api.html?highlight=max_members#discord.Guild.max_members), this is always `None`, unless the guild is received from `get_guild()`.
     max_members: Option(Int),
+    /// Is `None` if the guild doesn't have a vanity url.
     vanity_url_code: Option(String),
+    /// Is `None` if the guild doesn't have a description.
     description: Option(String),
-    banner_hash: Option(String),
-    premium_tier: PremiumTier,
+    /// Is `None` if the guild doesn't have a banner.
+    banner_hash: Option(ImageHash),
+    premium_tier: GuildPremiumTier,
     premium_subscription_count: Option(Int),
     preferred_locale: String,
     public_updates_channel_id: Option(String),
@@ -1089,6 +1099,40 @@ pub type Guild {
     safety_alerts_channel_id: Option(String),
     incidents_data: Option(IncidentsData),
   )
+}
+
+pub type GuildPremiumTier {
+  /// The guild hasn't unlocked any server boost perks.
+  GuildWithoutPremium
+  /// Server boost level 1 perks.
+  GuildPremiumTier1
+  /// Server boost level 2 perks.
+  GuildPremiumTier2
+  /// Server boost level 3 perks.
+  GuildPremiumTier3
+}
+
+pub type GuildSystemChannelFlag {
+  /// Suppresses the member join notifications.
+  GuildSystemChannelWithoutJoinNotifications
+  /// Suppresses the server boost notifications.
+  GuildSystemChannelWithoutPremiumNotifications
+  /// Suppresses server setup tips.
+  GuildSystemChannelWithoutGuildReminderNotifications
+  /// Hides the sticker reply buttons to member join notifications.
+  GuildSystemChannelWithoutJoinNotificationStickerReplyButtons
+  /// Suppresses role subscription purchase/renewal notifications.
+  GuildSystemChannelWithoutRoleSubscriptionPurchaseNotifications
+  /// Hides the sticker reply buttons to role subscription purchase/renewal notifications.
+  GuildSystemChannelWithoutRoleSubscriptionPurchaseNotificationStickerReplyButtons
+}
+
+// TODO: GET RID OF ME! USE ACTUAL APPLICATIONS
+pub type Application
+
+pub type GuildRequiredMfaLevel {
+  GuildDoesNotRequireMfa
+  GuildRequiresMfaForModerationActions
 }
 
 pub type GuildFeature {
