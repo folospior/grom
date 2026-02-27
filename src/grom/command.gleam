@@ -1291,7 +1291,7 @@ pub fn parameter_sub_command_to_json(parameter: ParameterSubCommand) -> Json {
 
   let parameters = case parameter.parameters {
     Some(parameters) -> [
-      #("parameters", json.array(parameters, parameter_to_json)),
+      #("options", json.array(parameters, parameter_to_json)),
     ]
     None -> []
   }
@@ -1339,7 +1339,7 @@ pub fn parameter_sub_command_group_to_json(
 
   let parameters = case parameter.parameters {
     Some(parameters) -> [
-      #("parameters", json.array(parameters, parameter_to_json)),
+      #("options", json.array(parameters, parameter_to_json)),
     ]
     None -> []
   }
@@ -2142,7 +2142,7 @@ pub fn modify_slash_command_for_guild_to_json(
 
   let parameters = case modify.parameters {
     Some(parameters) -> [
-      #("parameters", json.array(parameters, parameter_to_json)),
+      #("options", json.array(parameters, parameter_to_json)),
     ]
     None -> []
   }

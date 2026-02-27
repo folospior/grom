@@ -1,3 +1,6 @@
+# v5.1.2 (27/02/2026)
+* Fix sub-command parameters having the `parameters` field incorrectly serialized (Filip Hoffmann)
+
 # v5.1.1 (20/02/2026)
 * Fix bugs related to reconnects failing (Copilot/Filip Hoffmann)
 
