@@ -40,6 +40,8 @@ pub type Component {
 
 @internal
 pub fn to_json(label: Label) -> Json {
+  let type_ = [#("type", json.int(18))]
+
   let id = case label.id {
     Some(id) -> [#("id", json.int(id))]
     None -> []
@@ -54,7 +56,7 @@ pub fn to_json(label: Label) -> Json {
 
   let component = [#("component", component_to_json(label.component))]
 
-  [id, description, label_, component]
+  [type_, id, description, label_, component]
   |> list.flatten
   |> json.object
 }

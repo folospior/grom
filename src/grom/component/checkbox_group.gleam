@@ -32,6 +32,8 @@ pub type Option {
 
 @internal
 pub fn to_json(group: CheckboxGroup) -> Json {
+  let type_ = [#("type", json.int(22))]
+
   let id = case group.id {
     Some(id) -> [#("id", json.int(id))]
     None -> []
@@ -53,7 +55,7 @@ pub fn to_json(group: CheckboxGroup) -> Json {
 
   let is_required = [#("required", json.bool(group.is_required))]
 
-  [id, custom_id, options, min_values, max_values, is_required]
+  [type_, id, custom_id, options, min_values, max_values, is_required]
   |> list.flatten
   |> json.object
 }

@@ -13,6 +13,8 @@ pub type Checkbox {
 
 @internal
 pub fn to_json(checkbox: Checkbox) -> Json {
+  let type_ = [#("type", json.int(23))]
+
   let id = case checkbox.id {
     Some(id) -> [#("id", json.int(id))]
     None -> []
@@ -24,7 +26,7 @@ pub fn to_json(checkbox: Checkbox) -> Json {
     #("default", json.bool(checkbox.is_default_selected)),
   ]
 
-  [id, custom_id, is_default_selected]
+  [type_, id, custom_id, is_default_selected]
   |> list.flatten
   |> json.object
 }
