@@ -1,3 +1,6 @@
+# Unreleased
+* Fix some components not being serialized with the `type` field (Filip Hoffmann)
+
 # v5.1.2 (27/02/2026)
 * Fix sub-command parameters having the `parameters` field incorrectly serialized (Filip Hoffmann)
 
