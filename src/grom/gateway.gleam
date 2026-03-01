@@ -2410,6 +2410,14 @@ pub fn with_shards(
   Builder(..builder, shard_count: Some(count))
 }
 
+pub fn supervised(
+  builder: Builder(state),
+) -> supervision.ChildSpecification(Subject(Message)) {
+  supervision.supervisor(run: fn() { start(builder) })
+}
+
+/// You probably want to use [supervised](#supervised) along with a supervisor instead.
+/// This will be removed in a future release.
 pub fn start(
   builder: Builder(state),
 ) -> Result(actor.Started(Subject(Message)), actor.StartError) {
@@ -2894,7 +2902,7 @@ fn reconnect(connection_state: Connection) -> Nil {
 fn on_connection_manager_message(
   current: ConnectionManagerState,
   message: ConnectionManagerMessage,
-) {
+) -> actor.Next(ConnectionManagerState, a) {
   case message {
     UpdateWebsocket(to: new) -> {
       list.each(current.queued_messages, fn(msg) {
@@ -3131,7 +3139,10 @@ fn on_start_soundboard_sounds_request(
   }
 }
 
-fn send_error(err: grom.Error, connection_state: Connection) {
+fn send_error(
+  err: grom.Error,
+  connection_state: Connection,
+) -> stratus.Next(Connection, a) {
   let next =
     process.call_forever(connection_state.subject, MessageFromDiscord(
       ErrorEvent(err),
