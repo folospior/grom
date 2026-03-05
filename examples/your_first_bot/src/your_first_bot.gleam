@@ -2,7 +2,6 @@ import dotenv_gleam
 import envoy
 import gleam/erlang/process
 import gleam/option.{Some}
-import gleam/string
 import grom
 import grom/command
 import grom/gateway
@@ -38,19 +37,17 @@ pub fn main() -> Nil {
       logging.log(logging.Info, "Started the gateway!")
       process.sleep_forever()
     }
-    Error(err) -> {
-      logging.log(
-        logging.Error,
-        "Couldn't start the gateway: " <> string.inspect(err),
-      )
-    }
+    Error(_err) -> logging.log(logging.Error, "Couldn't start the gateway.")
   }
 }
 
 fn on_event(state: State, event: gateway.Event) {
   case event {
-    gateway.ErrorEvent(error) -> {
-      logging.log(logging.Warning, string.inspect(error))
+    gateway.ErrorEvent(_error) -> {
+      // Better error event logging coming in the rewrite
+      // See the one-module branch for progesss!
+      // Sorry I can't do it now :(
+      logging.log(logging.Warning, "An event was errorneous")
       gateway.continue(state)
     }
     gateway.AllShardsReadyEvent(ready) -> on_ready(state, ready)
@@ -84,11 +81,8 @@ fn on_ready(state: State, ready: gateway.AllShardsReadyMessage) {
         "Overwrote the commands for " <> ready.application.id,
       )
     }
-    Error(err) -> {
-      logging.log(
-        logging.Error,
-        "Couldn't bulk overwrite global commands: " <> string.inspect(err),
-      )
+    Error(_err) -> {
+      logging.log(logging.Error, "Couldn't bulk overwrite global commands.")
     }
   }
 
