@@ -1,5 +1,7 @@
-# Unreleased
+# v5.1.3 (05/03/2026)
 * Fix some components not being serialized with the `type` field (Filip Hoffmann)
+* Fix the invalid session event being improperly parsed as a bool (not the data field) (Filip Hoffmann)
+* Example: Your First Bot: remove string.inspect logging (Filip Hoffmann)
 
 # v5.1.2 (27/02/2026)
 * Fix sub-command parameters having the `parameters` field incorrectly serialized (Filip Hoffmann)
