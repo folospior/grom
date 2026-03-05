@@ -906,7 +906,7 @@ fn message_decoder() -> decode.Decoder(ReceivedMessage) {
     1 -> decode.success(HeartbeatRequest)
     7 -> decode.success(ReconnectRequest)
     9 -> {
-      use can_reconnect <- decode.then(decode.bool)
+      use can_reconnect <- decode.field("d", decode.bool)
       decode.success(InvalidSession(can_reconnect:))
     }
     10 -> {
