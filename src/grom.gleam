@@ -1,6 +1,7 @@
 import gleam/bit_array
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
+import gleam/function
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
@@ -10,7 +11,6 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
-import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import gleam_community/colour.{type Colour}
 import status_code
@@ -18,9 +18,22 @@ import status_code
 const version: String = "v6.0.0"
 
 /// A snowflake is another name for an ID.
-/// It is possible to retrieve an object's creation date from its snowflake.
+/// It is possible to retrieve an object's creation date & time from its snowflake.
 pub opaque type Snowflake(a) {
   Snowflake(id: Int)
+}
+
+/// An authentication token, required to identify the user (bot) making requests.
+/// See [`bot`](#bot) for creating bot tokens.
+/// 
+/// In the future, this will be extended to also support bearer tokens.
+pub opaque type Token {
+  BotToken(token: String)
+}
+
+/// Creates a token object for a bot.
+pub fn bot(token: String) -> Token {
+  BotToken(token)
 }
 
 /// An error that is returned if something goes wrong using REST (HTTP) API calls.
@@ -101,6 +114,81 @@ fn flags_decoder(bits_flags: List(#(Int, flag))) -> Decoder(List(flag)) {
   |> decode.success
 }
 
+fn permissions_decoder() -> Decoder(List(Permission)) {
+  use string <- decode.then(decode.string)
+
+  case int.parse(string) {
+    Ok(bits) -> {
+      bits_permissions()
+      |> list.filter_map(fn(item) {
+        let #(bit, flag) = item
+        case int.bitwise_and(bits, bit) != 0 {
+          True -> Ok(flag)
+          False -> Error(Nil)
+        }
+      })
+      |> decode.success
+    }
+    Error(_) -> decode.failure([], "Permission")
+  }
+}
+
+fn bits_permissions() -> List(#(Int, Permission)) {
+  [
+    #(int.bitwise_shift_left(1, 0), AllowCreatingInstantInvites),
+    #(int.bitwise_shift_left(1, 1), AllowKickingMembers),
+    #(int.bitwise_shift_left(1, 2), AllowBanningMembers),
+    #(int.bitwise_shift_left(1, 3), AdministratorPermission),
+    #(int.bitwise_shift_left(1, 4), AllowManagingChannels),
+    #(int.bitwise_shift_left(1, 5), AllowManagingGuild),
+    #(int.bitwise_shift_left(1, 6), AllowAddingReactions),
+    #(int.bitwise_shift_left(1, 7), AllowViewingAuditLog),
+    #(int.bitwise_shift_left(1, 8), AllowPrioritySpeakingInVoiceChannels),
+    #(int.bitwise_shift_left(1, 9), AllowStreamingInVoiceChannels),
+    #(int.bitwise_shift_left(1, 10), AllowViewingChannels),
+    #(int.bitwise_shift_left(1, 11), AllowSendingMessages),
+    #(int.bitwise_shift_left(1, 12), AllowSendingTtsMessages),
+    #(int.bitwise_shift_left(1, 13), AllowManagingMessages),
+    #(int.bitwise_shift_left(1, 14), AutoEmbedLinksPermission),
+    #(int.bitwise_shift_left(1, 15), AllowAttachingFiles),
+    #(int.bitwise_shift_left(1, 16), AllowReadingMessageHistory),
+    #(int.bitwise_shift_left(1, 17), AllowMentioningEveryone),
+    #(int.bitwise_shift_left(1, 18), AllowUsingExternalEmojis),
+    #(int.bitwise_shift_left(1, 19), AllowViewingGuildInsights),
+    #(int.bitwise_shift_left(1, 20), AllowConnectingToVoiceChannels),
+    #(int.bitwise_shift_left(1, 21), AllowSpeakingInVoiceChannels),
+    #(int.bitwise_shift_left(1, 22), AllowMutingMembersInVoiceChannels),
+    #(int.bitwise_shift_left(1, 23), AllowDeafeningMembersInVoiceChannels),
+    #(int.bitwise_shift_left(1, 24), AllowMovingMembersBetweenVoiceChannels),
+    #(int.bitwise_shift_left(1, 25), AllowUsingVoiceActivityDetection),
+    #(int.bitwise_shift_left(1, 26), AllowChangingOwnNickname),
+    #(int.bitwise_shift_left(1, 27), AllowManagingNicknames),
+    #(int.bitwise_shift_left(1, 28), AllowManagingRoles),
+    #(int.bitwise_shift_left(1, 29), AllowManagingWebhooks),
+    #(int.bitwise_shift_left(1, 30), AllowManagingGuildExpressions),
+    #(int.bitwise_shift_left(1, 31), AllowUsingCommands),
+    #(int.bitwise_shift_left(1, 32), AllowRequestingToSpeakInStageChannels),
+    #(int.bitwise_shift_left(1, 33), AllowManagingEvents),
+    #(int.bitwise_shift_left(1, 34), AllowManagingThreads),
+    #(int.bitwise_shift_left(1, 35), AllowCreatingPublicThreads),
+    #(int.bitwise_shift_left(1, 36), AllowCreatingPrivateThreads),
+    #(int.bitwise_shift_left(1, 37), AllowUsingExternalStickers),
+    #(int.bitwise_shift_left(1, 38), AllowSendingMessagesInThreads),
+    #(int.bitwise_shift_left(1, 39), AllowUsingEmbeddedActivities),
+    #(int.bitwise_shift_left(1, 40), AllowModeratingMembers),
+    #(int.bitwise_shift_left(1, 41), AllowViewingCreatorMonetizationAnalytics),
+    #(int.bitwise_shift_left(1, 42), AllowUsingSoundboard),
+    #(int.bitwise_shift_left(1, 43), AllowCreatingGuildExpressions),
+    #(int.bitwise_shift_left(1, 44), AllowCreatingEvents),
+    #(int.bitwise_shift_left(1, 45), AllowUsingExternalSoundboardSounds),
+    #(int.bitwise_shift_left(1, 46), AllowSendingVoiceMessages),
+    #(int.bitwise_shift_left(1, 49), AllowSendingPolls),
+    #(int.bitwise_shift_left(1, 50), AllowUsingExternalApplications),
+    #(int.bitwise_shift_left(1, 51), AllowPinningMessages),
+    #(int.bitwise_shift_left(1, 52), AllowBypassingSlowmode),
+  ]
+}
+
 fn flags_to_int(flags: List(flag), bits_flags: List(#(Int, flag))) -> Int {
   bits_flags
   |> list.filter_map(fn(item) {
@@ -145,9 +233,8 @@ pub type User {
     /// Is `None` when the user uses a default color based on avatar.
     accent_colour: Option(Colour),
     /// The user's chosen locale.
-    /// Full list of locales: [link](https://docs.discord.com/developers/reference#locales)
     /// Discord hasn't disclosed when this field could be `None`. 
-    locale: Option(String),
+    locale: Option(Locale),
     flags: List(UserFlag),
     /// Is `None` if the user's premium type isn't known.
     premium_type: Option(UserPremiumType),
@@ -201,7 +288,7 @@ fn user_decoder() -> Decoder(User) {
   use locale <- decode.optional_field(
     "locale",
     None,
-    decode.optional(decode.string),
+    decode.optional(locale_decoder()),
   )
   use flags <- decode.optional_field(
     "flags",
@@ -457,16 +544,20 @@ const discord_api_url: String = "discord.com"
 const discord_api_path: String = "api/v10"
 
 fn new_api_request(
-  token token: String,
+  token token: Token,
   to path: String,
   method method: http.Method,
 ) -> Request(String) {
+  let token = case token {
+    BotToken(token) -> "Bot " <> token
+  }
+
   request.new()
   |> request.set_scheme(http.Https)
   |> request.set_host(discord_api_url)
   |> request.set_path(discord_api_path <> path)
   |> request.set_method(method)
-  |> request.prepend_header("authorization", "Bot " <> token)
+  |> request.prepend_header("authorization", token)
   |> request.prepend_header(
     "user-agent",
     "DiscordBot (https://github.com/folospior/grom, " <> version <> ")",
@@ -570,13 +661,13 @@ fn parse_error_response(
   }
 }
 
-pub fn get_current_user(token token: String) -> Result(User, RestError) {
+pub fn get_current_user(token token: Token) -> Result(User, RestError) {
   new_api_request(token:, to: "/users/@me", method: http.Get)
   |> send_request(decode_with: user_decoder())
 }
 
 pub fn get_user(
-  token token: String,
+  token token: Token,
   id id: Snowflake(User),
 ) -> Result(User, RestError) {
   new_api_request(
@@ -592,7 +683,7 @@ pub fn get_user(
 /// Other parts can be changed to a different value or deleted - for this, grom uses the Modification type.
 /// 
 /// The default behavior of modify functions is to not modify anything - for options: `None`, for modifications: `Skip`
-pub type Modification(a) {
+type Modification(a) {
   /// Will modify the value to the new, provided value
   Modify(a)
   /// Will set the value to `null`, deleting it
@@ -634,9 +725,9 @@ fn image_data_to_json(image_data: ImageData) -> Json {
   |> json.string
 }
 
-pub type ModifyCurrentUser {
+/// Look into the `(new_)modify_current_user_*` functions to use this type using a builder pattern.
+pub opaque type ModifyCurrentUser {
   ModifyCurrentUser(
-    /// May cause the discriminator to randomize if changed (mostly applies to bots).
     username: Option(String),
     avatar: Modification(ImageData),
     banner: Modification(ImageData),
@@ -644,7 +735,7 @@ pub type ModifyCurrentUser {
 }
 
 pub fn modify_current_user(
-  token token: String,
+  token token: Token,
   using modify: ModifyCurrentUser,
 ) -> Result(User, RestError) {
   let body = modify |> modify_current_user_to_json |> json.to_string
@@ -658,6 +749,7 @@ pub fn new_modify_current_user() -> ModifyCurrentUser {
   ModifyCurrentUser(None, Skip, Skip)
 }
 
+/// May cause the discriminator to randomize if changed (mostly applies to bots).
 pub fn modify_current_user_username(
   modify: ModifyCurrentUser,
   new username: String,
@@ -667,30 +759,37 @@ pub fn modify_current_user_username(
 
 pub fn modify_current_user_avatar(
   modify: ModifyCurrentUser,
-  new avatar: Modification(ImageData),
+  new avatar: ImageData,
 ) -> ModifyCurrentUser {
-  ModifyCurrentUser(..modify, avatar:)
+  ModifyCurrentUser(..modify, avatar: Modify(avatar))
+}
+
+pub fn delete_current_user_avatar(
+  modify: ModifyCurrentUser,
+) -> ModifyCurrentUser {
+  ModifyCurrentUser(..modify, avatar: Delete)
 }
 
 pub fn modify_current_user_banner(
   modify: ModifyCurrentUser,
-  new banner: Modification(ImageData),
+  new banner: ImageData,
 ) -> ModifyCurrentUser {
-  ModifyCurrentUser(..modify, banner:)
+  ModifyCurrentUser(..modify, banner: Modify(banner))
+}
+
+pub fn delete_current_user_banner(
+  modify: ModifyCurrentUser,
+) -> ModifyCurrentUser {
+  ModifyCurrentUser(..modify, banner: Delete)
 }
 
 fn modify_current_user_to_json(modify: ModifyCurrentUser) -> Json {
-  let username = case modify.username {
-    Some(new) -> [#("username", json.string(new))]
-    None -> []
-  }
-
-  let avatar = modification_to_json(modify.avatar, "avatar", image_data_to_json)
-
-  let banner = modification_to_json(modify.banner, "banner", image_data_to_json)
-
-  [username, avatar, banner]
-  |> list.flatten
+  [
+    modify_option_to_json(modify.username, "username", json.string),
+    modification_to_json(modify.avatar, "avatar", image_data_to_json),
+    modification_to_json(modify.banner, "banner", image_data_to_json),
+  ]
+  |> list.filter_map(function.identity)
   |> json.object
 }
 
@@ -698,11 +797,11 @@ fn modification_to_json(
   modification: Modification(a),
   key: String,
   success_encoder: fn(a) -> Json,
-) -> List(#(String, Json)) {
+) -> Result(#(String, Json), Nil) {
   case modification {
-    Modify(value) -> [#(key, success_encoder(value))]
-    Delete -> [#(key, json.null())]
-    Skip -> []
+    Modify(value) -> Ok(#(key, success_encoder(value)))
+    Delete -> Ok(#(key, json.null()))
+    Skip -> Error(Nil)
   }
 }
 
@@ -744,6 +843,81 @@ pub type Role {
     is_linked_role: Bool,
     flags: List(RoleFlag),
   )
+}
+
+fn role_decoder() -> Decoder(Role) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use colours <- decode.field("colors", role_colours_decoder())
+  use is_hoisted <- decode.field("hoist", decode.bool)
+  use icon_hash <- decode.optional_field(
+    "icon",
+    None,
+    decode.optional(image_hash_decoder()),
+  )
+  use unicode_emoji <- decode.optional_field(
+    "unicode_emoji",
+    None,
+    decode.optional(decode.string),
+  )
+  use position <- decode.field("position", decode.int)
+  use permissions <- decode.field("permissions", permissions_decoder())
+  use is_integration_managed <- decode.field("managed", decode.bool)
+  use is_mentionable <- decode.field("mentionable", decode.bool)
+  use bot_id <- decode.then(decode.optionally_at(
+    ["tags", "bot_id"],
+    None,
+    decode.optional(snowflake_decoder()),
+  ))
+  use integration_id <- decode.then(decode.optionally_at(
+    ["tags", "integration_id"],
+    None,
+    decode.optional(snowflake_decoder()),
+  ))
+  // this is weird, but essentially, in this case:
+  // - absent == False
+  // - null == True
+  // so i use False as the absent value, and then just accept anything if it's present and return True
+  use is_booster_role <- decode.then(decode.optionally_at(
+    ["tags", "premium_subscriber"],
+    False,
+    decode.success(True),
+  ))
+  use subscription_listing_id <- decode.then(decode.optionally_at(
+    ["tags", "subscription_listing_id"],
+    None,
+    decode.optional(snowflake_decoder()),
+  ))
+  use is_available_for_purchase <- decode.then(decode.optionally_at(
+    ["tags", "available_for_purchase"],
+    False,
+    decode.success(True),
+  ))
+  use is_linked_role <- decode.then(decode.optionally_at(
+    ["tags", "guild_connections"],
+    False,
+    decode.success(True),
+  ))
+  use flags <- decode.field("flags", flags_decoder(bits_role_flags()))
+  decode.success(Role(
+    id:,
+    name:,
+    colours:,
+    is_hoisted:,
+    icon_hash:,
+    unicode_emoji:,
+    position:,
+    permissions:,
+    is_integration_managed:,
+    is_mentionable:,
+    bot_id:,
+    integration_id:,
+    is_booster_role:,
+    subscription_listing_id:,
+    is_available_for_purchase:,
+    is_linked_role:,
+    flags:,
+  ))
 }
 
 pub type RoleFlag {
@@ -809,6 +983,8 @@ pub type Permission {
   AllowRequestingToSpeakInStageChannels
   /// Allows editing and deleting the guild's scheduled events.
   AllowManagingEvents
+  /// Allows deleting and archiving threads, and viewing all public and private threads.
+  AllowManagingThreads
   /// Allows creating public and announcement threads.
   AllowCreatingPublicThreads
   AllowCreatingPrivateThreads
@@ -858,6 +1034,23 @@ pub type RoleColours {
     /// - `tertiary_colour = 0xFFC3A0`
     tertiary_colour: Option(Colour),
   )
+}
+
+fn role_colours_decoder() -> Decoder(RoleColours) {
+  use primary_colour <- decode.field("primary_color", hex_colour_decoder())
+  use secondary_colour <- decode.field(
+    "secondary_color",
+    decode.optional(hex_colour_decoder()),
+  )
+  use tertiary_colour <- decode.field(
+    "tertiary_color",
+    decode.optional(hex_colour_decoder()),
+  )
+  decode.success(RoleColours(
+    primary_colour:,
+    secondary_colour:,
+    tertiary_colour:,
+  ))
 }
 
 // MESSAGE_CREATE && MESSAGE_UPDATE: DO NOT USE THIS TYPE
@@ -1000,7 +1193,7 @@ fn bits_guild_member_flags() -> List(#(Int, GuildMemberFlag)) {
 }
 
 pub fn get_current_user_as_guild_member(
-  token token: String,
+  token token: Token,
   for guild_id: Snowflake(Guild),
 ) -> Result(GuildMember, RestError) {
   new_api_request(
@@ -1012,7 +1205,7 @@ pub fn get_current_user_as_guild_member(
 }
 
 pub fn leave_guild(
-  token token: String,
+  token token: Token,
   id guild_id: Snowflake(Guild),
 ) -> Result(Nil, RestError) {
   new_api_request(
@@ -1047,7 +1240,7 @@ pub type Guild {
     /// Is `None` when the guild doesn't have a configured AFK channel.
     afk_channel_id: Option(Snowflake(Channel)),
     /// The time of inactivity after a voice channel user is marked as AFK in this guild.
-    afk_timeout: Duration,
+    afk_timeout: AfkTimeout,
     /// Whether the "server widget" is enabled.
     /// The server widget is a feature allowing guild advertisements on websites.
     is_widget_enabled: Bool,
@@ -1061,7 +1254,8 @@ pub type Guild {
     default_message_notification_setting: GuildDefaultMessageNotificationSetting,
     explicit_content_filter_setting: GuildExplicitContentFilterSetting,
     roles: List(Role),
-    emojis: List(Emoji),
+    /// List of the guild's custom emojis.
+    emojis: List(CustomEmoji),
     features: List(GuildFeature),
     /// MFA = multi-factor authentication
     required_mfa_level: GuildRequiredMfaLevel,
@@ -1084,20 +1278,408 @@ pub type Guild {
     description: Option(String),
     /// Is `None` if the guild doesn't have a banner.
     banner_hash: Option(ImageHash),
+    /// The guild's server boost benefit tier.
     premium_tier: GuildPremiumTier,
-    premium_subscription_count: Option(Int),
-    preferred_locale: String,
-    public_updates_channel_id: Option(String),
-    max_video_channel_users: Option(Int),
-    max_stage_video_channel_users: Option(Int),
-    approximate_member_count: Option(Int),
-    approximate_presence_count: Option(Int),
-    welcome_screen: Option(WelcomeScreen),
-    nsfw_level: NsfwLevel,
-    stickers: Option(List(Sticker)),
+    /// The guild's current amount of active server boosts.
+    premium_subscription_count: Int,
+    /// Is present for all guilds, but only community guilds have the ability to change it.
+    /// Defaults to `en-US` if not selected by the guild's admins. 
+    preferred_locale: Locale,
+    /// ID of the channel where admins and moderators of a Community guild receive notices from Discord.
+    /// Is `None` if the guild isn't a community guild.
+    public_updates_channel_id: Option(Snowflake(Channel)),
+    /// The maximum amount of webcam-sharing users in a voice channel for this guild.
+    max_video_channel_users: Int,
+    /// The maximum amount of webcam-sharing users in a stage channel for this guild.
+    max_stage_video_channel_users: Int,
+    /// Is only present in the `Invite.guild` field.
+    welcome_screen: Option(GuildWelcomeScreen),
+    nsfw_level: GuildNsfwLevel,
+    /// Is `None` in many circumstances, it's best to always check for this field's presence.
+    stickers: Option(List(GuildSticker)),
+    /// Whether the guild has the boost progress bar enabled.
     is_premium_progress_bar_enabled: Bool,
-    safety_alerts_channel_id: Option(String),
-    incidents_data: Option(IncidentsData),
+    /// ID of the chanel where moderators of Community guilds receive safety alerts from Discord.
+    /// Is `None` if the guild isn't a community guild.
+    safety_alerts_channel_id: Option(Snowflake(Channel)),
+    /// Is `None` if there is no active incident.
+    incidents_data: Option(GuildIncidentsData),
+  )
+}
+
+fn guild_decoder() -> Decoder(Guild) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use icon_hash <- decode.field("icon", decode.optional(image_hash_decoder()))
+  use splash_hash <- decode.field(
+    "splash",
+    decode.optional(image_hash_decoder()),
+  )
+  use discovery_splash_hash <- decode.field(
+    "discovery_splash",
+    decode.optional(image_hash_decoder()),
+  )
+  use owner_id <- decode.field("owner_id", snowflake_decoder())
+  use afk_channel_id <- decode.field(
+    "afk_channel_id",
+    decode.optional(snowflake_decoder()),
+  )
+  use afk_timeout <- decode.field("afk_timeout", afk_timeout_decoder())
+  use is_widget_enabled <- decode.optional_field(
+    "widget_enabled",
+    False,
+    decode.bool,
+  )
+  use widget_channel_id <- decode.optional_field(
+    "widget_channel_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use required_verification_level <- decode.field(
+    "verification_level",
+    guild_member_verification_level_decoder(),
+  )
+  use default_message_notification_setting <- decode.field(
+    "default_message_notifications",
+    guild_default_message_notification_setting_decoder(),
+  )
+  use explicit_content_filter_setting <- decode.field(
+    "explicit_content_filter",
+    guild_explicit_content_filter_setting_decoder(),
+  )
+  use roles <- decode.field("roles", decode.list(role_decoder()))
+  use emojis <- decode.field("emojis", decode.list(custom_emoji_decoder()))
+  use features <- decode.field("features", guild_features_decoder())
+  use required_mfa_level <- decode.field(
+    "mfa_level",
+    guild_required_mfa_level_decoder(),
+  )
+  use application_id <- decode.field(
+    "application_id",
+    decode.optional(snowflake_decoder()),
+  )
+  use system_channel_id <- decode.field(
+    "system_channel_id",
+    decode.optional(snowflake_decoder()),
+  )
+  use system_channel_flags <- decode.field(
+    "system_channel_flags",
+    flags_decoder(bits_guild_system_channel_flags()),
+  )
+  use rules_channel_id <- decode.field(
+    "rules_channel_id",
+    decode.optional(snowflake_decoder()),
+  )
+  use max_presences <- decode.optional_field(
+    "max_presences",
+    None,
+    decode.optional(decode.int),
+  )
+  use max_members <- decode.optional_field(
+    "max_members",
+    None,
+    decode.optional(decode.int),
+  )
+  use vanity_url_code <- decode.field(
+    "vanity_url_code",
+    decode.optional(decode.string),
+  )
+  use description <- decode.field("description", decode.optional(decode.string))
+  use banner_hash <- decode.field(
+    "banner",
+    decode.optional(image_hash_decoder()),
+  )
+  use premium_tier <- decode.field("premium_tier", guild_premium_tier_decoder())
+  use premium_subscription_count <- decode.field(
+    "premium_subscription_count",
+    decode.int,
+  )
+  use preferred_locale <- decode.field("preferred_locale", locale_decoder())
+  use public_updates_channel_id <- decode.field(
+    "public_updates_channel_id",
+    decode.optional(snowflake_decoder()),
+  )
+  use max_video_channel_users <- decode.field(
+    "max_video_channel_users",
+    decode.int,
+  )
+  use max_stage_video_channel_users <- decode.field(
+    "max_stage_video_channel_users",
+    decode.int,
+  )
+  use welcome_screen <- decode.optional_field(
+    "welcome_screen",
+    None,
+    decode.optional(guild_welcome_screen_decoder()),
+  )
+  use nsfw_level <- decode.field("nsfw_level", guild_nsfw_level_decoder())
+  use stickers <- decode.field(
+    "stickers",
+    decode.optional(decode.list(guild_sticker_decoder())),
+  )
+  use is_premium_progress_bar_enabled <- decode.field(
+    "premium_progress_bar_enabled",
+    decode.bool,
+  )
+  use safety_alerts_channel_id <- decode.field(
+    "safety_alerts_channel_id",
+    decode.optional(snowflake_decoder()),
+  )
+  use incidents_data <- decode.field(
+    "incidents_data",
+    decode.optional(guild_incidents_data_decoder()),
+  )
+  decode.success(Guild(
+    id:,
+    name:,
+    icon_hash:,
+    splash_hash:,
+    discovery_splash_hash:,
+    owner_id:,
+    afk_channel_id:,
+    afk_timeout:,
+    is_widget_enabled:,
+    widget_channel_id:,
+    required_verification_level:,
+    default_message_notification_setting:,
+    explicit_content_filter_setting:,
+    roles:,
+    emojis:,
+    features:,
+    required_mfa_level:,
+    application_id:,
+    system_channel_id:,
+    system_channel_flags:,
+    rules_channel_id:,
+    max_presences:,
+    max_members:,
+    vanity_url_code:,
+    description:,
+    banner_hash:,
+    premium_tier:,
+    premium_subscription_count:,
+    preferred_locale:,
+    public_updates_channel_id:,
+    max_video_channel_users:,
+    max_stage_video_channel_users:,
+    welcome_screen:,
+    nsfw_level:,
+    stickers:,
+    is_premium_progress_bar_enabled:,
+    safety_alerts_channel_id:,
+    incidents_data:,
+  ))
+}
+
+pub type GuildIncidentsData {
+  GuildIncidentsData(
+    /// When the ability to join the guild using an invite will be restored.
+    invites_disabled_until: Option(Timestamp),
+    /// When the ability to send first-time DMs to guild members will be restored.
+    dms_disabled_until: Option(Timestamp),
+    /// When Discord detected a DM spam campaign targeting the guild.
+    dm_spam_detected_at: Option(Timestamp),
+    /// When Discord detected a raid targeting the guild.
+    raid_detected_at: Option(Timestamp),
+  )
+}
+
+fn guild_incidents_data_decoder() -> Decoder(GuildIncidentsData) {
+  use invites_disabled_until <- decode.field(
+    "invites_disabled_until",
+    decode.optional(rfc3339_decoder()),
+  )
+  use dms_disabled_until <- decode.field(
+    "dms_disabled_until",
+    decode.optional(rfc3339_decoder()),
+  )
+  use dm_spam_detected_at <- decode.field(
+    "dm_spam_detected_at",
+    decode.optional(rfc3339_decoder()),
+  )
+  use raid_detected_at <- decode.field(
+    "raid_detected_at",
+    decode.optional(rfc3339_decoder()),
+  )
+  decode.success(GuildIncidentsData(
+    invites_disabled_until:,
+    dms_disabled_until:,
+    dm_spam_detected_at:,
+    raid_detected_at:,
+  ))
+}
+
+pub type Sticker {
+  /// Stickers available on all guilds to every user.
+  StickerStandardType(StandardSticker)
+  /// Stickers available:
+  /// * in the guild of registratrion for that guild's members
+  /// * in all guilds for Nitro subscribers who are also members of the guild of registration
+  StickerGuildType(GuildSticker)
+}
+
+pub type StandardSticker {
+  StandardSticker(
+    id: Snowflake(StandardSticker),
+    /// ID of the pack from which this sticker comes from.
+    pack_id: Snowflake(StickerPack),
+    name: String,
+    /// Is `None` if the sticker doesn't have a description.
+    description: Option(String),
+    /// Auto-complete/suggestion tags (keywords).
+    tags: String,
+    format_type: StickerFormatType,
+    /// A value used to sort more important stickers in the client.
+    /// If `None`, sorted alphabetically. (I assume)
+    sort_value: Option(Int),
+  )
+}
+
+pub type GuildSticker {
+  GuildSticker(
+    id: Snowflake(GuildSticker),
+    name: String,
+    /// Is `None` if the sticker doesn't have a description.
+    description: Option(String),
+    /// Auto-complete/suggestion tags (keywords).
+    tags: String,
+    format_type: StickerFormatType,
+    /// Is `False` when a guild loses its premium tier, reducing its sticker capacity and removing the sticker.
+    is_available: Bool,
+    guild_id: Snowflake(Guild),
+    uploader: User,
+  )
+}
+
+fn guild_sticker_decoder() -> Decoder(GuildSticker) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use description <- decode.field("description", decode.optional(decode.string))
+  use tags <- decode.field("tags", decode.string)
+  use format_type <- decode.field("format_type", sticker_format_type_decoder())
+  use is_available <- decode.optional_field("available", True, decode.bool)
+  use guild_id <- decode.field("guild_id", snowflake_decoder())
+  use uploader <- decode.field("user", user_decoder())
+  decode.success(GuildSticker(
+    id:,
+    name:,
+    description:,
+    tags:,
+    format_type:,
+    is_available:,
+    guild_id:,
+    uploader:,
+  ))
+}
+
+/// Used for the `get_sticker` function.
+pub fn guild_sticker_id_to_sticker_id(
+  id: Snowflake(GuildSticker),
+) -> Snowflake(Sticker) {
+  id
+  |> snowflake_to_int
+  |> new_snowflake
+}
+
+/// Used for the `get_sticker` function.
+pub fn standard_sticker_id_to_sticker_id(
+  id: Snowflake(StandardSticker),
+) -> Snowflake(Sticker) {
+  id
+  |> snowflake_to_int
+  |> new_snowflake
+}
+
+pub type StickerFormatType {
+  PngSticker
+  ApngSticker
+  LottieSticker
+  GifSticker
+}
+
+fn sticker_format_type_decoder() -> Decoder(StickerFormatType) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    1 -> decode.success(PngSticker)
+    2 -> decode.success(ApngSticker)
+    3 -> decode.success(LottieSticker)
+    4 -> decode.success(GifSticker)
+    _ -> decode.failure(PngSticker, "StickerFormatType")
+  }
+}
+
+pub type StickerPack
+
+pub type GuildNsfwLevel {
+  /// Unrated.
+  DefaultGuildNsfwLevel
+  /// Has explicit content.
+  ExplicitGuild
+  /// Safe-for-work.
+  SafeGuild
+  /// Guild is restricted to adults.
+  AgeRestrictedGuild
+}
+
+fn guild_nsfw_level_decoder() -> Decoder(GuildNsfwLevel) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(DefaultGuildNsfwLevel)
+    1 -> decode.success(ExplicitGuild)
+    2 -> decode.success(SafeGuild)
+    3 -> decode.success(AgeRestrictedGuild)
+    _ -> decode.failure(DefaultGuildNsfwLevel, "GuildNsfwLevel")
+  }
+}
+
+pub type GuildWelcomeScreen {
+  GuildWelcomeScreen(
+    /// The guild description shown in the welcome screen.
+    /// Is `None` if the guild hasn't configured a description.
+    description: Option(String),
+    /// The channels shown in the welcome screen. Up to 5.
+    welcome_channels: List(GuildWelcomeScreenChannel),
+  )
+}
+
+fn guild_welcome_screen_decoder() -> Decoder(GuildWelcomeScreen) {
+  use description <- decode.field("description", decode.optional(decode.string))
+  use welcome_channels <- decode.field(
+    "welcome_channels",
+    decode.list(guild_welcome_screen_channel_decoder()),
+  )
+  decode.success(GuildWelcomeScreen(description:, welcome_channels:))
+}
+
+pub type GuildWelcomeScreenChannel {
+  GuildWelcomeScreenChannel(
+    id: Snowflake(Channel),
+    description: String,
+    /// ID of the channel's associated emoji, if the emoji is custom.
+    emoji_id: Option(Snowflake(Emoji)),
+    /// The emoji's name if custom, or its unicode character if standard.
+    /// Is `None` if the channel doesn't have an associated emoji.
+    emoji_name: Option(String),
+  )
+}
+
+fn guild_welcome_screen_channel_decoder() -> Decoder(GuildWelcomeScreenChannel) {
+  use id <- decode.field("channel_id", snowflake_decoder())
+  use description <- decode.field("description", decode.string)
+  use emoji_id <- decode.field("emoji_id", decode.optional(snowflake_decoder()))
+  use emoji_name <- decode.field("emoji_name", decode.optional(decode.string))
+  decode.success(GuildWelcomeScreenChannel(
+    id:,
+    description:,
+    emoji_id:,
+    emoji_name:,
+  ))
+}
+
+pub type GuildApproximateCounts {
+  GuildApproximateCounts(
+    approximate_member_count: Int,
+    approximate_presence_count: Int,
   )
 }
 
@@ -1110,6 +1692,17 @@ pub type GuildPremiumTier {
   GuildPremiumTier2
   /// Server boost level 3 perks.
   GuildPremiumTier3
+}
+
+fn guild_premium_tier_decoder() -> Decoder(GuildPremiumTier) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(GuildWithoutPremium)
+    1 -> decode.success(GuildPremiumTier1)
+    2 -> decode.success(GuildPremiumTier2)
+    3 -> decode.success(GuildPremiumTier3)
+    _ -> decode.failure(GuildWithoutPremium, "GuildPremiumTier")
+  }
 }
 
 pub type GuildSystemChannelFlag {
@@ -1127,12 +1720,47 @@ pub type GuildSystemChannelFlag {
   GuildSystemChannelWithoutRoleSubscriptionPurchaseNotificationStickerReplyButtons
 }
 
+fn bits_guild_system_channel_flags() -> List(#(Int, GuildSystemChannelFlag)) {
+  [
+    #(int.bitwise_shift_left(1, 0), GuildSystemChannelWithoutJoinNotifications),
+    #(
+      int.bitwise_shift_left(1, 1),
+      GuildSystemChannelWithoutPremiumNotifications,
+    ),
+    #(
+      int.bitwise_shift_left(1, 2),
+      GuildSystemChannelWithoutGuildReminderNotifications,
+    ),
+    #(
+      int.bitwise_shift_left(1, 3),
+      GuildSystemChannelWithoutJoinNotificationStickerReplyButtons,
+    ),
+    #(
+      int.bitwise_shift_left(1, 4),
+      GuildSystemChannelWithoutRoleSubscriptionPurchaseNotifications,
+    ),
+    #(
+      int.bitwise_shift_left(1, 5),
+      GuildSystemChannelWithoutRoleSubscriptionPurchaseNotificationStickerReplyButtons,
+    ),
+  ]
+}
+
 // TODO: GET RID OF ME! USE ACTUAL APPLICATIONS
 pub type Application
 
 pub type GuildRequiredMfaLevel {
   GuildDoesNotRequireMfa
   GuildRequiresMfaForModerationActions
+}
+
+fn guild_required_mfa_level_decoder() -> Decoder(GuildRequiredMfaLevel) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(GuildDoesNotRequireMfa)
+    1 -> decode.success(GuildRequiresMfaForModerationActions)
+    _ -> decode.failure(GuildDoesNotRequireMfa, "GuildRequiredMfaLevel")
+  }
 }
 
 pub type GuildFeature {
@@ -1233,13 +1861,13 @@ fn guild_features_decoder() -> Decoder(List(GuildFeature)) {
 
 // REACTIONS: DO NOT USE THIS OBJECT, IT WILL NOT HAVE THE NAME FIELD
 pub type Emoji {
-  UnicodeEmoji(character: String)
-  CustomEmoji(CustomEmojiData)
-  ApplicationEmoji(ApplicationEmojiData)
+  EmojiUnicode(character: String)
+  EmojiCustom(CustomEmoji)
+  EmojiApplication(ApplicationEmoji)
 }
 
-pub type CustomEmojiData {
-  CustomEmojiData(
+pub type CustomEmoji {
+  CustomEmoji(
     id: Snowflake(Emoji),
     name: String,
     /// Is `None` if the emoji is not restricted on a per-role basis.
@@ -1254,8 +1882,8 @@ pub type CustomEmojiData {
   )
 }
 
-pub type ApplicationEmojiData {
-  ApplicationEmojiData(
+pub type ApplicationEmoji {
+  ApplicationEmoji(
     id: Snowflake(Emoji),
     name: String,
     creator: User,
@@ -1270,67 +1898,69 @@ pub type ApplicationEmojiData {
   )
 }
 
-fn emoji_decoder() -> Decoder(Emoji) {
-  use id <- decode.field("id", decode.optional(snowflake_decoder()))
-  case id {
-    None -> {
-      use character <- decode.field("name", decode.string)
-      decode.success(UnicodeEmoji(character:))
-    }
-    Some(id) -> {
-      use name <- decode.field("name", decode.string)
-      use allowed_roles_ids <- decode.optional_field(
-        "roles",
-        None,
-        decode.optional(decode.list(of: snowflake_decoder())),
-      )
-      use creator <- decode.optional_field(
-        "user",
-        None,
-        decode.optional(user_decoder()),
-      )
-      use requires_colons <- decode.optional_field(
-        "require_colons",
-        True,
-        decode.bool,
-      )
-      use is_integration_managed <- decode.optional_field(
-        "managed",
-        False,
-        decode.bool,
-      )
-      use is_animated <- decode.optional_field("animated", False, decode.bool)
-      use is_available <- decode.optional_field("available", True, decode.bool)
+fn application_emoji_decoder() -> Decoder(ApplicationEmoji) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use allowed_roles_ids <- decode.optional_field(
+    "roles",
+    None,
+    decode.optional(decode.list(of: snowflake_decoder())),
+  )
+  use creator <- decode.field("user", user_decoder())
+  use requires_colons <- decode.optional_field(
+    "require_colons",
+    True,
+    decode.bool,
+  )
+  use is_integration_managed <- decode.optional_field(
+    "managed",
+    False,
+    decode.bool,
+  )
+  use is_animated <- decode.optional_field("animated", False, decode.bool)
+  use is_available <- decode.optional_field("available", True, decode.bool)
 
-      case creator {
-        Some(creator) ->
-          decode.success(
-            ApplicationEmoji(ApplicationEmojiData(
-              id:,
-              name:,
-              creator:,
-              allowed_roles_ids:,
-              requires_colons:,
-              is_integration_managed:,
-              is_animated:,
-              is_available:,
-            )),
-          )
-        None ->
-          decode.success(
-            CustomEmoji(CustomEmojiData(
-              id:,
-              name:,
-              allowed_roles_ids:,
-              requires_colons:,
-              is_integration_managed:,
-              is_animated:,
-              is_available:,
-            )),
-          )
-      }
-    }
-  }
+  decode.success(ApplicationEmoji(
+    id:,
+    name:,
+    creator:,
+    allowed_roles_ids:,
+    requires_colons:,
+    is_integration_managed:,
+    is_animated:,
+    is_available:,
+  ))
+}
+
+fn custom_emoji_decoder() -> Decoder(CustomEmoji) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use allowed_roles_ids <- decode.optional_field(
+    "roles",
+    None,
+    decode.optional(decode.list(of: snowflake_decoder())),
+  )
+  use requires_colons <- decode.optional_field(
+    "require_colons",
+    True,
+    decode.bool,
+  )
+  use is_integration_managed <- decode.optional_field(
+    "managed",
+    False,
+    decode.bool,
+  )
+  use is_animated <- decode.optional_field("animated", False, decode.bool)
+  use is_available <- decode.optional_field("available", True, decode.bool)
+  decode.success(CustomEmoji(
+    id:,
+    name:,
+    allowed_roles_ids:,
+    requires_colons:,
+    is_integration_managed:,
+    is_animated:,
+    is_available:,
+  ))
 }
 
 pub type GuildMemberVerificationLevel {
@@ -1346,11 +1976,41 @@ pub type GuildMemberVerificationLevel {
   VeryHighGuildMemberVerification
 }
 
+fn guild_member_verification_level_decoder() -> Decoder(
+  GuildMemberVerificationLevel,
+) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(NoGuildMemberVerification)
+    1 -> decode.success(LowGuildMemberVerification)
+    2 -> decode.success(MediumGuildMemberVerification)
+    3 -> decode.success(HighGuildMemberVerification)
+    4 -> decode.success(VeryHighGuildMemberVerification)
+    _ ->
+      decode.failure(NoGuildMemberVerification, "GuildMemberVerificationLevel")
+  }
+}
+
 pub type GuildDefaultMessageNotificationSetting {
   /// By default, notifications will be sent for all messages in the guild.
   NotifyForAllMessages
   /// By default, notifications will be sent only for messages in which the user was mentioned.
   NotifyOnlyForMentions
+}
+
+fn guild_default_message_notification_setting_decoder() -> Decoder(
+  GuildDefaultMessageNotificationSetting,
+) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(NotifyForAllMessages)
+    1 -> decode.success(NotifyOnlyForMentions)
+    _ ->
+      decode.failure(
+        NotifyForAllMessages,
+        "GuildDefaultMessageNotificationSetting",
+      )
+  }
 }
 
 pub type GuildExplicitContentFilterSetting {
@@ -1360,4 +2020,757 @@ pub type GuildExplicitContentFilterSetting {
   GuildExplicitContentFilterForMembersWithoutRoles
   /// Media sent by all members will be scanned for explicit content.
   GuildExplicitContentFilterForAllMembers
+}
+
+fn guild_explicit_content_filter_setting_decoder() -> Decoder(
+  GuildExplicitContentFilterSetting,
+) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(GuildExplicitContentFilterDisabled)
+    1 -> decode.success(GuildExplicitContentFilterForMembersWithoutRoles)
+    2 -> decode.success(GuildExplicitContentFilterForAllMembers)
+    _ ->
+      decode.failure(
+        GuildExplicitContentFilterDisabled,
+        "GuildExplicitContentFilterSetting",
+      )
+  }
+}
+
+pub fn get_guild(
+  token token: Token,
+  id id: Snowflake(Guild),
+) -> Result(Guild, RestError) {
+  new_api_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(id),
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_decoder())
+}
+
+/// Returns a guild object along with its approximate member and presence counts.
+pub fn get_guild_with_counts(
+  token token: Token,
+  id id: Snowflake(Guild),
+) -> Result(#(Guild, GuildApproximateCounts), RestError) {
+  new_api_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(id),
+    method: http.Get,
+  )
+  |> request.set_query([#("with_counts", "true")])
+  |> send_request(decode_with: {
+    use guild <- decode.then(guild_decoder())
+    use approximate_member_count <- decode.field(
+      "approximate_member_count",
+      decode.int,
+    )
+    use approximate_presence_count <- decode.field(
+      "approximate_presence_count",
+      decode.int,
+    )
+
+    decode.success(#(
+      guild,
+      GuildApproximateCounts(
+        approximate_member_count:,
+        approximate_presence_count:,
+      ),
+    ))
+  })
+}
+
+/// Represents an offline guild, or a guild whose information has not been provided
+/// through the Guild Create events during the gateway connection initiation.
+pub type UnavailableGuild {
+  UnavailableGuild(id: Snowflake(Guild), is_unavailable: Bool)
+}
+
+pub type GuildPreview {
+  GuildPreview(
+    id: Snowflake(Guild),
+    name: String,
+    icon_hash: Option(ImageHash),
+    splash_hash: Option(ImageHash),
+    discovery_splash_hash: Option(ImageHash),
+    emojis: List(CustomEmoji),
+    features: List(GuildFeature),
+    approximate_member_count: Int,
+    approximate_presence_count: Int,
+    description: Option(String),
+    stickers: List(GuildSticker),
+  )
+}
+
+fn guild_preview_decoder() -> Decoder(GuildPreview) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use icon_hash <- decode.field("icon", decode.optional(image_hash_decoder()))
+  use splash_hash <- decode.field(
+    "splash",
+    decode.optional(image_hash_decoder()),
+  )
+  use discovery_splash_hash <- decode.field(
+    "discovery_splash",
+    decode.optional(image_hash_decoder()),
+  )
+  use emojis <- decode.field("emojis", decode.list(custom_emoji_decoder()))
+  use features <- decode.field("features", guild_features_decoder())
+  use approximate_member_count <- decode.field(
+    "approximate_member_count",
+    decode.int,
+  )
+  use approximate_presence_count <- decode.field(
+    "approximate_presence_count",
+    decode.int,
+  )
+  use description <- decode.field("description", decode.optional(decode.string))
+  use stickers <- decode.field("stickers", decode.list(guild_sticker_decoder()))
+  decode.success(GuildPreview(
+    id:,
+    name:,
+    icon_hash:,
+    splash_hash:,
+    discovery_splash_hash:,
+    emojis:,
+    features:,
+    approximate_member_count:,
+    approximate_presence_count:,
+    description:,
+    stickers:,
+  ))
+}
+
+/// Returns a guild preview object. Is useful for receiving information about discoverable
+/// guilds, when the current user isn't a member of one of those guilds.
+pub fn get_guild_preview(
+  token token: Token,
+  id id: Snowflake(Guild),
+) -> Result(GuildPreview, RestError) {
+  new_api_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(id) <> "/preview",
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_preview_decoder())
+}
+
+/// Look into the `(new_)modify_guild_*` functions to use this type using a builder pattern.
+pub opaque type ModifyGuild {
+  ModifyGuild(
+    name: Option(String),
+    member_verification_level: Modification(GuildMemberVerificationLevel),
+    default_message_notification_setting: Modification(
+      GuildDefaultMessageNotificationSetting,
+    ),
+    explicit_content_filter_setting: Modification(
+      GuildExplicitContentFilterSetting,
+    ),
+    afk_channel_id: Modification(Snowflake(Channel)),
+    afk_timeout: Option(AfkTimeout),
+    icon: Modification(ImageData),
+    splash: Modification(ImageData),
+    discovery_splash: Modification(ImageData),
+    banner: Modification(ImageData),
+    system_channel_id: Modification(Snowflake(Channel)),
+    system_channel_flags: Option(List(GuildSystemChannelFlag)),
+    rules_channel_id: Modification(Snowflake(Channel)),
+    public_updates_channel_id: Modification(Snowflake(Channel)),
+    preferred_locale: Modification(Locale),
+    features: Option(List(GuildFeature)),
+    description: Modification(String),
+    is_premium_progress_bar_enabled: Option(Bool),
+    safety_alerts_channel_id: Modification(Snowflake(Channel)),
+  )
+}
+
+pub fn new_modify_guild() -> ModifyGuild {
+  ModifyGuild(
+    None,
+    Skip,
+    Skip,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    Skip,
+    Skip,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    None,
+    Skip,
+  )
+}
+
+pub fn modify_guild_name(modify: ModifyGuild, new name: String) -> ModifyGuild {
+  ModifyGuild(..modify, name: Some(name))
+}
+
+pub fn modify_guild_member_verification_level(
+  modify: ModifyGuild,
+  new level: GuildMemberVerificationLevel,
+) -> ModifyGuild {
+  ModifyGuild(..modify, member_verification_level: Modify(level))
+}
+
+/// Resets the guild's member verification level back to default.
+pub fn reset_guild_member_verification_level(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, member_verification_level: Delete)
+}
+
+pub fn modify_guild_default_message_notification_setting(
+  modify: ModifyGuild,
+  new setting: GuildDefaultMessageNotificationSetting,
+) -> ModifyGuild {
+  ModifyGuild(..modify, default_message_notification_setting: Modify(setting))
+}
+
+/// Resets the guild's default message notification setting back to default.
+pub fn reset_guild_default_message_notification_setting(
+  modify: ModifyGuild,
+) -> ModifyGuild {
+  ModifyGuild(..modify, default_message_notification_setting: Delete)
+}
+
+pub fn modify_guild_explicit_content_filter_setting(
+  modify: ModifyGuild,
+  new setting: GuildExplicitContentFilterSetting,
+) -> ModifyGuild {
+  ModifyGuild(..modify, explicit_content_filter_setting: Modify(setting))
+}
+
+/// Resets the guild's explicit content filter setting back to default.
+pub fn reset_guild_explicit_content_filter_setting(
+  modify: ModifyGuild,
+) -> ModifyGuild {
+  ModifyGuild(..modify, explicit_content_filter_setting: Delete)
+}
+
+pub fn modify_guild_afk_channel(
+  modify: ModifyGuild,
+  new_id id: Snowflake(Channel),
+) -> ModifyGuild {
+  ModifyGuild(..modify, afk_channel_id: Modify(id))
+}
+
+/// Unsets the guild's AFK channel.
+///
+/// This will not delete the channel, just make the guild not have an AFK channel.
+pub fn unset_guild_afk_channel(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, afk_channel_id: Delete)
+}
+
+/// Represents the time after which an AFK person will be moved to an AFK channel, if one is present.
+pub type AfkTimeout {
+  /// After 1 minute.
+  AfkTimeout60Seconds
+  /// After 5 minutes.
+  AfkTimeout300Seconds
+  /// After 15 minutes.
+  AfkTimeout900Seconds
+  /// After 30 minutes.
+  AfkTimeout1800Seconds
+  /// After 60 minutes.
+  AfkTimeout3600Seconds
+}
+
+fn afk_timeout_decoder() -> Decoder(AfkTimeout) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    60 -> decode.success(AfkTimeout60Seconds)
+    300 -> decode.success(AfkTimeout300Seconds)
+    900 -> decode.success(AfkTimeout900Seconds)
+    1800 -> decode.success(AfkTimeout1800Seconds)
+    3600 -> decode.success(AfkTimeout3600Seconds)
+    _ -> decode.failure(AfkTimeout60Seconds, "AfkTimeout")
+  }
+}
+
+pub fn modify_guild_afk_timeout(
+  modify: ModifyGuild,
+  new timeout: AfkTimeout,
+) -> ModifyGuild {
+  ModifyGuild(..modify, afk_timeout: Some(timeout))
+}
+
+/// The icon must have a resolution of 1024x1024.
+///
+/// It can only be animated if the guild has the `GuildCanUseAnimatedIcon` feature.
+pub fn modify_guild_icon(
+  modify: ModifyGuild,
+  new icon: ImageData,
+) -> ModifyGuild {
+  ModifyGuild(..modify, icon: Modify(icon))
+}
+
+pub fn delete_guild_icon(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, icon: Delete)
+}
+
+/// The splash must be a PNG/JPEG image with a 16:9 aspect ratio.
+///
+/// The guild must have the `GuildCanUseInviteSplash` feature.
+pub fn modify_guild_splash(
+  modify: ModifyGuild,
+  new splash: ImageData,
+) -> ModifyGuild {
+  ModifyGuild(..modify, splash: Modify(splash))
+}
+
+pub fn delete_guild_splash(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, splash: Delete)
+}
+
+/// The splash must be a PNG/JPEG image with a 16:9 aspect ratio.
+///
+/// The guild must have the `GuildIsDiscoverable` feature.
+pub fn modify_guild_discovery_splash(
+  modify: ModifyGuild,
+  new splash: ImageData,
+) -> ModifyGuild {
+  ModifyGuild(..modify, discovery_splash: Modify(splash))
+}
+
+pub fn delete_guild_discovery_splash(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, discovery_splash: Delete)
+}
+
+/// If not animated, the banner must be a PNG/JPEG image with a 16:9 aspect ratio.
+///
+/// If animated, the banner must be a GIF image with a 16:9 aspect ratio
+/// and the guild must have the `GuildCanUseAnimatedBanner` feature.
+/// 
+/// In all cases, the guild must have the `GuildCanUseBanner` feature.
+pub fn modify_guild_banner(
+  modify: ModifyGuild,
+  new banner: ImageData,
+) -> ModifyGuild {
+  ModifyGuild(..modify, banner: Modify(banner))
+}
+
+pub fn delete_guild_banner(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, banner: Delete)
+}
+
+pub fn modify_guild_system_channel(
+  modify: ModifyGuild,
+  new_id id: Snowflake(Channel),
+) -> ModifyGuild {
+  ModifyGuild(..modify, system_channel_id: Modify(id))
+}
+
+/// Makes the guild not have a system channel anymore.
+///
+/// This will not delete the channel.
+pub fn unset_guild_system_channel(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, system_channel_id: Delete)
+}
+
+pub fn modify_guild_system_channel_flags(
+  modify: ModifyGuild,
+  new flags: List(GuildSystemChannelFlag),
+) -> ModifyGuild {
+  ModifyGuild(..modify, system_channel_flags: Some(flags))
+}
+
+pub fn modify_guild_rules_channel(
+  modify: ModifyGuild,
+  new_id id: Snowflake(Channel),
+) -> ModifyGuild {
+  ModifyGuild(..modify, rules_channel_id: Modify(id))
+}
+
+/// Makes the guild not have a rules channel anymore.
+///
+/// This will not delete the channel.
+pub fn unset_guild_rules_channel(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, rules_channel_id: Delete)
+}
+
+pub fn modify_guild_public_updates_channel(
+  modify: ModifyGuild,
+  new_id id: Snowflake(Channel),
+) -> ModifyGuild {
+  ModifyGuild(..modify, public_updates_channel_id: Modify(id))
+}
+
+/// Makes the guild not have a public updates channel anymore.
+///
+/// This will not delete the channel.
+pub fn unset_guild_public_updates_channel(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, public_updates_channel_id: Delete)
+}
+
+pub type Locale {
+  IndonesianLocale
+  DanishLocale
+  GermanLocale
+  EnglishUkLocale
+  EnglishUsLocale
+  SpanishSpainLocale
+  SpanishLatamLocale
+  FrenchLocale
+  CroatianLocale
+  ItalianLocale
+  LithuanianLocale
+  HungarianLocale
+  DutchLocale
+  NorwegianLocale
+  PolishLocale
+  PortugueseBrazilLocale
+  RomanianRomaniaLocale
+  FinnishLocale
+  SwedishLocale
+  VietnameseLocale
+  TurkishLocale
+  CzechLocale
+  GreekLocale
+  BulgarianLocale
+  RussianLocale
+  UkrainianLocale
+  HindiLocale
+  ThaiLocale
+  ChineseChinaLocale
+  JapaneseLocale
+  ChineseTaiwanLocale
+  KoreanLocale
+}
+
+fn locale_to_json(locale: Locale) -> Json {
+  case locale {
+    IndonesianLocale -> json.string("id")
+    DanishLocale -> json.string("da")
+    GermanLocale -> json.string("de")
+    EnglishUkLocale -> json.string("en-GB")
+    EnglishUsLocale -> json.string("en-US")
+    SpanishSpainLocale -> json.string("es-ES")
+    SpanishLatamLocale -> json.string("es-419")
+    FrenchLocale -> json.string("fr")
+    CroatianLocale -> json.string("hr")
+    ItalianLocale -> json.string("it")
+    LithuanianLocale -> json.string("lt")
+    HungarianLocale -> json.string("hu")
+    DutchLocale -> json.string("nl")
+    NorwegianLocale -> json.string("no")
+    PolishLocale -> json.string("pl")
+    PortugueseBrazilLocale -> json.string("pt-BR")
+    RomanianRomaniaLocale -> json.string("ro")
+    FinnishLocale -> json.string("fi")
+    SwedishLocale -> json.string("sv-SE")
+    VietnameseLocale -> json.string("vi")
+    TurkishLocale -> json.string("tr")
+    CzechLocale -> json.string("cs")
+    GreekLocale -> json.string("el")
+    BulgarianLocale -> json.string("bg")
+    RussianLocale -> json.string("ru")
+    UkrainianLocale -> json.string("uk")
+    HindiLocale -> json.string("hi")
+    ThaiLocale -> json.string("th")
+    ChineseChinaLocale -> json.string("zh-CN")
+    JapaneseLocale -> json.string("ja")
+    ChineseTaiwanLocale -> json.string("zh-TW")
+    KoreanLocale -> json.string("ko")
+  }
+}
+
+fn locale_decoder() -> Decoder(Locale) {
+  use variant <- decode.then(decode.string)
+  case variant {
+    "id" -> decode.success(IndonesianLocale)
+    "da" -> decode.success(DanishLocale)
+    "de" -> decode.success(GermanLocale)
+    "en-GB" -> decode.success(EnglishUkLocale)
+    "en-US" -> decode.success(EnglishUsLocale)
+    "es-ES" -> decode.success(SpanishSpainLocale)
+    "es-419" -> decode.success(SpanishLatamLocale)
+    "fr" -> decode.success(FrenchLocale)
+    "hr" -> decode.success(CroatianLocale)
+    "it" -> decode.success(ItalianLocale)
+    "lt" -> decode.success(LithuanianLocale)
+    "hu" -> decode.success(HungarianLocale)
+    "nl" -> decode.success(DutchLocale)
+    "no" -> decode.success(NorwegianLocale)
+    "pl" -> decode.success(PolishLocale)
+    "pt-BR" -> decode.success(PortugueseBrazilLocale)
+    "ro" -> decode.success(RomanianRomaniaLocale)
+    "fi" -> decode.success(FinnishLocale)
+    "sv-SE" -> decode.success(SwedishLocale)
+    "vi" -> decode.success(VietnameseLocale)
+    "tr" -> decode.success(TurkishLocale)
+    "cs" -> decode.success(CzechLocale)
+    "el" -> decode.success(GreekLocale)
+    "bg" -> decode.success(BulgarianLocale)
+    "ru" -> decode.success(RussianLocale)
+    "uk" -> decode.success(UkrainianLocale)
+    "hi" -> decode.success(HindiLocale)
+    "th" -> decode.success(ThaiLocale)
+    "zh-CN" -> decode.success(ChineseChinaLocale)
+    "ja" -> decode.success(JapaneseLocale)
+    "zh-TW" -> decode.success(ChineseTaiwanLocale)
+    "ko" -> decode.success(KoreanLocale)
+    _ -> decode.failure(IndonesianLocale, "Locale")
+  }
+}
+
+pub fn modify_guild_preferred_locale(
+  modify: ModifyGuild,
+  new preferred_locale: Locale,
+) -> ModifyGuild {
+  ModifyGuild(..modify, preferred_locale: Modify(preferred_locale))
+}
+
+/// Modifies the guild's features to the provided list. 
+///
+/// You can only modify the following features:
+/// * `GuildIsCommunity` - requires the `AdministratorPermission` permission
+/// * `GuildIsDiscoverable` - requires the `AdministratorPermission` permission. The guild must also satisfy all the discovery requirements.
+/// * `GuildHasPausedInvites` - requires the `AllowManagingGuild` permission
+/// * `GuildDisabledRaidAlerts` - requires the `AllowManagingGuild` permission
+///
+/// NOTE: **All** enabled features, mutable and immutable, must be provided.
+pub fn modify_guild_features(
+  modify: ModifyGuild,
+  new features: List(GuildFeature),
+) -> ModifyGuild {
+  ModifyGuild(..modify, features: Some(features))
+}
+
+pub fn modify_guild_description(
+  modify: ModifyGuild,
+  new description: String,
+) -> ModifyGuild {
+  ModifyGuild(..modify, description: Modify(description))
+}
+
+pub fn delete_guild_description(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, description: Delete)
+}
+
+pub fn enable_guild_premium_progress_bar(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, is_premium_progress_bar_enabled: Some(True))
+}
+
+pub fn disable_guild_premium_progress_bar(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, is_premium_progress_bar_enabled: Some(False))
+}
+
+pub fn modify_guild_safety_alerts_channel(
+  modify: ModifyGuild,
+  new_id id: Snowflake(Channel),
+) -> ModifyGuild {
+  ModifyGuild(..modify, safety_alerts_channel_id: Modify(id))
+}
+
+/// Makes the guild not have a safety alerts channel anymore.
+///
+/// This will not delete the channel.
+pub fn unset_guild_safety_alerts_channel(modify: ModifyGuild) -> ModifyGuild {
+  ModifyGuild(..modify, safety_alerts_channel_id: Delete)
+}
+
+fn modify_option_to_json(
+  option: Option(a),
+  name: String,
+  encoder: fn(a) -> Json,
+) -> Result(#(String, Json), Nil) {
+  case option {
+    Some(data) -> Ok(#(name, encoder(data)))
+    None -> Error(Nil)
+  }
+}
+
+fn modify_guild_to_json(modify: ModifyGuild) -> Json {
+  [
+    modify_option_to_json(modify.name, "name", json.string),
+    modification_to_json(
+      modify.member_verification_level,
+      "verification_level",
+      guild_member_verification_level_to_json,
+    ),
+    modification_to_json(
+      modify.default_message_notification_setting,
+      "default_message_notifications",
+      guild_default_message_notification_setting_to_json,
+    ),
+    modification_to_json(
+      modify.explicit_content_filter_setting,
+      "explicit_content_filter",
+      guild_explicit_content_filter_setting_to_json,
+    ),
+    modification_to_json(
+      modify.afk_channel_id,
+      "afk_channel_id",
+      snowflake_to_json,
+    ),
+    modify_option_to_json(
+      modify.afk_timeout,
+      "afk_timeout",
+      afk_timeout_to_json,
+    ),
+    modification_to_json(modify.icon, "icon", image_data_to_json),
+    modification_to_json(modify.splash, "splash", image_data_to_json),
+    modification_to_json(
+      modify.discovery_splash,
+      "discovery_splash",
+      image_data_to_json,
+    ),
+    modification_to_json(modify.banner, "banner", image_data_to_json),
+    modification_to_json(
+      modify.system_channel_id,
+      "system_channel_id",
+      snowflake_to_json,
+    ),
+    modify_option_to_json(
+      modify.system_channel_flags,
+      "system_channel_flags",
+      flags_to_json(_, bits_guild_system_channel_flags()),
+    ),
+    modification_to_json(
+      modify.rules_channel_id,
+      "rules_channel_id",
+      snowflake_to_json,
+    ),
+    modification_to_json(
+      modify.public_updates_channel_id,
+      "public_updates_channel_id",
+      snowflake_to_json,
+    ),
+    modification_to_json(
+      modify.preferred_locale,
+      "preferred_locale",
+      locale_to_json,
+    ),
+    modify_option_to_json(modify.features, "features", json.array(
+      _,
+      guild_feature_to_json,
+    )),
+    modification_to_json(modify.description, "description", json.string),
+    modify_option_to_json(
+      modify.is_premium_progress_bar_enabled,
+      "premium_progress_bar_enabled",
+      json.bool,
+    ),
+    modification_to_json(
+      modify.safety_alerts_channel_id,
+      "safety_alerts_channel_id",
+      snowflake_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+fn guild_feature_to_json(feature: GuildFeature) -> Json {
+  case feature {
+    GuildCanUseAnimatedBanner -> "ANIMATED_BANNER"
+    GuildCanUseAnimatedIcon -> "ANIMATED_ICON"
+    GuildUsesOldPermissionConfigurationBehavior ->
+      "APPLICATION_COMMAND_PERMISSIONS_V2"
+    GuildCreatedAutoModerationRules -> "AUTO_MODERATION"
+    GuildCanUseBanner -> "BANNER"
+    GuildIsCommunity -> "COMMUNITY"
+    GuildUsesMonetization -> "CREATOR_MONETIZABLE_PROVISIONAL"
+    GuildUsesRoleSubscriptionPromoPage -> "CREATOR_STORE_PAGE"
+    GuildIsDeveloperSupportServer -> "DEVELOPER_SUPPORT_SERVER"
+    GuildIsDiscoverable -> "DISCOVERABLE"
+    GuildIsFeaturable -> "FEATURABLE"
+    GuildHasPausedInvites -> "INVITES_DISABLED"
+    GuildCanUseInviteSplash -> "INVITE_SPLASH"
+    GuildUsesMembershipScreening -> "MEMBER_VERIFICATION_GATE_ENABLED"
+    GuildHasMoreSoundboardSoundSlots -> "MORE_SOUNDBOARD"
+    GuildHasMoreStickerSlots -> "MORE_STICKERS"
+    GuildCanCreateAnnouncementChannels -> "NEWS"
+    GuildIsPartnered -> "PARTNERED"
+    GuildCanBePreviewed -> "PREVIEW_ENABLED"
+    GuildDisabledRaidAlerts -> "RAID_ALERTS_DISABLED"
+    GuildCanUseRoleIcons -> "ROLE_ICONS"
+    GuildHasPurchasableRoleSubscriptions ->
+      "ROLE_SUBSCRIPTIONS_AVAILABLE_FOR_PURCHASE"
+    GuildUsesRoleSubscriptions -> "ROLE_SUBSCRIPTIONS_ENABLED"
+    GuildCreatedSoundboardSounds -> "SOUNDBOARD"
+    GuildUsesTicketedEvents -> "TICKETED_EVENTS_ENABLED"
+    GuildCanUseVanityUrl -> "VANITY_URL"
+    GuildIsVerified -> "VERIFIED"
+    GuildCanUse384KbpsVoiceBitrate -> "VIP_REGIONS"
+    GuildUsesWelcomeScreen -> "WELCOME_SCREEN"
+    GuildCanUseGuestInvites -> "GUESTS_ENABLED"
+    GuildCanUseGuildTags -> "GUILD_TAGS"
+    GuildCanUseEnhancedRoleColours -> "ENHANCED_ROLE_COLORS"
+  }
+  |> json.string
+}
+
+fn afk_timeout_to_json(afk_timeout: AfkTimeout) -> Json {
+  case afk_timeout {
+    AfkTimeout60Seconds -> 60
+    AfkTimeout300Seconds -> 300
+    AfkTimeout900Seconds -> 900
+    AfkTimeout1800Seconds -> 1800
+    AfkTimeout3600Seconds -> 3600
+  }
+  |> json.int
+}
+
+fn guild_explicit_content_filter_setting_to_json(
+  setting: GuildExplicitContentFilterSetting,
+) -> Json {
+  case setting {
+    GuildExplicitContentFilterDisabled -> 0
+    GuildExplicitContentFilterForMembersWithoutRoles -> 1
+    GuildExplicitContentFilterForAllMembers -> 2
+  }
+  |> json.int
+}
+
+fn guild_default_message_notification_setting_to_json(
+  setting: GuildDefaultMessageNotificationSetting,
+) -> Json {
+  case setting {
+    NotifyForAllMessages -> 0
+    NotifyOnlyForMentions -> 1
+  }
+  |> json.int
+}
+
+fn guild_member_verification_level_to_json(
+  level: GuildMemberVerificationLevel,
+) -> Json {
+  case level {
+    NoGuildMemberVerification -> 0
+    LowGuildMemberVerification -> 1
+    MediumGuildMemberVerification -> 2
+    HighGuildMemberVerification -> 3
+    VeryHighGuildMemberVerification -> 4
+  }
+  |> json.int
+}
+
+/// Requires the `AllowManagingGuild` permission.
+pub fn modify_guild(
+  token token: Token,
+  id id: Snowflake(Guild),
+  using modify: ModifyGuild,
+  because reason: Option(String),
+) -> Result(Guild, RestError) {
+  let body =
+    modify
+    |> modify_guild_to_json
+    |> json.to_string
+
+  new_api_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(id),
+    method: http.Patch,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_decoder())
 }
