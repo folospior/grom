@@ -763,10 +763,11 @@ pub opaque type Builder(state) {
   Builder(
     identify: BaseIdentifyMessage,
     data: Data,
-    init: fn(Subject(Message)) -> Result(state, String),
+    initial_state: state,
     handler: fn(state, Event) -> Next(state),
     close: fn(state) -> Nil,
     shard_count: Option(Int),
+    name: process.Name(Message),
   )
 }
 
@@ -2355,34 +2356,19 @@ pub fn stop_abnormal(reason: String) -> Next(state) {
 /// * `RequestGuildMembers`
 /// * `RequestSoundboardSounds`
 pub fn new(
-  state: state,
-  identify: BaseIdentifyMessage,
-  data: Data,
+  named name: process.Name(Message),
+  holding state: state,
+  identifying_as identify: BaseIdentifyMessage,
+  using data: Data,
 ) -> Builder(state) {
   Builder(
     identify:,
     data:,
-    init: fn(_) { Ok(state) },
+    initial_state: state,
     handler: fn(state, _event) { continue(state) },
     close: fn(_state) { Nil },
     shard_count: None,
-  )
-}
-
-/// You should hold the gateway subject in your state.
-/// You'll send user messages to that subject.
-pub fn new_with_initializer(
-  init: fn(Subject(Message)) -> Result(user_state, String),
-  identify: BaseIdentifyMessage,
-  data: Data,
-) -> Builder(user_state) {
-  Builder(
-    identify:,
-    data:,
-    init:,
-    handler: fn(state, _event) { continue(state) },
-    close: fn(_state) { Nil },
-    shard_count: None,
+    name:,
   )
 }
 
@@ -2416,9 +2402,7 @@ pub fn supervised(
   supervision.supervisor(run: fn() { start(builder) })
 }
 
-/// You probably want to use [supervised](#supervised) along with a supervisor instead.
-/// This will be removed in a future release.
-pub fn start(
+fn start(
   builder: Builder(state),
 ) -> Result(actor.Started(Subject(Message)), actor.StartError) {
   let shard_count = case builder.shard_count {
@@ -2449,11 +2433,9 @@ pub fn start(
     })
 
   actor.new_with_initialiser(1000, fn(subject) {
-    use user_state <- result.try(builder.init(subject))
-
     let state =
       Gateway(
-        user_state:,
+        user_state: builder.initial_state,
         identify: builder.identify,
         data: builder.data,
         event_handler: builder.handler,
@@ -2490,6 +2472,7 @@ pub fn start(
     |> actor.returning(subject)
     |> Ok
   })
+  |> actor.named(builder.name)
   |> actor.on_message(on_gateway_message)
   |> actor.start
 }
