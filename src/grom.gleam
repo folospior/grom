@@ -11,6 +11,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import gleam_community/colour.{type Colour}
 import status_code
@@ -1216,8 +1217,562 @@ pub fn leave_guild(
   |> send_no_content_request
 }
 
-// TODO: GET RID OF ME! USE ACTUAL CHANNELS
-pub type Channel
+pub type Channel {
+  Channel(id: Snowflake(Channel), data: ChannelData)
+}
+
+pub type ChannelData {
+  ChannelGuild(GuildChannel)
+  ChannelDm(DmChannel)
+  ChannelThread(Thread)
+}
+
+pub type Thread {
+  Thread(
+    id: Snowflake(Thread),
+    type_: ThreadType,
+    /// Is `None` in some gateway events.
+    guild_id: Option(Snowflake(Guild)),
+    name: String,
+    /// Is `None` if there are no messages in the channel.
+    last_message_id: Option(Snowflake(Message)),
+    /// The amount of time between a user has to wait between sending a message or creating a thread.
+    /// 
+    /// Between 0 and 21600 seconds.
+    ///
+    /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+    rate_limit_per_user: Duration,
+    parent_id: Snowflake(GuildChannel),
+    /// Number of messages in the thread, not including the initial message or deleted messages.
+    ///
+    /// Inaccurate for threads created before July 1st, 2022 if they have more than 50 messages.
+    message_count: Int,
+    /// Stops counting at 50.
+    approximate_member_count: Int,
+    /// OP's ID.
+    owner_id: Snowflake(User),
+    is_archived: Bool,
+    /// Time of inactivity after which the thread will be automatically archived.
+    auto_archive_duration: ThreadAutoArchiveDuration,
+    /// Time when the thread's archive status was last changed at.
+    last_archive_status_change_at: Timestamp,
+    /// If a thread is locked, only users with the `AllowManagingThreads` permission will be able to unarchive it.
+    is_locked: Bool,
+    /// Whether non-moderators can add other non-moderators to the thread.
+    ///
+    /// Always `True` on non-private threads. Varies depending on setting in private threads.
+    is_invitable: Bool,
+    /// Is `None` if the thread was created before September 1st, 2022.
+    created_at: Option(Timestamp),
+    flags: List(ThreadFlag),
+    /// Similar to `message_count`, except it won't decrement when a message is deleted.
+    total_message_count: Int,
+    /// IDs of the tags that are applied to this thread.
+    applied_tags_ids: List(Snowflake(ForumTag)),
+  )
+}
+
+fn thread_decoder() -> Decoder(Thread) {
+  use id <- decode.field("id", snowflake_decoder())
+  use type_ <- decode.field("type", thread_type_decoder())
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use last_message_id <- decode.optional_field(
+    "last_message_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    decode.map(decode.int, duration.seconds),
+  )
+  use parent_id <- decode.field("parent_id", snowflake_decoder())
+  use message_count <- decode.field("message_count", decode.int)
+  use approximate_member_count <- decode.field("member_count", decode.int)
+  use owner_id <- decode.field("owner_id", snowflake_decoder())
+  use is_archived <- decode.subfield(
+    ["thread_metadata", "archived"],
+    decode.bool,
+  )
+  use auto_archive_duration <- decode.subfield(
+    ["thread_metadata", "auto_archive_duration"],
+    thread_auto_archive_duration_decoder(),
+  )
+  use last_archive_status_change_at <- decode.subfield(
+    ["thread_metadata", "archive_timestamp"],
+    rfc3339_decoder(),
+  )
+  use is_locked <- decode.subfield(["thread_metadata", "locked"], decode.bool)
+  use is_invitable <- decode.then(decode.optionally_at(
+    ["thread_metadata", "invitable"],
+    True,
+    decode.bool,
+  ))
+  use created_at <- decode.then(decode.optionally_at(
+    ["thread_metadata", "create_timestamp"],
+    None,
+    decode.optional(rfc3339_decoder()),
+  ))
+  use flags <- decode.optional_field(
+    "flags",
+    [],
+    flags_decoder(bits_thread_flags()),
+  )
+  use total_message_count <- decode.field("total_message_count", decode.int)
+  use applied_tags_ids <- decode.field(
+    "applied_tags",
+    decode.list(snowflake_decoder()),
+  )
+  decode.success(Thread(
+    id:,
+    type_:,
+    guild_id:,
+    name:,
+    last_message_id:,
+    rate_limit_per_user:,
+    parent_id:,
+    message_count:,
+    approximate_member_count:,
+    owner_id:,
+    is_archived:,
+    auto_archive_duration:,
+    last_archive_status_change_at:,
+    is_locked:,
+    is_invitable:,
+    created_at:,
+    flags:,
+    total_message_count:,
+    applied_tags_ids:,
+  ))
+}
+
+fn thread_type_decoder() -> Decoder(ThreadType) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    10 -> decode.success(AnnouncementThread)
+    11 -> decode.success(PublicThread)
+    12 -> decode.success(PrivateThread)
+    _ -> decode.failure(AnnouncementThread, "ThreadType")
+  }
+}
+
+pub type ForumTag {
+  ForumTag(
+    id: Snowflake(ForumTag),
+    name: String,
+    /// Whether this tag can only be added/removed from threads by a member with the `AllowManagingThreads` permission.
+    is_moderated: Bool,
+    /// Only provided if the tag uses a guild emoji. The tag must use *an* emoji.
+    emoji_id: Option(Snowflake(CustomEmoji)),
+    /// Only provided if the tag uses a unicode emoji. The tag must use *an* emoji.
+    emoji_character: Option(String),
+  )
+}
+
+pub type ThreadFlag {
+  /// The thread is pinned on top of its parent Forum or Media channel.
+  ThreadIsPinned
+}
+
+fn bits_thread_flags() -> List(#(Int, ThreadFlag)) {
+  [#(int.bitwise_shift_left(1, 1), ThreadIsPinned)]
+}
+
+pub fn guild_channel_id_to_channel_id(
+  id: Snowflake(GuildChannel),
+) -> Snowflake(Channel) {
+  Snowflake(id.id)
+}
+
+pub fn category_channel_id_to_channel_id(
+  id: Snowflake(CategoryChannel),
+) -> Snowflake(Channel) {
+  Snowflake(id.id)
+}
+
+pub type ThreadType {
+  AnnouncementThread
+  PublicThread
+  PrivateThread
+}
+
+pub type GuildChannel {
+  GuildChannel(
+    id: Snowflake(GuildChannel),
+    data: GuildChannelData,
+    permission_overwrites: List(PermissionOverwrite),
+    /// Is `None` in some gateway events.
+    guild_id: Option(Snowflake(Guild)),
+    /// Channels with the same position are sorted by ID.
+    position: Int,
+    name: String,
+  )
+}
+
+fn guild_channel_decoder() -> Decoder(GuildChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use data <- decode.then(guild_channel_data_decoder())
+  use permission_overwrites <- decode.optional_field(
+    "permission_overwrites",
+    [],
+    decode.list(permission_overwrite_decoder()),
+  )
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use position <- decode.field("position", decode.int)
+  use name <- decode.field("name", decode.string)
+  decode.success(GuildChannel(
+    id:,
+    data:,
+    permission_overwrites:,
+    guild_id:,
+    position:,
+    name:,
+  ))
+}
+
+pub type GuildChannelData {
+  ChannelText(TextChannel)
+  ChannelVoice(VoiceChannel)
+  ChannelCategory(CategoryChannel)
+  ChannelAnnouncement(AnnouncementChannel)
+  ChannelStage(StageChannel)
+  ChannelForum(ForumChannel)
+  ChannelMedia(MediaChannel)
+}
+
+fn guild_channel_data_decoder() -> Decoder(GuildChannelData) {
+  use type_ <- decode.field("type", decode.int)
+
+  case type_ {
+    0 -> decode.map(text_channel_decoder(), ChannelText)
+    _ ->
+      decode.failure(
+        ChannelCategory(CategoryChannel(Snowflake(0))),
+        "GuildChannelData",
+      )
+  }
+}
+
+pub type TextChannel {
+  TextChannel(
+    id: Snowflake(TextChannel),
+    topic: Option(String),
+    is_nsfw: Bool,
+    /// Is `None` if there are no messages in the channel.
+    last_message_id: Option(Snowflake(Message)),
+    /// The amount of time between a user has to wait between sending a message or creating a thread.
+    /// 
+    /// Between 0 and 21600 seconds.
+    ///
+    /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+    rate_limit_per_user: Duration,
+    /// Is `None` in some gateway events and if there are no pinned messages.
+    last_pin_timestamp: Option(Timestamp),
+    default_thread_auto_archive_duration: ThreadAutoArchiveDuration,
+    default_thread_rate_limit_per_user: Duration,
+    /// Is `None` if the channel isn't in a category.
+    parent_id: Option(Snowflake(CategoryChannel)),
+  )
+}
+
+fn text_channel_decoder() -> Decoder(TextChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use topic <- decode.optional_field(
+    "topic",
+    None,
+    decode.optional(decode.string),
+  )
+  use is_nsfw <- decode.field("nsfw", decode.bool)
+  use last_message_id <- decode.optional_field(
+    "last_message_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    decode.map(decode.int, duration.seconds),
+  )
+  use last_pin_timestamp <- decode.optional_field(
+    "last_pin_timestamp",
+    None,
+    decode.optional(rfc3339_decoder()),
+  )
+  use default_thread_auto_archive_duration <- decode.field(
+    "default_thread_auto_archive_duration",
+    thread_auto_archive_duration_decoder(),
+  )
+  use default_thread_rate_limit_per_user <- decode.field(
+    "default_thread_rate_limit_per_user",
+    todo as "Decoder for Duration",
+  )
+  use parent_id <- decode.field(
+    "parent_id",
+    decode.optional(todo as "Decoder for Snowflake(CategoryChannel)"),
+  )
+  decode.success(TextChannel(
+    id:,
+    topic:,
+    is_nsfw:,
+    last_message_id:,
+    rate_limit_per_user:,
+    last_pin_timestamp:,
+    default_thread_auto_archive_duration:,
+    default_thread_rate_limit_per_user:,
+    parent_id:,
+  ))
+}
+
+pub type DmChannel {
+  DmChannel(
+    id: Snowflake(DmChannel),
+    /// Is `None` if there are no messages in the channel.
+    last_message_id: Option(Snowflake(Message)),
+    recipient: User,
+    /// Is `None` in some gateway events and if there are no pinned messages.
+    last_pin_timestamp: Option(Timestamp),
+  )
+}
+
+pub type VoiceChannel {
+  VoiceChannel(
+    id: Snowflake(VoiceChannel),
+    is_nsfw: Bool,
+    /// Is `None` if no messages have been sent in the voice channel adjacent text channel.
+    last_message_id: Option(Snowflake(Message)),
+    /// Bitrate in bits per second.
+    bitrate: Int,
+    user_limit: Option(Int),
+    /// The amount of time between a user has to wait between sending a message in the voice channel adjacent text channel.
+    /// 
+    /// Between 0 and 21600 seconds.
+    ///
+    /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+    rate_limit_per_user: Duration,
+    /// Voice Region ID for the voice channel.
+    /// Automatically assigned if `None`.
+    rtc_region: Option(String),
+    video_quality_mode: VideoQualityMode,
+    /// Is `None` if the channel isn't in a category.
+    parent_id: Option(Snowflake(CategoryChannel)),
+  )
+}
+
+pub type VideoQualityMode {
+  AutomaticVideoQuality
+  /// 720p
+  HdVideoQuality
+}
+
+pub type ThreadAutoArchiveDuration {
+  ArchiveThreadAfter1Hour
+  ArchiveThreadAfter1Day
+  ArchiveThreadAfter3Days
+  ArchiveThreadAfter7Days
+}
+
+fn thread_auto_archive_duration_decoder() -> Decoder(ThreadAutoArchiveDuration) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    60 -> decode.success(ArchiveThreadAfter1Hour)
+    1440 -> decode.success(ArchiveThreadAfter1Day)
+    4320 -> decode.success(ArchiveThreadAfter3Days)
+    10_080 -> decode.success(ArchiveThreadAfter7Days)
+    _ -> decode.failure(ArchiveThreadAfter1Hour, "ThreadAutoArchiveDuration")
+  }
+}
+
+pub type CategoryChannel {
+  CategoryChannel(id: Snowflake(CategoryChannel))
+}
+
+pub type AnnouncementChannel {
+  AnnouncementChannel(
+    id: Snowflake(TextChannel),
+    topic: Option(String),
+    is_nsfw: Bool,
+    /// Is `None` if there are no messages in the channel.
+    last_message_id: Option(Snowflake(Message)),
+    /// Is `None` in some gateway events and if there are no pinned messages.
+    last_pin_timestamp: Option(Timestamp),
+    default_thread_auto_archive_duration: ThreadAutoArchiveDuration,
+    /// Is `None` if the channel isn't in a category.
+    parent_id: Option(Snowflake(CategoryChannel)),
+  )
+}
+
+pub type StageChannel {
+  StageChannel(
+    id: Snowflake(VoiceChannel),
+    is_nsfw: Bool,
+    /// Is `None` if no messages have been sent in the stage channel adjacent text channel.
+    last_message_id: Option(Snowflake(Message)),
+    /// Bitrate in bits per second.
+    bitrate: Int,
+    user_limit: Option(Int),
+    /// The amount of time between a user has to wait between sending a message in the stage channel adjacent text channel.
+    /// 
+    /// Between 0 and 21600 seconds.
+    ///
+    /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+    rate_limit_per_user: Duration,
+    video_quality_mode: VideoQualityMode,
+    /// Is `None` if the channel isn't in a category.
+    parent_id: Option(Snowflake(CategoryChannel)),
+  )
+}
+
+pub fn thread_id_to_channel_id(id: Snowflake(Thread)) -> Snowflake(Channel) {
+  Snowflake(id.id)
+}
+
+pub type ForumChannel {
+  ForumChannel(
+    id: Snowflake(ForumChannel),
+    topic: Option(String),
+    /// The amount of time between a user has to wait between creating threads.
+    /// 
+    /// Between 0 and 21600 seconds.
+    ///
+    /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+    rate_limit_per_user: Duration,
+    last_thread_id: Option(Snowflake(Thread)),
+    parent_id: Option(Snowflake(CategoryChannel)),
+    default_thread_auto_archive_duration: ThreadAutoArchiveDuration,
+    flags: List(ForumChannelFlag),
+    available_tags: List(ForumTag),
+    default_reaction: Option(DefaultForumReaction),
+    default_thread_rate_limit_per_user: Duration,
+    default_sort_order: ForumSortOrder,
+    default_layout: ForumLayout,
+  )
+}
+
+pub type MediaChannel {
+  MediaChannel(
+    id: Snowflake(ForumChannel),
+    topic: Option(String),
+    /// The amount of time between a user has to wait between creating threads.
+    /// 
+    /// Between 0 and 21600 seconds.
+    ///
+    /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+    rate_limit_per_user: Duration,
+    last_thread_id: Option(Snowflake(Thread)),
+    parent_id: Option(Snowflake(CategoryChannel)),
+    default_thread_auto_archive_duration: ThreadAutoArchiveDuration,
+    flags: List(MediaChannelFlag),
+    available_tags: List(ForumTag),
+    default_reaction: Option(DefaultForumReaction),
+    default_thread_rate_limit_per_user: Duration,
+    default_sort_order: ForumSortOrder,
+  )
+}
+
+pub type ForumLayout {
+  /// An admin hasn't specified a default forum layout.
+  ForumLayoutUnspecified
+  ListForumLayout
+  GalleryForumLayout
+}
+
+pub type ForumSortOrder {
+  ForumSortOrderUnspecified
+  SortForumPostsByActivity
+  /// From newest to oldest
+  SortForumPostsByCreationTime
+}
+
+fn forum_sort_order_decoder() -> Decoder(ForumSortOrder) {
+  use variant <- decode.then(decode.optional(decode.int))
+  case variant {
+    Some(0) -> decode.success(SortForumPostsByActivity)
+    Some(1) -> decode.success(SortForumPostsByCreationTime)
+    None -> decode.success(ForumSortOrderUnspecified)
+    _ -> decode.failure(ForumSortOrderUnspecified, "ForumSortOrder")
+  }
+}
+
+pub type ForumChannelFlag {
+  ForumChannelRequiresTags
+}
+
+pub type MediaChannelFlag {
+  MediaChannelRequiresTags
+  MediaChannelHidesMediaDownloadOptions
+}
+
+pub type DefaultForumReaction {
+  DefaultForumReactionCustomEmoji(id: Snowflake(CustomEmoji))
+  DefaultForumReactionStandardemoji(character: String)
+}
+
+// Get rid of me!! Use actual messages
+pub type Message
+
+/// Permission overwrites are used to grant/deny specific permissions to members
+/// (personally or per-role) in specific channels.
+///
+/// The order of importance for permission overwrites:
+/// 1. User-based allow overwrites
+/// 2. User-based deny overwrites
+/// 3. Role-based allow overwrites
+/// 4. Role-based deny overwrites
+/// 5. @everyone allow overwrites
+/// 6. @everyone deny overwrites
+/// 7. Guild-level role permissions
+/// 8. Guild-level @everyone permissions
+pub type PermissionOverwrite {
+  RolePermissionOverwrite(
+    role_id: Snowflake(Role),
+    allow: List(Permission),
+    deny: List(Permission),
+  )
+  UserPermissionOverwrite(
+    user_id: Snowflake(User),
+    allow: List(Permission),
+    deny: List(Permission),
+  )
+}
+
+fn permission_overwrite_decoder() -> Decoder(PermissionOverwrite) {
+  use variant <- decode.field("type", decode.int)
+  use allow <- decode.field("allow", permissions_decoder())
+  use deny <- decode.field("deny", permissions_decoder())
+
+  case variant {
+    0 -> {
+      use role_id <- decode.field("id", snowflake_decoder())
+      decode.success(RolePermissionOverwrite(role_id:, allow:, deny:))
+    }
+    1 -> {
+      use user_id <- decode.field("id", snowflake_decoder())
+      decode.success(UserPermissionOverwrite(user_id:, allow:, deny:))
+    }
+    _ ->
+      decode.failure(
+        RolePermissionOverwrite(Snowflake(0), [], []),
+        "PermissionOverwrite",
+      )
+  }
+}
+
+/// Returns the ID of the `@everyone` role for a specific guild.
+pub fn get_everyone_role_id(
+  of_guild_with_id id: Snowflake(Guild),
+) -> Snowflake(Role) {
+  // the @everyone role has the same ID as the guild
+  id
+  |> snowflake_to_int
+  |> new_snowflake
+}
 
 pub type Guild {
   Guild(
@@ -2773,4 +3328,38 @@ pub fn modify_guild(
   |> request_with_reason(reason)
   |> request.set_body(body)
   |> send_request(decode_with: guild_decoder())
+}
+
+fn channel_decoder() -> Decoder(Channel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use type_ <- decode.field("type", decode.int)
+  use data <- decode.then(case type_ {
+    1 -> decode.map(dm_channel_decoder(), ChannelDm)
+    10 | 11 | 12 -> decode.map(thread_decoder(), ChannelThread)
+    _ -> decode.map(guild_channel_decoder(), ChannelGuild)
+  })
+
+  decode.success(Channel(id:, data:))
+}
+
+fn dm_channel_decoder() -> Decoder(DmChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use last_message_id <- decode.optional_field(
+    "last_message_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use recipient <- decode.field("recipients", decode.at([0], user_decoder()))
+  use last_pin_timestamp <- decode.optional_field(
+    "last_pin_timestamp",
+    None,
+    decode.optional(rfc3339_decoder()),
+  )
+
+  decode.success(DmChannel(
+    id:,
+    last_message_id:,
+    recipient:,
+    last_pin_timestamp:,
+  ))
 }
