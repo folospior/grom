@@ -1,6 +1,7 @@
 import gleam/bit_array
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
+import gleam/float
 import gleam/function
 import gleam/http
 import gleam/http/request.{type Request}
@@ -27,7 +28,7 @@ pub opaque type Snowflake(a) {
 /// An authentication token, required to identify the user (bot) making requests.
 /// See [`bot`](#bot) for creating bot tokens.
 /// 
-/// In the future, this will be extended to also support bearer tokens.
+/// In the future, this will be extended to also support OAuth2 bearer tokens.
 pub opaque type Token {
   BotToken(token: String)
 }
@@ -204,7 +205,16 @@ fn flags_to_int(flags: List(flag), bits_flags: List(#(Int, flag))) -> Int {
 }
 
 fn flags_to_json(flags: List(flag), bits_flags: List(#(Int, flag))) -> Json {
-  json.int(flags |> flags_to_int(bits_flags))
+  flags
+  |> flags_to_int(bits_flags)
+  |> json.int
+}
+
+fn permissions_to_json(permissions: List(Permission)) -> Json {
+  permissions
+  |> flags_to_int(bits_permissions())
+  |> int.to_string
+  |> json.string
 }
 
 pub type User {
@@ -544,7 +554,7 @@ const discord_api_url: String = "discord.com"
 
 const discord_api_path: String = "api/v10"
 
-fn new_api_request(
+fn new_request(
   token token: Token,
   to path: String,
   method method: http.Method,
@@ -663,7 +673,7 @@ fn parse_error_response(
 }
 
 pub fn get_current_user(token token: Token) -> Result(User, RestError) {
-  new_api_request(token:, to: "/users/@me", method: http.Get)
+  new_request(token:, to: "/users/@me", method: http.Get)
   |> send_request(decode_with: user_decoder())
 }
 
@@ -671,7 +681,7 @@ pub fn get_user(
   token token: Token,
   id id: Snowflake(User),
 ) -> Result(User, RestError) {
-  new_api_request(
+  new_request(
     token:,
     to: "/users/" <> snowflake_to_string(id),
     method: http.Get,
@@ -741,7 +751,7 @@ pub fn modify_current_user(
 ) -> Result(User, RestError) {
   let body = modify |> modify_current_user_to_json |> json.to_string
 
-  new_api_request(token:, to: "/users/@me", method: http.Patch)
+  new_request(token:, to: "/users/@me", method: http.Patch)
   |> request.set_body(body)
   |> send_request(decode_with: user_decoder())
 }
@@ -786,7 +796,7 @@ pub fn delete_current_user_banner(
 
 fn modify_current_user_to_json(modify: ModifyCurrentUser) -> Json {
   [
-    modify_option_to_json(modify.username, "username", json.string),
+    optional_to_json(modify.username, "username", json.string),
     modification_to_json(modify.avatar, "avatar", image_data_to_json),
     modification_to_json(modify.banner, "banner", image_data_to_json),
   ]
@@ -1197,7 +1207,7 @@ pub fn get_current_user_as_guild_member(
   token token: Token,
   for guild_id: Snowflake(Guild),
 ) -> Result(GuildMember, RestError) {
-  new_api_request(
+  new_request(
     token:,
     to: "/users/@me/guilds/" <> snowflake_to_string(guild_id) <> "/member",
     method: http.Get,
@@ -1207,9 +1217,9 @@ pub fn get_current_user_as_guild_member(
 
 pub fn leave_guild(
   token token: Token,
-  id guild_id: Snowflake(Guild),
+  with_id guild_id: Snowflake(Guild),
 ) -> Result(Nil, RestError) {
-  new_api_request(
+  new_request(
     token:,
     to: "/users/@me/guilds/" <> snowflake_to_string(guild_id),
     method: http.Delete,
@@ -1366,11 +1376,44 @@ pub type ForumTag {
     name: String,
     /// Whether this tag can only be added/removed from threads by a member with the `AllowManagingThreads` permission.
     is_moderated: Bool,
-    /// Only provided if the tag uses a guild emoji. The tag must use *an* emoji.
-    emoji_id: Option(Snowflake(CustomEmoji)),
-    /// Only provided if the tag uses a unicode emoji. The tag must use *an* emoji.
-    emoji_character: Option(String),
+    emoji: ForumTagEmoji,
   )
+}
+
+fn forum_tag_to_json(forum_tag: ForumTag) -> Json {
+  let ForumTag(id:, name:, is_moderated:, emoji:) = forum_tag
+  json.object([
+    #("id", snowflake_to_json(id)),
+    #("name", json.string(name)),
+    #("moderated", json.bool(is_moderated)),
+    #("emoji", forum_tag_emoji_to_json(emoji)),
+  ])
+}
+
+pub type ForumTagEmoji {
+  StandardForumTagEmoji(character: String)
+  CustomForumTagEmoji(id: Snowflake(CustomEmoji))
+}
+
+fn forum_tag_decoder() -> Decoder(ForumTag) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use is_moderated <- decode.field("moderated", decode.bool)
+  use emoji <- decode.then(
+    decode.one_of(
+      {
+        use emoji_id <- decode.field("emoji_id", snowflake_decoder())
+        decode.success(CustomForumTagEmoji(id: emoji_id))
+      },
+      or: [
+        {
+          use character <- decode.field("emoji_name", decode.string)
+          decode.success(StandardForumTagEmoji(character:))
+        },
+      ],
+    ),
+  )
+  decode.success(ForumTag(id:, name:, is_moderated:, emoji:))
 }
 
 pub type ThreadFlag {
@@ -1453,6 +1496,12 @@ fn guild_channel_data_decoder() -> Decoder(GuildChannelData) {
 
   case type_ {
     0 -> decode.map(text_channel_decoder(), ChannelText)
+    2 -> decode.map(voice_channel_decoder(), ChannelVoice)
+    4 -> decode.map(category_channel_decoder(), ChannelCategory)
+    5 -> decode.map(announcement_channel_decoder(), ChannelAnnouncement)
+    13 -> decode.map(stage_channel_decoder(), ChannelStage)
+    15 -> decode.map(forum_channel_decoder(), ChannelForum)
+    16 -> decode.map(media_channel_decoder(), ChannelMedia)
     _ ->
       decode.failure(
         ChannelCategory(CategoryChannel(Snowflake(0))),
@@ -1506,16 +1555,17 @@ fn text_channel_decoder() -> Decoder(TextChannel) {
     decode.optional(rfc3339_decoder()),
   )
   use default_thread_auto_archive_duration <- decode.field(
-    "default_thread_auto_archive_duration",
+    "default_auto_archive_duration",
     thread_auto_archive_duration_decoder(),
   )
   use default_thread_rate_limit_per_user <- decode.field(
     "default_thread_rate_limit_per_user",
-    todo as "Decoder for Duration",
+    decode.map(decode.int, duration.seconds),
   )
-  use parent_id <- decode.field(
+  use parent_id <- decode.optional_field(
     "parent_id",
-    decode.optional(todo as "Decoder for Snowflake(CategoryChannel)"),
+    None,
+    decode.optional(snowflake_decoder()),
   )
   decode.success(TextChannel(
     id:,
@@ -1558,11 +1608,57 @@ pub type VoiceChannel {
     rate_limit_per_user: Duration,
     /// Voice Region ID for the voice channel.
     /// Automatically assigned if `None`.
-    rtc_region: Option(String),
+    rtc_region_id: Option(String),
     video_quality_mode: VideoQualityMode,
     /// Is `None` if the channel isn't in a category.
     parent_id: Option(Snowflake(CategoryChannel)),
   )
+}
+
+fn voice_channel_decoder() -> Decoder(VoiceChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use is_nsfw <- decode.field("nsfw", decode.bool)
+  use last_message_id <- decode.optional_field(
+    "last_message_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+
+  use bitrate <- decode.field("bitrate", decode.int)
+  use user_limit <- decode.optional_field(
+    "user_limit",
+    None,
+    decode.optional(decode.int),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    decode.map(decode.int, duration.seconds),
+  )
+  use rtc_region_id <- decode.optional_field(
+    "rtc_region",
+    None,
+    decode.optional(decode.string),
+  )
+  use video_quality_mode <- decode.field(
+    "video_quality_mode",
+    video_quality_mode_decoder(),
+  )
+  use parent_id <- decode.optional_field(
+    "parent_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  decode.success(VoiceChannel(
+    id:,
+    is_nsfw:,
+    last_message_id:,
+    bitrate:,
+    user_limit:,
+    rate_limit_per_user:,
+    rtc_region_id:,
+    video_quality_mode:,
+    parent_id:,
+  ))
 }
 
 pub type VideoQualityMode {
@@ -1571,11 +1667,38 @@ pub type VideoQualityMode {
   HdVideoQuality
 }
 
+fn video_quality_mode_to_json(video_quality_mode: VideoQualityMode) -> Json {
+  case video_quality_mode {
+    AutomaticVideoQuality -> json.int(1)
+    HdVideoQuality -> json.int(2)
+  }
+}
+
+fn video_quality_mode_decoder() -> Decoder(VideoQualityMode) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    1 -> decode.success(AutomaticVideoQuality)
+    2 -> decode.success(HdVideoQuality)
+    _ -> decode.failure(AutomaticVideoQuality, "VideoQualityMode")
+  }
+}
+
 pub type ThreadAutoArchiveDuration {
   ArchiveThreadAfter1Hour
   ArchiveThreadAfter1Day
   ArchiveThreadAfter3Days
   ArchiveThreadAfter7Days
+}
+
+fn thread_auto_archive_duration_to_json(
+  thread_auto_archive_duration: ThreadAutoArchiveDuration,
+) -> Json {
+  case thread_auto_archive_duration {
+    ArchiveThreadAfter1Hour -> json.int(60)
+    ArchiveThreadAfter1Day -> json.int(1440)
+    ArchiveThreadAfter3Days -> json.int(4320)
+    ArchiveThreadAfter7Days -> json.int(10_080)
+  }
 }
 
 fn thread_auto_archive_duration_decoder() -> Decoder(ThreadAutoArchiveDuration) {
@@ -1593,9 +1716,14 @@ pub type CategoryChannel {
   CategoryChannel(id: Snowflake(CategoryChannel))
 }
 
+fn category_channel_decoder() -> Decoder(CategoryChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  decode.success(CategoryChannel(id:))
+}
+
 pub type AnnouncementChannel {
   AnnouncementChannel(
-    id: Snowflake(TextChannel),
+    id: Snowflake(AnnouncementChannel),
     topic: Option(String),
     is_nsfw: Bool,
     /// Is `None` if there are no messages in the channel.
@@ -1608,9 +1736,47 @@ pub type AnnouncementChannel {
   )
 }
 
+fn announcement_channel_decoder() -> Decoder(AnnouncementChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use topic <- decode.optional_field(
+    "topic",
+    None,
+    decode.optional(decode.string),
+  )
+  use is_nsfw <- decode.field("nsfw", decode.bool)
+  use last_message_id <- decode.optional_field(
+    "last_message_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use last_pin_timestamp <- decode.optional_field(
+    "last_pin_timestamp",
+    None,
+    decode.optional(rfc3339_decoder()),
+  )
+  use default_thread_auto_archive_duration <- decode.field(
+    "default_auto_archive_duration",
+    thread_auto_archive_duration_decoder(),
+  )
+  use parent_id <- decode.optional_field(
+    "parent_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  decode.success(AnnouncementChannel(
+    id:,
+    topic:,
+    is_nsfw:,
+    last_message_id:,
+    last_pin_timestamp:,
+    default_thread_auto_archive_duration:,
+    parent_id:,
+  ))
+}
+
 pub type StageChannel {
   StageChannel(
-    id: Snowflake(VoiceChannel),
+    id: Snowflake(StageChannel),
     is_nsfw: Bool,
     /// Is `None` if no messages have been sent in the stage channel adjacent text channel.
     last_message_id: Option(Snowflake(Message)),
@@ -1623,10 +1789,58 @@ pub type StageChannel {
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
     rate_limit_per_user: Duration,
+    /// Voice Region ID for the voice channel.
+    /// Automatically assigned if `None`.
+    rtc_region_id: Option(String),
     video_quality_mode: VideoQualityMode,
     /// Is `None` if the channel isn't in a category.
     parent_id: Option(Snowflake(CategoryChannel)),
   )
+}
+
+fn stage_channel_decoder() -> Decoder(StageChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use is_nsfw <- decode.field("nsfw", decode.bool)
+  use last_message_id <- decode.optional_field(
+    "last_message_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use bitrate <- decode.field("bitrate", decode.int)
+  use user_limit <- decode.optional_field(
+    "user_limit",
+    None,
+    decode.optional(decode.int),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    decode.map(decode.int, duration.seconds),
+  )
+  use rtc_region_id <- decode.optional_field(
+    "rtc_region",
+    None,
+    decode.optional(decode.string),
+  )
+  use video_quality_mode <- decode.field(
+    "video_quality_mode",
+    video_quality_mode_decoder(),
+  )
+  use parent_id <- decode.optional_field(
+    "parent_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  decode.success(StageChannel(
+    id:,
+    is_nsfw:,
+    last_message_id:,
+    bitrate:,
+    user_limit:,
+    rtc_region_id:,
+    rate_limit_per_user:,
+    video_quality_mode:,
+    parent_id:,
+  ))
 }
 
 pub fn thread_id_to_channel_id(id: Snowflake(Thread)) -> Snowflake(Channel) {
@@ -1655,9 +1869,72 @@ pub type ForumChannel {
   )
 }
 
+fn forum_channel_decoder() -> Decoder(ForumChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use topic <- decode.optional_field(
+    "topic",
+    None,
+    decode.optional(decode.string),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    decode.map(decode.int, duration.seconds),
+  )
+  use last_thread_id <- decode.optional_field(
+    "last_message_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use parent_id <- decode.optional_field(
+    "parent_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use default_thread_auto_archive_duration <- decode.field(
+    "default_auto_archive_duration",
+    thread_auto_archive_duration_decoder(),
+  )
+  use flags <- decode.field("flags", flags_decoder(bits_forum_channel_flags()))
+  use available_tags <- decode.field(
+    "available_tags",
+    decode.list(forum_tag_decoder()),
+  )
+  use default_reaction <- decode.optional_field(
+    "default_reaction_emoji",
+    None,
+    decode.optional(default_forum_reaction_decoder()),
+  )
+  use default_thread_rate_limit_per_user <- decode.field(
+    "default_thread_rate_limit_per_user",
+    decode.map(decode.int, duration.seconds),
+  )
+  use default_sort_order <- decode.field(
+    "default_sort_order",
+    forum_sort_order_decoder(),
+  )
+  use default_layout <- decode.field(
+    "default_forum_layout",
+    forum_layout_decoder(),
+  )
+  decode.success(ForumChannel(
+    id:,
+    topic:,
+    rate_limit_per_user:,
+    last_thread_id:,
+    parent_id:,
+    default_thread_auto_archive_duration:,
+    flags:,
+    available_tags:,
+    default_reaction:,
+    default_thread_rate_limit_per_user:,
+    default_sort_order:,
+    default_layout:,
+  ))
+}
+
 pub type MediaChannel {
   MediaChannel(
-    id: Snowflake(ForumChannel),
+    id: Snowflake(MediaChannel),
     topic: Option(String),
     /// The amount of time between a user has to wait between creating threads.
     /// 
@@ -1676,11 +1953,86 @@ pub type MediaChannel {
   )
 }
 
+fn media_channel_decoder() -> Decoder(MediaChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use topic <- decode.optional_field(
+    "topic",
+    None,
+    decode.optional(decode.string),
+  )
+  use rate_limit_per_user <- decode.field(
+    "rate_limit_per_user",
+    decode.map(decode.int, duration.seconds),
+  )
+  use last_thread_id <- decode.optional_field(
+    "last_message_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use parent_id <- decode.optional_field(
+    "parent_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use default_thread_auto_archive_duration <- decode.field(
+    "default_auto_archive_duration",
+    thread_auto_archive_duration_decoder(),
+  )
+  use flags <- decode.field("flags", flags_decoder(bits_media_channel_flags()))
+  use available_tags <- decode.field(
+    "available_tags",
+    decode.list(forum_tag_decoder()),
+  )
+  use default_reaction <- decode.field(
+    "default_reaction_emoji",
+    decode.optional(default_forum_reaction_decoder()),
+  )
+  use default_thread_rate_limit_per_user <- decode.field(
+    "default_thread_rate_limit_per_user",
+    decode.map(decode.int, duration.seconds),
+  )
+  use default_sort_order <- decode.field(
+    "default_sort_order",
+    forum_sort_order_decoder(),
+  )
+  decode.success(MediaChannel(
+    id:,
+    topic:,
+    rate_limit_per_user:,
+    last_thread_id:,
+    parent_id:,
+    default_thread_auto_archive_duration:,
+    flags:,
+    available_tags:,
+    default_reaction:,
+    default_thread_rate_limit_per_user:,
+    default_sort_order:,
+  ))
+}
+
 pub type ForumLayout {
   /// An admin hasn't specified a default forum layout.
   ForumLayoutUnspecified
   ListForumLayout
   GalleryForumLayout
+}
+
+fn forum_layout_to_json(layout: ForumLayout) -> Json {
+  json.int(case layout {
+    ForumLayoutUnspecified -> 0
+    ListForumLayout -> 1
+    GalleryForumLayout -> 2
+  })
+}
+
+fn forum_layout_decoder() -> Decoder(ForumLayout) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(ForumLayoutUnspecified)
+    1 -> decode.success(ListForumLayout)
+    2 -> decode.success(GalleryForumLayout)
+    _ -> decode.failure(ForumLayoutUnspecified, "ForumLayout")
+  }
 }
 
 pub type ForumSortOrder {
@@ -1700,8 +2052,20 @@ fn forum_sort_order_decoder() -> Decoder(ForumSortOrder) {
   }
 }
 
+fn forum_sort_order_to_json(order: ForumSortOrder) -> Json {
+  case order {
+    ForumSortOrderUnspecified -> json.null()
+    SortForumPostsByActivity -> json.int(0)
+    SortForumPostsByCreationTime -> json.int(1)
+  }
+}
+
 pub type ForumChannelFlag {
   ForumChannelRequiresTags
+}
+
+fn bits_forum_channel_flags() -> List(#(Int, ForumChannelFlag)) {
+  [#(int.bitwise_shift_left(1, 4), ForumChannelRequiresTags)]
 }
 
 pub type MediaChannelFlag {
@@ -1709,9 +2073,55 @@ pub type MediaChannelFlag {
   MediaChannelHidesMediaDownloadOptions
 }
 
+fn bits_media_channel_flags() -> List(#(Int, MediaChannelFlag)) {
+  [
+    #(int.bitwise_shift_left(1, 4), MediaChannelRequiresTags),
+    #(int.bitwise_shift_left(1, 15), MediaChannelHidesMediaDownloadOptions),
+  ]
+}
+
 pub type DefaultForumReaction {
-  DefaultForumReactionCustomEmoji(id: Snowflake(CustomEmoji))
-  DefaultForumReactionStandardemoji(character: String)
+  CustomDefaultForumReaction(id: Snowflake(CustomEmoji))
+  StandardDefaultForumReaction(character: String)
+}
+
+fn default_forum_reaction_decoder() -> Decoder(DefaultForumReaction) {
+  decode.one_of(
+    {
+      use id <- decode.field("emoji_id", snowflake_decoder())
+      decode.success(CustomDefaultForumReaction(id:))
+    },
+    or: [
+      {
+        use character <- decode.field("emoji_name", decode.string)
+        decode.success(StandardDefaultForumReaction(character:))
+      },
+    ],
+  )
+}
+
+fn default_forum_reaction_to_json(reaction: DefaultForumReaction) -> Json {
+  json.object([
+    case reaction {
+      CustomDefaultForumReaction(id:) -> #("emoji_id", snowflake_to_json(id))
+      StandardDefaultForumReaction(character:) -> #(
+        "emoji_name",
+        json.string(character),
+      )
+    },
+  ])
+}
+
+fn forum_tag_emoji_to_json(emoji: ForumTagEmoji) -> Json {
+  json.object([
+    case emoji {
+      CustomForumTagEmoji(id:) -> #("emoji_id", snowflake_to_json(id))
+      StandardForumTagEmoji(character:) -> #(
+        "emoji_name",
+        json.string(character),
+      )
+    },
+  ])
 }
 
 // Get rid of me!! Use actual messages
@@ -1740,6 +2150,25 @@ pub type PermissionOverwrite {
     allow: List(Permission),
     deny: List(Permission),
   )
+}
+
+fn permission_overwrite_to_json(overwrite: PermissionOverwrite) -> Json {
+  case overwrite {
+    RolePermissionOverwrite(role_id:, allow:, deny:) ->
+      json.object([
+        #("type", json.int(0)),
+        #("id", snowflake_to_json(role_id)),
+        #("allow", permissions_to_json(allow)),
+        #("deny", permissions_to_json(deny)),
+      ])
+    UserPermissionOverwrite(user_id:, allow:, deny:) ->
+      json.object([
+        #("type", json.int(1)),
+        #("id", snowflake_to_json(user_id)),
+        #("allow", permissions_to_json(allow)),
+        #("deny", permissions_to_json(deny)),
+      ])
+  }
 }
 
 fn permission_overwrite_decoder() -> Decoder(PermissionOverwrite) {
@@ -2597,7 +3026,7 @@ pub fn get_guild(
   token token: Token,
   id id: Snowflake(Guild),
 ) -> Result(Guild, RestError) {
-  new_api_request(
+  new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(id),
     method: http.Get,
@@ -2610,7 +3039,7 @@ pub fn get_guild_with_counts(
   token token: Token,
   id id: Snowflake(Guild),
 ) -> Result(#(Guild, GuildApproximateCounts), RestError) {
-  new_api_request(
+  new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(id),
     method: http.Get,
@@ -2704,7 +3133,7 @@ pub fn get_guild_preview(
   token token: Token,
   id id: Snowflake(Guild),
 ) -> Result(GuildPreview, RestError) {
-  new_api_request(
+  new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(id) <> "/preview",
     method: http.Get,
@@ -3131,7 +3560,7 @@ pub fn unset_guild_safety_alerts_channel(modify: ModifyGuild) -> ModifyGuild {
   ModifyGuild(..modify, safety_alerts_channel_id: Delete)
 }
 
-fn modify_option_to_json(
+fn optional_to_json(
   option: Option(a),
   name: String,
   encoder: fn(a) -> Json,
@@ -3144,7 +3573,7 @@ fn modify_option_to_json(
 
 fn modify_guild_to_json(modify: ModifyGuild) -> Json {
   [
-    modify_option_to_json(modify.name, "name", json.string),
+    optional_to_json(modify.name, "name", json.string),
     modification_to_json(
       modify.member_verification_level,
       "verification_level",
@@ -3165,11 +3594,7 @@ fn modify_guild_to_json(modify: ModifyGuild) -> Json {
       "afk_channel_id",
       snowflake_to_json,
     ),
-    modify_option_to_json(
-      modify.afk_timeout,
-      "afk_timeout",
-      afk_timeout_to_json,
-    ),
+    optional_to_json(modify.afk_timeout, "afk_timeout", afk_timeout_to_json),
     modification_to_json(modify.icon, "icon", image_data_to_json),
     modification_to_json(modify.splash, "splash", image_data_to_json),
     modification_to_json(
@@ -3183,7 +3608,7 @@ fn modify_guild_to_json(modify: ModifyGuild) -> Json {
       "system_channel_id",
       snowflake_to_json,
     ),
-    modify_option_to_json(
+    optional_to_json(
       modify.system_channel_flags,
       "system_channel_flags",
       flags_to_json(_, bits_guild_system_channel_flags()),
@@ -3203,12 +3628,12 @@ fn modify_guild_to_json(modify: ModifyGuild) -> Json {
       "preferred_locale",
       locale_to_json,
     ),
-    modify_option_to_json(modify.features, "features", json.array(
+    optional_to_json(modify.features, "features", json.array(
       _,
       guild_feature_to_json,
     )),
     modification_to_json(modify.description, "description", json.string),
-    modify_option_to_json(
+    optional_to_json(
       modify.is_premium_progress_bar_enabled,
       "premium_progress_bar_enabled",
       json.bool,
@@ -3320,7 +3745,7 @@ pub fn modify_guild(
     |> modify_guild_to_json
     |> json.to_string
 
-  new_api_request(
+  new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(id),
     method: http.Patch,
@@ -3336,7 +3761,20 @@ fn channel_decoder() -> Decoder(Channel) {
   use data <- decode.then(case type_ {
     1 -> decode.map(dm_channel_decoder(), ChannelDm)
     10 | 11 | 12 -> decode.map(thread_decoder(), ChannelThread)
-    _ -> decode.map(guild_channel_decoder(), ChannelGuild)
+    0 | 2 | 4 | 5 | 13 | 15 | 16 ->
+      decode.map(guild_channel_decoder(), ChannelGuild)
+    _ ->
+      decode.failure(
+        ChannelGuild(GuildChannel(
+          Snowflake(0),
+          ChannelCategory(CategoryChannel(Snowflake(0))),
+          [],
+          None,
+          0,
+          "",
+        )),
+        "ChannelData",
+      )
   })
 
   decode.success(Channel(id:, data:))
@@ -3362,4 +3800,908 @@ fn dm_channel_decoder() -> Decoder(DmChannel) {
     recipient:,
     last_pin_timestamp:,
   ))
+}
+
+/// Returns all the channels of a guild, excluding threads.
+pub fn get_guild_channels(
+  token token: Token,
+  guild_id guild_id: Snowflake(Guild),
+) -> Result(List(GuildChannel), RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Get,
+  )
+  |> send_request(decode_with: decode.list(of: guild_channel_decoder()))
+}
+
+pub opaque type CreateTextChannel {
+  CreateTextChannel(
+    name: String,
+    topic: Option(String),
+    rate_limit_per_user: Option(Duration),
+    position: Option(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Option(Snowflake(CategoryChannel)),
+    is_nsfw: Option(Bool),
+    default_thread_auto_archive_duration: Option(ThreadAutoArchiveDuration),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+}
+
+fn create_text_channel_to_json(create: CreateTextChannel) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    Ok(#("type", json.int(0))),
+    optional_to_json(create.topic, "topic", json.string),
+    optional_to_json(
+      create.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(create.position, "position", json.int),
+    optional_to_json(
+      create.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    optional_to_json(create.parent_id, "parent_id", snowflake_to_json),
+    optional_to_json(create.is_nsfw, "nsfw", json.bool),
+    optional_to_json(
+      create.default_thread_auto_archive_duration,
+      "default_auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(
+      create.default_thread_rate_limit_per_user,
+      "default_thread_rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+fn duration_to_json_seconds(duration: Duration) -> Json {
+  duration
+  |> duration.to_seconds
+  |> float.round
+  |> json.int
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn create_text_channel(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using create: CreateTextChannel,
+  because reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  let body = create |> create_text_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Post,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_channel_decoder())
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn new_create_text_channel(named name: String) -> CreateTextChannel {
+  CreateTextChannel(name, None, None, None, None, None, None, None, None)
+}
+
+pub fn create_text_channel_with_topic(
+  create: CreateTextChannel,
+  topic: String,
+) -> CreateTextChannel {
+  CreateTextChannel(..create, topic: Some(topic))
+}
+
+/// The rate limit per user is the amount of time a user has to wait between sending messages.
+pub fn create_text_channel_with_rate_limit_per_user(
+  create: CreateTextChannel,
+  rate_limit_per_user: Duration,
+) -> CreateTextChannel {
+  CreateTextChannel(..create, rate_limit_per_user: Some(rate_limit_per_user))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+/// Channels with the same position are sorted by ID (new channel will be lower)
+pub fn create_text_channel_at_position(
+  create: CreateTextChannel,
+  position: Int,
+) -> CreateTextChannel {
+  CreateTextChannel(..create, position: Some(position))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn create_text_channel_with_permission_overwrites(
+  create: CreateTextChannel,
+  overwrites: List(PermissionOverwrite),
+) -> CreateTextChannel {
+  CreateTextChannel(..create, permission_overwrites: Some(overwrites))
+}
+
+/// Puts the channel in a category.
+/// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
+pub fn create_text_channel_with_parent_id(
+  create: CreateTextChannel,
+  parent_id: Snowflake(CategoryChannel),
+) -> CreateTextChannel {
+  CreateTextChannel(..create, parent_id: Some(parent_id))
+}
+
+/// Creates an age-restricted text channel.
+pub fn create_nsfw_text_channel(create: CreateTextChannel) -> CreateTextChannel {
+  CreateTextChannel(..create, is_nsfw: Some(True))
+}
+
+/// Controls the default amount of time after which inactive threads are archived in the channel.
+pub fn create_text_channel_with_thread_auto_archive_duration(
+  create: CreateTextChannel,
+  duration: ThreadAutoArchiveDuration,
+) -> CreateTextChannel {
+  CreateTextChannel(
+    ..create,
+    default_thread_auto_archive_duration: Some(duration),
+  )
+}
+
+/// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
+pub fn create_text_channel_with_thread_rate_limit_per_user(
+  create: CreateTextChannel,
+  rate_limit_per_user: Duration,
+) -> CreateTextChannel {
+  CreateTextChannel(
+    ..create,
+    default_thread_rate_limit_per_user: Some(rate_limit_per_user),
+  )
+}
+
+pub opaque type CreateVoiceChannel {
+  CreateVoiceChannel(
+    name: String,
+    rate_limit_per_user: Option(Duration),
+    bitrate: Option(Int),
+    user_limit: Option(Int),
+    position: Option(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Option(Snowflake(CategoryChannel)),
+    is_nsfw: Option(Bool),
+    rtc_region_id: Option(String),
+    video_quality_mode: Option(VideoQualityMode),
+  )
+}
+
+fn create_voice_channel_to_json(create: CreateVoiceChannel) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    Ok(#("type", json.int(2))),
+    optional_to_json(
+      create.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(create.bitrate, "bitrate", json.int),
+    optional_to_json(create.user_limit, "user_limit", json.int),
+    optional_to_json(create.position, "position", json.int),
+    optional_to_json(
+      create.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    optional_to_json(create.parent_id, "parent_id", snowflake_to_json),
+    optional_to_json(create.is_nsfw, "nsfw", json.bool),
+    optional_to_json(create.rtc_region_id, "rtc_region", json.string),
+    optional_to_json(
+      create.video_quality_mode,
+      "video_quality_mode",
+      video_quality_mode_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn create_voice_channel(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using create: CreateVoiceChannel,
+  because reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  let body = create |> create_voice_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Post,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn new_create_voice_channel(named name: String) -> CreateVoiceChannel {
+  CreateVoiceChannel(name, None, None, None, None, None, None, None, None, None)
+}
+
+/// The rate limit per user amount of time that a user has to wait between sending messages in the voice-channel attached text channel.
+pub fn create_voice_channel_with_rate_limit_per_user(
+  create: CreateVoiceChannel,
+  limit: Duration,
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, rate_limit_per_user: Some(limit))
+}
+
+/// Bitrate is expressed in bits per second.
+///
+/// Maximum bitrate for every premium tier:
+/// * No premium tier - `96000`
+/// * Premium tier 1 - `128000`
+/// * Premium tier 2 - `256000`
+/// * Premium tier 3 - `384000`
+///
+/// Additionally, servers with the `GuildCanUse384KbpsVoiceBitrate` can specify the bitrate up to `384000`. 
+pub fn create_voice_channel_with_bitrate(
+  create: CreateVoiceChannel,
+  bitrate: Int,
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, bitrate: Some(bitrate))
+}
+
+pub fn create_voice_channel_with_user_limit(
+  create: CreateVoiceChannel,
+  user_limit: Int,
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, user_limit: Some(user_limit))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+/// Channels with the same position are sorted by ID (new channel will be lower)
+pub fn create_voice_channel_at_position(
+  create: CreateVoiceChannel,
+  position: Int,
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, position: Some(position))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn create_voice_channel_with_permission_overwrites(
+  create: CreateVoiceChannel,
+  overwrites: List(PermissionOverwrite),
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, permission_overwrites: Some(overwrites))
+}
+
+/// Puts the channel in a category.
+/// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
+pub fn create_voice_channel_with_parent_id(
+  create: CreateVoiceChannel,
+  parent_id: Snowflake(CategoryChannel),
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, parent_id: Some(parent_id))
+}
+
+/// Creates an age-restricted voice channel.
+pub fn create_nsfw_voice_channel(
+  create: CreateVoiceChannel,
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, is_nsfw: Some(True))
+}
+
+/// Manually sets the voice channel's region.
+pub fn create_voice_channel_with_rtc_region_id(
+  create: CreateVoiceChannel,
+  id: String,
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, rtc_region_id: Some(id))
+}
+
+pub fn create_voice_channel_with_video_quality_mode(
+  create: CreateVoiceChannel,
+  mode: VideoQualityMode,
+) -> CreateVoiceChannel {
+  CreateVoiceChannel(..create, video_quality_mode: Some(mode))
+}
+
+pub opaque type CreateCategoryChannel {
+  CreateCategoryChannel(
+    name: String,
+    position: Option(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+  )
+}
+
+fn create_category_channel_to_json(create: CreateCategoryChannel) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    Ok(#("type", json.int(4))),
+    optional_to_json(create.position, "position", json.int),
+    optional_to_json(
+      create.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn create_category_channel(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using create: CreateCategoryChannel,
+  because reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  let body = create |> create_category_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Post,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn new_create_category_channel(named name: String) -> CreateCategoryChannel {
+  CreateCategoryChannel(name, None, None)
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their channel list.
+/// Channels with the same position are sorted by ID (new channel will be lower)
+pub fn create_category_channel_at_position(
+  create: CreateCategoryChannel,
+  position: Int,
+) -> CreateCategoryChannel {
+  CreateCategoryChannel(..create, position: Some(position))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+/// Channels can sync their permissions to their category channels.
+pub fn create_category_channel_with_permission_overwrites(
+  create: CreateCategoryChannel,
+  overwrites: List(PermissionOverwrite),
+) -> CreateCategoryChannel {
+  CreateCategoryChannel(..create, permission_overwrites: Some(overwrites))
+}
+
+pub opaque type CreateStageChannel {
+  CreateStageChannel(
+    name: String,
+    rate_limit_per_user: Option(Duration),
+    bitrate: Option(Int),
+    user_limit: Option(Int),
+    position: Option(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Option(Snowflake(CategoryChannel)),
+    is_nsfw: Option(Bool),
+    rtc_region_id: Option(String),
+    video_quality_mode: Option(VideoQualityMode),
+  )
+}
+
+fn create_stage_channel_to_json(create: CreateStageChannel) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    Ok(#("type", json.int(13))),
+    optional_to_json(
+      create.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(create.bitrate, "bitrate", json.int),
+    optional_to_json(create.user_limit, "user_limit", json.int),
+    optional_to_json(create.position, "position", json.int),
+    optional_to_json(
+      create.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    optional_to_json(create.parent_id, "parent_id", snowflake_to_json),
+    optional_to_json(create.is_nsfw, "nsfw", json.bool),
+    optional_to_json(create.rtc_region_id, "rtc_region", json.string),
+    optional_to_json(
+      create.video_quality_mode,
+      "video_quality_mode",
+      video_quality_mode_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn create_stage_channel(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using create: CreateStageChannel,
+  because reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  let body = create |> create_stage_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Post,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn new_create_stage_channel(named name: String) -> CreateStageChannel {
+  CreateStageChannel(name, None, None, None, None, None, None, None, None, None)
+}
+
+/// The rate limit per user amount of time that a user has to wait between sending messages in the stage-channel attached text channel.
+pub fn create_stage_channel_with_rate_limit_per_user(
+  create: CreateStageChannel,
+  limit: Duration,
+) -> CreateStageChannel {
+  CreateStageChannel(..create, rate_limit_per_user: Some(limit))
+}
+
+/// Bitrate is expressed in bits per second.
+///
+/// Maximum bitrate for every premium tier:
+/// * No premium tier - `96000`
+/// * Premium tier 1 - `128000`
+/// * Premium tier 2 - `256000`
+/// * Premium tier 3 - `384000`
+///
+/// Additionally, servers with the `GuildCanUse384KbpsstageBitrate` can specify the bitrate up to `384000`. 
+pub fn create_stage_channel_with_bitrate(
+  create: CreateStageChannel,
+  bitrate: Int,
+) -> CreateStageChannel {
+  CreateStageChannel(..create, bitrate: Some(bitrate))
+}
+
+pub fn create_stage_channel_with_user_limit(
+  create: CreateStageChannel,
+  user_limit: Int,
+) -> CreateStageChannel {
+  CreateStageChannel(..create, user_limit: Some(user_limit))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+/// Channels with the same position are sorted by ID (new channel will be lower)
+pub fn create_stage_channel_at_position(
+  create: CreateStageChannel,
+  position: Int,
+) -> CreateStageChannel {
+  CreateStageChannel(..create, position: Some(position))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn create_stage_channel_with_permission_overwrites(
+  create: CreateStageChannel,
+  overwrites: List(PermissionOverwrite),
+) -> CreateStageChannel {
+  CreateStageChannel(..create, permission_overwrites: Some(overwrites))
+}
+
+/// Puts the channel in a category.
+/// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
+pub fn create_stage_channel_with_parent_id(
+  create: CreateStageChannel,
+  parent_id: Snowflake(CategoryChannel),
+) -> CreateStageChannel {
+  CreateStageChannel(..create, parent_id: Some(parent_id))
+}
+
+/// Creates an age-restricted stage channel.
+pub fn create_nsfw_stage_channel(
+  create: CreateStageChannel,
+) -> CreateStageChannel {
+  CreateStageChannel(..create, is_nsfw: Some(True))
+}
+
+/// Manually sets the stage channel's region.
+pub fn create_stage_channel_with_rtc_region_id(
+  create: CreateStageChannel,
+  id: String,
+) -> CreateStageChannel {
+  CreateStageChannel(..create, rtc_region_id: Some(id))
+}
+
+pub fn create_stage_channel_with_video_quality_mode(
+  create: CreateStageChannel,
+  mode: VideoQualityMode,
+) -> CreateStageChannel {
+  CreateStageChannel(..create, video_quality_mode: Some(mode))
+}
+
+pub opaque type CreateForumChannel {
+  CreateForumChannel(
+    name: String,
+    topic: Option(String),
+    rate_limit_per_user: Option(Duration),
+    position: Option(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Option(Snowflake(CategoryChannel)),
+    is_nsfw: Option(Bool),
+    default_thread_auto_archive_duration: Option(ThreadAutoArchiveDuration),
+    default_reaction: Option(DefaultForumReaction),
+    available_tags: Option(List(ForumTag)),
+    default_sort_order: Option(ForumSortOrder),
+    default_layout: Option(ForumLayout),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+}
+
+fn create_forum_channel_to_json(create: CreateForumChannel) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    Ok(#("type", json.int(15))),
+    optional_to_json(create.topic, "topic", json.string),
+    optional_to_json(
+      create.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(create.position, "position", json.int),
+    optional_to_json(
+      create.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    optional_to_json(create.parent_id, "parent_id", snowflake_to_json),
+    optional_to_json(create.is_nsfw, "nsfw", json.bool),
+    optional_to_json(
+      create.default_thread_auto_archive_duration,
+      "default_auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(
+      create.default_reaction,
+      "default_reaction_emoji",
+      default_forum_reaction_to_json,
+    ),
+    optional_to_json(create.available_tags, "available_tags", json.array(
+      _,
+      forum_tag_to_json,
+    )),
+    optional_to_json(
+      create.default_sort_order,
+      "default_sort_order",
+      forum_sort_order_to_json,
+    ),
+    optional_to_json(
+      create.default_layout,
+      "default_forum_layout",
+      forum_layout_to_json,
+    ),
+    optional_to_json(
+      create.default_thread_rate_limit_per_user,
+      "default_thread_rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn create_forum_channel(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using create: CreateForumChannel,
+  because reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  let body = create |> create_forum_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Post,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn new_create_forum_channel(named name: String) -> CreateForumChannel {
+  CreateForumChannel(
+    name,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+  )
+}
+
+pub fn create_forum_channel_with_topic(
+  create: CreateForumChannel,
+  topic: String,
+) -> CreateForumChannel {
+  CreateForumChannel(..create, topic: Some(topic))
+}
+
+/// The rate limit per user is the amount of time a user has to wait between sending messages.
+pub fn create_forum_channel_with_rate_limit_per_user(
+  create: CreateForumChannel,
+  limit: Duration,
+) -> CreateForumChannel {
+  CreateForumChannel(..create, rate_limit_per_user: Some(limit))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+/// Channels with the same position are sorted by ID (new channel will be lower)
+pub fn create_forum_channel_at_position(
+  create: CreateForumChannel,
+  position: Int,
+) -> CreateForumChannel {
+  CreateForumChannel(..create, position: Some(position))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn create_forum_channel_with_permission_overwrites(
+  create: CreateForumChannel,
+  overwrites: List(PermissionOverwrite),
+) -> CreateForumChannel {
+  CreateForumChannel(..create, permission_overwrites: Some(overwrites))
+}
+
+/// Puts the channel in a category.
+/// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
+pub fn create_forum_channel_with_parent_id(
+  create: CreateForumChannel,
+  parent_id: Snowflake(CategoryChannel),
+) -> CreateForumChannel {
+  CreateForumChannel(..create, parent_id: Some(parent_id))
+}
+
+/// Controls the default amount of time after which inactive threads are archived in the channel.
+pub fn create_forum_channel_with_thread_auto_archive_duration(
+  create: CreateForumChannel,
+  duration: ThreadAutoArchiveDuration,
+) -> CreateForumChannel {
+  CreateForumChannel(
+    ..create,
+    default_thread_auto_archive_duration: Some(duration),
+  )
+}
+
+/// Controls the default reaction shown in the thread preview.
+pub fn create_forum_channel_with_default_reaction(
+  create: CreateForumChannel,
+  reaction: DefaultForumReaction,
+) -> CreateForumChannel {
+  CreateForumChannel(..create, default_reaction: Some(reaction))
+}
+
+pub fn create_forum_channel_with_tags(
+  create: CreateForumChannel,
+  tags: List(ForumTag),
+) -> CreateForumChannel {
+  CreateForumChannel(..create, available_tags: Some(tags))
+}
+
+/// Controls the default layout the channel is shown in.
+pub fn create_forum_channel_with_default_layout(
+  create: CreateForumChannel,
+  layout: ForumLayout,
+) -> CreateForumChannel {
+  CreateForumChannel(..create, default_layout: Some(layout))
+}
+
+/// Controls the default order of sorting the threads in the forum.
+pub fn create_forum_channel_with_default_sort_order(
+  create: CreateForumChannel,
+  order: ForumSortOrder,
+) -> CreateForumChannel {
+  CreateForumChannel(..create, default_sort_order: Some(order))
+}
+
+/// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
+pub fn create_forum_channel_with_thread_rate_limit_per_user(
+  create: CreateForumChannel,
+  limit: Duration,
+) -> CreateForumChannel {
+  CreateForumChannel(..create, default_thread_rate_limit_per_user: Some(limit))
+}
+
+pub opaque type CreateMediaChannel {
+  CreateMediaChannel(
+    name: String,
+    topic: Option(String),
+    rate_limit_per_user: Option(Duration),
+    position: Option(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Option(Snowflake(CategoryChannel)),
+    is_nsfw: Option(Bool),
+    default_thread_auto_archive_duration: Option(ThreadAutoArchiveDuration),
+    default_reaction: Option(DefaultForumReaction),
+    available_tags: Option(List(ForumTag)),
+    default_sort_order: Option(ForumSortOrder),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+}
+
+fn create_media_channel_to_json(create: CreateMediaChannel) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    Ok(#("type", json.int(15))),
+    optional_to_json(create.topic, "topic", json.string),
+    optional_to_json(
+      create.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(create.position, "position", json.int),
+    optional_to_json(
+      create.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    optional_to_json(create.parent_id, "parent_id", snowflake_to_json),
+    optional_to_json(create.is_nsfw, "nsfw", json.bool),
+    optional_to_json(
+      create.default_thread_auto_archive_duration,
+      "default_auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(
+      create.default_reaction,
+      "default_reaction_emoji",
+      default_forum_reaction_to_json,
+    ),
+    optional_to_json(create.available_tags, "available_tags", json.array(
+      _,
+      forum_tag_to_json,
+    )),
+    optional_to_json(
+      create.default_sort_order,
+      "default_sort_order",
+      forum_sort_order_to_json,
+    ),
+    optional_to_json(
+      create.default_thread_rate_limit_per_user,
+      "default_thread_rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn create_media_channel(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using create: CreateMediaChannel,
+  because reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  let body = create |> create_media_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Post,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn new_create_media_channel(named name: String) -> CreateMediaChannel {
+  CreateMediaChannel(
+    name,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+  )
+}
+
+pub fn create_media_channel_with_topic(
+  create: CreateMediaChannel,
+  topic: String,
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, topic: Some(topic))
+}
+
+/// The rate limit per user is the amount of time a user has to wait between sending messages.
+pub fn create_media_channel_with_rate_limit_per_user(
+  create: CreateMediaChannel,
+  limit: Duration,
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, rate_limit_per_user: Some(limit))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+/// Channels with the same position are sorted by ID (new channel will be lower)
+pub fn create_media_channel_at_position(
+  create: CreateMediaChannel,
+  position: Int,
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, position: Some(position))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn create_media_channel_with_permission_overwrites(
+  create: CreateMediaChannel,
+  overwrites: List(PermissionOverwrite),
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, permission_overwrites: Some(overwrites))
+}
+
+/// Puts the channel in a category.
+/// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
+pub fn create_media_channel_with_parent_id(
+  create: CreateMediaChannel,
+  parent_id: Snowflake(CategoryChannel),
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, parent_id: Some(parent_id))
+}
+
+/// Controls the default amount of time after which inactive threads are archived in the channel.
+pub fn create_media_channel_with_thread_auto_archive_duration(
+  create: CreateMediaChannel,
+  duration: ThreadAutoArchiveDuration,
+) -> CreateMediaChannel {
+  CreateMediaChannel(
+    ..create,
+    default_thread_auto_archive_duration: Some(duration),
+  )
+}
+
+/// Controls the default reaction shown in the thread preview.
+pub fn create_media_channel_with_default_reaction(
+  create: CreateMediaChannel,
+  reaction: DefaultForumReaction,
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, default_reaction: Some(reaction))
+}
+
+pub fn create_media_channel_with_tags(
+  create: CreateMediaChannel,
+  tags: List(ForumTag),
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, available_tags: Some(tags))
+}
+
+/// Controls the default order of sorting the threads in the media.
+pub fn create_media_channel_with_default_sort_order(
+  create: CreateMediaChannel,
+  order: ForumSortOrder,
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, default_sort_order: Some(order))
+}
+
+/// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
+pub fn create_media_channel_with_thread_rate_limit_per_user(
+  create: CreateMediaChannel,
+  limit: Duration,
+) -> CreateMediaChannel {
+  CreateMediaChannel(..create, default_thread_rate_limit_per_user: Some(limit))
 }
