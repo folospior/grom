@@ -1,4 +1,5 @@
 import gleam/bit_array
+import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
 import gleam/float
@@ -14,6 +15,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
+import gleam/uri
 import gleam_community/colour.{type Colour}
 import status_code
 
@@ -1045,6 +1047,22 @@ pub type RoleColours {
     /// - `tertiary_colour = 0xFFC3A0`
     tertiary_colour: Option(Colour),
   )
+}
+
+fn colour_to_json(colour: Colour) -> Json {
+  colour
+  |> colour.to_rgb_hex
+  |> json.int
+}
+
+fn role_colours_to_json(role_colours: RoleColours) -> Json {
+  let RoleColours(primary_colour:, secondary_colour:, tertiary_colour:) =
+    role_colours
+  json.object([
+    #("primary_color", colour_to_json(primary_colour)),
+    #("secondary_color", json.nullable(secondary_colour, colour_to_json)),
+    #("tertiary_color", json.nullable(tertiary_colour, colour_to_json)),
+  ])
 }
 
 fn role_colours_decoder() -> Decoder(RoleColours) {
@@ -3738,7 +3756,7 @@ pub fn modify_guild(
   token token: Token,
   id id: Snowflake(Guild),
   using modify: ModifyGuild,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(Guild, RestError) {
   let body =
     modify
@@ -3874,7 +3892,7 @@ pub fn create_text_channel(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateTextChannel,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(GuildChannel, RestError) {
   let body = create |> create_text_channel_to_json |> json.to_string
 
@@ -4012,7 +4030,7 @@ pub fn create_voice_channel(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateVoiceChannel,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(GuildChannel, RestError) {
   let body = create |> create_voice_channel_to_json |> json.to_string
 
@@ -4138,7 +4156,7 @@ pub fn create_category_channel(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateCategoryChannel,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(GuildChannel, RestError) {
   let body = create |> create_category_channel_to_json |> json.to_string
 
@@ -4225,7 +4243,7 @@ pub fn create_stage_channel(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateStageChannel,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(GuildChannel, RestError) {
   let body = create |> create_stage_channel_to_json |> json.to_string
 
@@ -4398,7 +4416,7 @@ pub fn create_forum_channel(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateForumChannel,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(GuildChannel, RestError) {
   let body = create |> create_forum_channel_to_json |> json.to_string
 
@@ -4591,7 +4609,7 @@ pub fn create_media_channel(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateMediaChannel,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(GuildChannel, RestError) {
   let body = create |> create_media_channel_to_json |> json.to_string
 
@@ -5113,7 +5131,7 @@ pub fn modify_guild_member(
   with_id user_id: Snowflake(User),
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyGuildMember,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(GuildMember, RestError) {
   let body = modify |> modify_guild_member_to_json |> json.to_string
 
@@ -5218,7 +5236,7 @@ pub fn modify_current_member(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyCurrentMember,
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(GuildMember, RestError) {
   let body = modify |> modify_current_member_to_json |> json.to_string
 
@@ -5238,7 +5256,7 @@ pub fn add_guild_member_role(
   in_guild_with_id guild_id: Snowflake(Guild),
   to_member_with_id user_id: Snowflake(User),
   with_id role_id: Snowflake(Role),
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(Nil, RestError) {
   new_request(
     token:,
@@ -5262,7 +5280,7 @@ pub fn delete_guild_member_role(
   in_guild_with_id guild_id: Snowflake(Guild),
   from_member_with_id user_id: Snowflake(User),
   with_id role_id: Snowflake(Role),
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(Nil, RestError) {
   new_request(
     token:,
@@ -5283,7 +5301,7 @@ pub fn kick_guild_member(
   token token: Token,
   with_id user_id: Snowflake(User),
   from_guild_with_id guild_id: Snowflake(Guild),
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(Nil, RestError) {
   new_request(
     token:,
@@ -5399,7 +5417,7 @@ pub fn ban_guild_member(
   with_id user_id: Snowflake(User),
   from_guild_with_id guild_id: Snowflake(Guild),
   delete_messages_since delete_messages_since: Option(Duration),
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(Nil, RestError) {
   let json = case delete_messages_since {
     Some(duration) -> [
@@ -5432,7 +5450,7 @@ pub fn unban_guild_member(
   token token: Token,
   with_id user_id: Snowflake(User),
   from_guild_with_id guild_id: Snowflake(Guild),
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(Nil, RestError) {
   new_request(
     token:,
@@ -5471,7 +5489,7 @@ pub fn bulk_guild_ban(
   users_with_ids user_ids: List(Snowflake(User)),
   from_guild_with_id guild_id: Snowflake(Guild),
   delete_messages_since delete_messages_since: Option(Duration),
-  because reason: Option(String),
+  reason reason: Option(String),
 ) -> Result(BulkGuildBanResponse, RestError) {
   let body =
     [
@@ -5494,4 +5512,363 @@ pub fn bulk_guild_ban(
   |> request_with_reason(reason)
   |> request.set_body(body)
   |> send_request(decode_with: bulk_guild_ban_response_decoder())
+}
+
+pub fn get_guild_roles(
+  token token: Token,
+  of_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(List(Role), RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/roles",
+    method: http.Get,
+  )
+  |> send_request(decode_with: decode.list(of: role_decoder()))
+}
+
+pub fn get_role(
+  token token: Token,
+  with_id role_id: Snowflake(Role),
+  from_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(Role, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/roles/"
+      <> snowflake_to_string(role_id),
+    method: http.Get,
+  )
+  |> send_request(decode_with: role_decoder())
+}
+
+/// Returns a Dict of (role_id, member_count)
+pub fn get_role_member_counts(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(Dict(Snowflake(Role), Int), RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/roles/member-counts",
+    method: http.Get,
+  )
+  |> send_request(decode_with: decode.dict(snowflake_decoder(), decode.int))
+}
+
+pub opaque type CreateRole {
+  CreateRole(
+    name: Option(String),
+    permissions: Option(List(Permission)),
+    colours: Option(RoleColours),
+    is_hoisted: Option(Bool),
+    icon: Option(ImageData),
+    unicode_emoji: Option(String),
+    is_mentionable: Option(Bool),
+  )
+}
+
+fn create_role_to_json(create: CreateRole) -> Json {
+  [
+    optional_to_json(create.name, "name", json.string),
+    optional_to_json(create.permissions, "permissions", permissions_to_json),
+    optional_to_json(create.colours, "colors", role_colours_to_json),
+    optional_to_json(create.is_hoisted, "hoist", json.bool),
+    optional_to_json(create.icon, "icon", image_data_to_json),
+    optional_to_json(create.unicode_emoji, "unicode_emoji", json.string),
+    optional_to_json(create.is_mentionable, "mentionable", json.bool),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Defaults:
+/// * name: "new role"
+/// * permissions: the same as the guild @everyone permissions
+/// * colours: { primary: 0, secondary: null, tertiary: null }
+/// * is_hoisted: false
+/// * icon: null
+/// * unicode_emoji: null
+/// * is_mentionable: false
+pub fn new_create_role() -> CreateRole {
+  CreateRole(None, None, None, None, None, None, None)
+}
+
+pub fn create_role_with_name(create: CreateRole, name: String) -> CreateRole {
+  CreateRole(..create, name: Some(name))
+}
+
+/// Controls the role's guild-wide permissions.
+pub fn create_role_with_permissions(
+  create: CreateRole,
+  permissions: List(Permission),
+) -> CreateRole {
+  CreateRole(..create, permissions: Some(permissions))
+}
+
+pub fn create_role_with_colours(
+  create: CreateRole,
+  colours: RoleColours,
+) -> CreateRole {
+  CreateRole(..create, colours: Some(colours))
+}
+
+pub fn new_role_colours() -> RoleColours {
+  RoleColours(colour.black, None, None)
+}
+
+pub fn role_colours_with_primary_colour(
+  colours: RoleColours,
+  colour: Colour,
+) -> RoleColours {
+  RoleColours(..colours, primary_colour: colour)
+}
+
+pub fn role_colours_with_secondary_colour(
+  colours: RoleColours,
+  colour: Colour,
+) -> RoleColours {
+  RoleColours(..colours, secondary_colour: Some(colour))
+}
+
+pub fn role_colours_with_tertiary_colour(
+  colours: RoleColours,
+  colour: Colour,
+) -> RoleColours {
+  RoleColours(..colours, tertiary_colour: Some(colour))
+}
+
+/// Controls whether the role is shown separately in the sidebar.
+pub fn create_hoisted_role(create: CreateRole) -> CreateRole {
+  CreateRole(..create, is_hoisted: Some(True))
+}
+
+/// Requires the `GuildCanUseRoleIcons` feature.
+pub fn create_role_with_icon(create: CreateRole, icon: ImageData) -> CreateRole {
+  CreateRole(..create, icon: Some(icon))
+}
+
+/// Requires the `GuildCanUseRoleIcons` feature.
+/// 
+/// Accepts a unicode emoji character (e.g. 🔨)
+pub fn create_role_with_unicode_emoji(
+  create: CreateRole,
+  emoji: String,
+) -> CreateRole {
+  CreateRole(..create, unicode_emoji: Some(emoji))
+}
+
+/// Allows everyone the mention the role.
+pub fn create_mentionable_role(create: CreateRole) -> CreateRole {
+  CreateRole(..create, is_mentionable: Some(True))
+}
+
+/// Requires the `AllowManagingRoles` permission.
+pub fn create_role(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using create: CreateRole,
+  reason reason: Option(String),
+) -> Result(Role, RestError) {
+  let body = create |> create_role_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/roles",
+    method: http.Post,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: role_decoder())
+}
+
+/// See the [`move_role`](#move_role) and [`delete_role_position`](#delete_role_position) functions.
+pub opaque type ModifyRolePosition {
+  ModifyRolePosition(id: Snowflake(Role), position: Modification(Int))
+}
+
+fn modify_role_position_to_json(modify: ModifyRolePosition) -> Json {
+  [
+    Ok(#("id", snowflake_to_json(modify.id))),
+    modification_to_json(modify.position, "position", json.int),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Roles with the same position are sorted by ID.
+pub fn move_role(
+  with_id id: Snowflake(Role),
+  to_position position: Int,
+) -> ModifyRolePosition {
+  ModifyRolePosition(id:, position: Modify(position))
+}
+
+/// Roles with the same position are sorted by ID.
+pub fn delete_role_position(
+  of_role_with_id id: Snowflake(Role),
+) -> ModifyRolePosition {
+  ModifyRolePosition(id:, position: Delete)
+}
+
+/// Requires the `AllowManagingRoles` permission.
+/// Returns all of the guild's roles.
+pub fn modify_role_positions(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using modify: List(ModifyRolePosition),
+  reason reason: Option(String),
+) -> Result(List(Role), RestError) {
+  let body =
+    modify
+    |> json.array(modify_role_position_to_json)
+    |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/roles",
+    method: http.Patch,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: decode.list(of: role_decoder()))
+}
+
+pub opaque type ModifyRole {
+  ModifyRole(
+    name: Modification(String),
+    permissions: Modification(List(Permission)),
+    colours: Modification(RoleColours),
+    is_hoisted: Modification(Bool),
+    icon: Modification(ImageData),
+    unicode_emoji: Modification(String),
+    is_mentionable: Modification(Bool),
+  )
+}
+
+fn modify_role_to_json(modify: ModifyRole) -> Json {
+  [
+    modification_to_json(modify.name, "name", json.string),
+    modification_to_json(modify.permissions, "permissions", permissions_to_json),
+    modification_to_json(modify.colours, "colors", role_colours_to_json),
+    modification_to_json(modify.is_hoisted, "hoist", json.bool),
+    modification_to_json(modify.icon, "icon", image_data_to_json),
+    modification_to_json(modify.unicode_emoji, "unicode_emoji", json.string),
+    modification_to_json(modify.is_mentionable, "mentionable", json.bool),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_modify_role() -> ModifyRole {
+  ModifyRole(Skip, Skip, Skip, Skip, Skip, Skip, Skip)
+}
+
+pub fn modify_role_name(modify: ModifyRole, new name: String) -> ModifyRole {
+  ModifyRole(..modify, name: Modify(name))
+}
+
+/// Resets the role's name to "new name".
+pub fn delete_role_name(modify: ModifyRole) -> ModifyRole {
+  ModifyRole(..modify, name: Delete)
+}
+
+/// Controls the role's guild-wide permissions.
+/// Supply the function with all the future permissions.
+pub fn modify_role_permissions(
+  modify: ModifyRole,
+  new permissions: List(Permission),
+) -> ModifyRole {
+  ModifyRole(..modify, permissions: Modify(permissions))
+}
+
+pub fn modify_role_colours(
+  modify: ModifyRole,
+  new colours: RoleColours,
+) -> ModifyRole {
+  ModifyRole(..modify, colours: Modify(colours))
+}
+
+pub fn delete_role_colours(modify: ModifyRole) -> ModifyRole {
+  ModifyRole(..modify, colours: Delete)
+}
+
+/// Makes the role separate from others in the sidebar.
+pub fn hoist_role(modify: ModifyRole) -> ModifyRole {
+  ModifyRole(..modify, is_hoisted: Modify(True))
+}
+
+/// Makes the role no longer separate from others in the sidebar.
+pub fn unhoist_role(modify: ModifyRole) -> ModifyRole {
+  ModifyRole(..modify, is_hoisted: Modify(False))
+}
+
+/// Requires the `GuildCanUseRoleIcons` feature.
+pub fn modify_role_icon(modify: ModifyRole, new icon: ImageData) -> ModifyRole {
+  ModifyRole(..modify, icon: Modify(icon))
+}
+
+pub fn delete_role_icon(modify: ModifyRole) -> ModifyRole {
+  ModifyRole(..modify, icon: Delete)
+}
+
+/// Requires the `GuildCanUseRoleIcons` feature.
+pub fn modify_role_unicode_emoji(
+  modify: ModifyRole,
+  new unicode_emoji: String,
+) -> ModifyRole {
+  ModifyRole(..modify, unicode_emoji: Modify(unicode_emoji))
+}
+
+pub fn delete_role_unicode_emoji(modify: ModifyRole) -> ModifyRole {
+  ModifyRole(..modify, unicode_emoji: Delete)
+}
+
+/// Allows everyone to mention the role.
+pub fn modify_role_as_mentionable(modify: ModifyRole) -> ModifyRole {
+  ModifyRole(..modify, is_mentionable: Modify(True))
+}
+
+/// Does not allow everyone to mention the role.
+pub fn modify_role_as_unmentionable(modify: ModifyRole) -> ModifyRole {
+  ModifyRole(..modify, is_mentionable: Modify(False))
+}
+
+pub fn modify_role(
+  token token: Token,
+  with_id role_id: Snowflake(Role),
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using modify: ModifyRole,
+  reason reason: Option(String),
+) -> Result(Role, RestError) {
+  let body = modify |> modify_role_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/roles/"
+      <> snowflake_to_string(role_id),
+    method: http.Patch,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: role_decoder())
+}
+
+pub fn delete_role(
+  token token: Token,
+  with_id role_id: Snowflake(Role),
+  from_guild_with_id guild_id: Snowflake(Guild),
+  reason reason: Option(String),
+) -> Result(Nil, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/roles/"
+      <> snowflake_to_string(role_id),
+    method: http.Delete,
+  )
+  |> request_with_reason(reason)
+  |> send_no_content_request
 }
