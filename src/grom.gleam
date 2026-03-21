@@ -4542,7 +4542,7 @@ pub opaque type CreateMediaChannel {
 fn create_media_channel_to_json(create: CreateMediaChannel) -> Json {
   [
     Ok(#("name", json.string(create.name))),
-    Ok(#("type", json.int(15))),
+    Ok(#("type", json.int(16))),
     optional_to_json(create.topic, "topic", json.string),
     optional_to_json(
       create.rate_limit_per_user,
@@ -4704,4 +4704,794 @@ pub fn create_media_channel_with_thread_rate_limit_per_user(
   limit: Duration,
 ) -> CreateMediaChannel {
   CreateMediaChannel(..create, default_thread_rate_limit_per_user: Some(limit))
+}
+
+pub opaque type ModifyGuildChannelPosition {
+  ModifyGuildChannelPosition(
+    id: Snowflake(GuildChannel),
+    position: Modification(Int),
+    sync_permissions: Option(Bool),
+    parent_id: Modification(Snowflake(CategoryChannel)),
+  )
+}
+
+pub fn new_modify_guild_channel_position(
+  of_channel_with_id id: Snowflake(GuildChannel),
+) -> ModifyGuildChannelPosition {
+  ModifyGuildChannelPosition(id, Skip, None, Skip)
+}
+
+pub fn modify_guild_channel_position(
+  modify: ModifyGuildChannelPosition,
+  new position: Int,
+) -> ModifyGuildChannelPosition {
+  ModifyGuildChannelPosition(..modify, position: Modify(position))
+}
+
+/// Resets the channel's position back to the default - will put the channel at the bottom of the category/channel list.
+pub fn unset_guild_channel_position(
+  modify: ModifyGuildChannelPosition,
+) -> ModifyGuildChannelPosition {
+  ModifyGuildChannelPosition(..modify, position: Delete)
+}
+
+/// `sync_permissions` - whether to sync the permission overwrites with the new parent.
+pub fn modify_guild_channel_parent_id(
+  modify: ModifyGuildChannelPosition,
+  new parent_id: Snowflake(CategoryChannel),
+  sync_permissions sync_permissions: Bool,
+) -> ModifyGuildChannelPosition {
+  ModifyGuildChannelPosition(
+    ..modify,
+    parent_id: Modify(parent_id),
+    sync_permissions: Some(sync_permissions),
+  )
+}
+
+/// Makes the channel independent of a category, putting it by itself in the channel list.
+pub fn unset_guild_channel_parent_id(
+  modify: ModifyGuildChannelPosition,
+) -> ModifyGuildChannelPosition {
+  ModifyGuildChannelPosition(..modify, parent_id: Delete)
+}
+
+fn modify_guild_channel_position_to_json(
+  modify: ModifyGuildChannelPosition,
+) -> Json {
+  [
+    Ok(#("id", snowflake_to_json(modify.id))),
+    modification_to_json(modify.position, "position", json.int),
+    optional_to_json(modify.sync_permissions, "lock_permissions", json.bool),
+    modification_to_json(modify.parent_id, "parent_id", snowflake_to_json),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn modify_guild_channel_positions(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using modify: List(ModifyGuildChannelPosition),
+) -> Result(Nil, RestError) {
+  let body =
+    modify
+    |> json.array(modify_guild_channel_position_to_json)
+    |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Patch,
+  )
+  |> request.set_body(body)
+  |> send_no_content_request
+}
+
+pub type ThreadMember {
+  ThreadMember(
+    thread_id: Snowflake(Thread),
+    user_id: Snowflake(User),
+    /// When the member last joined the thread.
+    joined_at: Timestamp,
+  )
+}
+
+fn thread_member_decoder() -> Decoder(ThreadMember) {
+  use thread_id <- decode.field("id", snowflake_decoder())
+  use user_id <- decode.field("user_id", snowflake_decoder())
+  use joined_at <- decode.field("join_timestamp", rfc3339_decoder())
+  decode.success(ThreadMember(thread_id:, user_id:, joined_at:))
+}
+
+pub type GetAllActiveGuildThreadsResponse {
+  GetAllActiveGuildThreadsResponse(
+    /// The active threads. Sorted by `id` in descending order.
+    threads: List(Thread),
+    /// The thread member object for each thread the current user has joined.
+    members: List(ThreadMember),
+  )
+}
+
+fn get_all_active_guild_threads_response_decoder() -> Decoder(
+  GetAllActiveGuildThreadsResponse,
+) {
+  use threads <- decode.field("threads", decode.list(thread_decoder()))
+  use members <- decode.field("members", decode.list(thread_member_decoder()))
+  decode.success(GetAllActiveGuildThreadsResponse(threads:, members:))
+}
+
+pub fn get_all_active_threads(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(GetAllActiveGuildThreadsResponse, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/threads/active",
+    method: http.Get,
+  )
+  |> send_request(decode_with: get_all_active_guild_threads_response_decoder())
+}
+
+pub fn get_guild_member(
+  token token: Token,
+  with_id user_id: Snowflake(User),
+  in_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(GuildMember, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/members/"
+      <> snowflake_to_string(user_id),
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_member_decoder())
+}
+
+pub opaque type GetGuildMembersOptions {
+  GetGuildMembersOptions(limit: Option(Int), after: Option(Snowflake(User)))
+}
+
+pub fn new_get_guild_members_options() -> GetGuildMembersOptions {
+  GetGuildMembersOptions(None, None)
+}
+
+/// Used for pagination. The parameter should be the highest user ID in the previous page.
+pub fn get_guild_members_after_id(
+  options: GetGuildMembersOptions,
+  id: Snowflake(User),
+) -> GetGuildMembersOptions {
+  GetGuildMembersOptions(..options, after: Some(id))
+}
+
+/// The maximum limit is 1000 members. The API will not return more than that.
+pub fn get_guild_members_with_limit(
+  options: GetGuildMembersOptions,
+  limit: Int,
+) -> GetGuildMembersOptions {
+  GetGuildMembersOptions(..options, limit: Some(int.clamp(limit, 1, 1000)))
+}
+
+/// used for query parameters
+fn optional_to_string(
+  option: Option(a),
+  name: String,
+  encoder: fn(a) -> String,
+) -> Result(#(String, String), Nil) {
+  case option {
+    Some(data) -> Ok(#(name, encoder(data)))
+    None -> Error(Nil)
+  }
+}
+
+/// Requires the `GuildMembersIntent` privileged intent.
+///
+/// By default, will return one member. The maximum limit is 1000.
+pub fn get_guild_members(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+  options options: Option(GetGuildMembersOptions),
+) -> Result(List(GuildMember), RestError) {
+  let query = case options {
+    None -> []
+    Some(options) ->
+      [
+        optional_to_string(options.limit, "limit", int.to_string),
+        optional_to_string(options.after, "after", snowflake_to_string),
+      ]
+      |> list.filter_map(function.identity)
+  }
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/members",
+    method: http.Get,
+  )
+  |> request.set_query(query)
+  |> send_request(decode_with: decode.list(of: guild_member_decoder()))
+}
+
+/// The API will respond with one member for limits smaller than 1, and with 1000 members for limits larger than 1000.
+pub fn search_guild_members(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  search_query query: String,
+  limit limit: Int,
+) -> Result(List(GuildMember), RestError) {
+  let query = [
+    #("query", query),
+    #("limit", int.to_string(int.clamp(limit, 1, 1000))),
+  ]
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/members/search",
+    method: http.Get,
+  )
+  |> request.set_query(query)
+  |> send_request(decode_with: decode.list(of: guild_member_decoder()))
+}
+
+pub opaque type ModifyGuildMember {
+  ModifyGuildMember(
+    nick: Modification(String),
+    roles: Modification(List(Snowflake(Role))),
+    is_mute: Modification(Bool),
+    is_deaf: Modification(Bool),
+    channel_id: Modification(Snowflake(MovableChannel)),
+    communication_disabled_until: Modification(Timestamp),
+    flags: Modification(List(GuildMemberFlag)),
+  )
+}
+
+/// A movable channel is either a voice channel or a stage channel. (because you can move members to and from it)
+pub type MovableChannel
+
+pub fn voice_channel_id_to_movable_channel_id(
+  id: Snowflake(VoiceChannel),
+) -> Snowflake(MovableChannel) {
+  Snowflake(id.id)
+}
+
+pub fn stage_channel_id_to_movable_channel_id(
+  id: Snowflake(StageChannel),
+) -> Snowflake(MovableChannel) {
+  Snowflake(id.id)
+}
+
+pub fn new_modify_guild_member() -> ModifyGuildMember {
+  ModifyGuildMember(Skip, Skip, Skip, Skip, Skip, Skip, Skip)
+}
+
+/// Requires the `AllowManagingNicknames` permission.
+pub fn modify_guild_member_nick(
+  modify: ModifyGuildMember,
+  new nick: String,
+) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, nick: Modify(nick))
+}
+
+/// Requires the `AllowManagingNicknames` permission.
+pub fn delete_guild_member_nick(modify: ModifyGuildMember) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, nick: Delete)
+}
+
+/// Requires the `AllowManagingRoles` permission.
+///
+/// Supply the function with all of the member's future roles.
+pub fn modify_guild_member_roles(
+  modify: ModifyGuildMember,
+  new_roles_ids roles: List(Snowflake(Role)),
+) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, roles: Modify(roles))
+}
+
+/// Requires the `AllowManagingRoles` permission.
+/// 
+/// Does not actually delete the roles - only removes them from the member.
+pub fn delete_guild_member_roles(modify: ModifyGuildMember) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, roles: Delete)
+}
+
+/// Requires the `AllowMutingMembersInVoiceChannels` permission.
+///
+/// Denies the user's permission to speak in all the guild's voice channels.
+/// 
+/// Will return a bad request if the user is not in a voice channel.
+pub fn mute_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, is_mute: Modify(True))
+}
+
+/// Requires the `AllowMutingMembersInVoiceChannels` permission.
+///
+/// Allows the user to speak in all the guild's voice channels.
+/// 
+/// Will return a bad request if the user is not in a voice channel.
+pub fn unmute_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, is_mute: Modify(False))
+}
+
+/// Requires the `AllowDeafeningMembersInVoiceChannels` permission.
+///
+/// Denies the user's permission to listen and speak in all the guild's voice channels.
+/// 
+/// Will return a bad request if the user is not in a voice channel.
+pub fn deafen_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, is_deaf: Modify(True))
+}
+
+/// Requires the `AllowDeafeningMembersInVoiceChannels` permission.
+///
+/// Allows the user to listen in all the guild's voice channels, and, if they were previously muted because of a server-wide deafen, allows them to speak.
+///
+/// Will return a bad request if the user is not in a voice channel.
+pub fn undeafen_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, is_deaf: Modify(False))
+}
+
+/// Requires the `AllowMovingMembersBetweenVoiceChannels` permission and the `AllowConnectingToVoiceChannels` permission for that voice channel.
+///
+/// Will return a bad request if the user is not in a voice channel.
+pub fn move_guild_member(
+  modify: ModifyGuildMember,
+  to channel_id: Snowflake(MovableChannel),
+) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, channel_id: Modify(channel_id))
+}
+
+/// Requires the `AllowMovingMembersBetweenVoiceChannels` permission and the `AllowConnectingToVoiceChannels` permission for that voice channel.
+///
+/// Will return a bad request if the user is not in a voice channel.
+pub fn disconnect_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, channel_id: Delete)
+}
+
+/// Requires the `AllowModeratingMembers` permission.
+///
+/// The timeout can be issued for a maximum of 28 days.
+/// 
+/// Will override all previous timeouts.
+///
+/// Will return a `Forbidden (403)` status code if the member has the `AdministratorPermission` or is the guild's owner.
+pub fn timeout_guild_member(
+  modify: ModifyGuildMember,
+  until timestamp: Timestamp,
+) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, communication_disabled_until: Modify(timestamp))
+}
+
+/// Requires the `AllowModeratingMembers` permission.
+pub fn untimeout_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, communication_disabled_until: Delete)
+}
+
+/// You can only add or remove the `GuildMemberBypassesVerificationFlag`.
+///
+/// Supply the function with all of the future flags.
+///
+/// Requires one of the following permissions:
+/// * `AllowManagingGuild`
+/// * `AllowManagingRoles`
+/// * `AllowModeratingMembers` + `AllowKickingMembers` + `AllowBanningMembers`
+pub fn modify_guild_member_flags(
+  modify: ModifyGuildMember,
+  new flags: List(GuildMemberFlag),
+) -> ModifyGuildMember {
+  ModifyGuildMember(..modify, flags: Modify(flags))
+}
+
+fn modify_guild_member_to_json(modify: ModifyGuildMember) -> Json {
+  [
+    modification_to_json(modify.nick, "nick", json.string),
+    modification_to_json(modify.roles, "roles", json.array(_, snowflake_to_json)),
+    modification_to_json(modify.is_mute, "mute", json.bool),
+    modification_to_json(modify.is_deaf, "deaf", json.bool),
+    modification_to_json(modify.channel_id, "channel_id", snowflake_to_json),
+    modification_to_json(
+      modify.communication_disabled_until,
+      "communication_disabled_until",
+      timestamp_to_json,
+    ),
+    modification_to_json(modify.flags, "flags", flags_to_json(
+      _,
+      bits_guild_member_flags(),
+    )),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+fn timestamp_to_json(timestamp: Timestamp) -> Json {
+  timestamp
+  |> timestamp.to_rfc3339(duration.seconds(0))
+  |> json.string
+}
+
+pub fn modify_guild_member(
+  token token: Token,
+  with_id user_id: Snowflake(User),
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using modify: ModifyGuildMember,
+  because reason: Option(String),
+) -> Result(GuildMember, RestError) {
+  let body = modify |> modify_guild_member_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/members/"
+      <> snowflake_to_string(user_id),
+    method: http.Patch,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_member_decoder())
+}
+
+pub opaque type ModifyCurrentMember {
+  ModifyCurrentMember(
+    nick: Modification(String),
+    banner: Modification(ImageData),
+    avatar: Modification(ImageData),
+    bio: Modification(String),
+  )
+}
+
+pub fn new_modify_current_member() -> ModifyCurrentMember {
+  ModifyCurrentMember(Skip, Skip, Skip, Skip)
+}
+
+/// Requires the `AllowChangingOwnNickname` permission.
+pub fn modify_current_member_nick(
+  modify: ModifyCurrentMember,
+  new nick: String,
+) -> ModifyCurrentMember {
+  ModifyCurrentMember(..modify, nick: Modify(nick))
+}
+
+/// Requires the `AllowChangingOwnNickname` permission.
+pub fn delete_current_member_nick(
+  modify: ModifyCurrentMember,
+) -> ModifyCurrentMember {
+  ModifyCurrentMember(..modify, nick: Delete)
+}
+
+/// Modifies your per-guild banner.
+pub fn modify_current_member_banner(
+  modify: ModifyCurrentMember,
+  new banner: ImageData,
+) -> ModifyCurrentMember {
+  ModifyCurrentMember(..modify, banner: Modify(banner))
+}
+
+/// Modifies your per-guild banner.
+pub fn delete_current_member_banner(
+  modify: ModifyCurrentMember,
+) -> ModifyCurrentMember {
+  ModifyCurrentMember(..modify, banner: Delete)
+}
+
+/// Modifies your per-guild avatar.
+pub fn modify_current_member_avatar(
+  modify: ModifyCurrentMember,
+  new avatar: ImageData,
+) -> ModifyCurrentMember {
+  ModifyCurrentMember(..modify, avatar: Modify(avatar))
+}
+
+/// Modifies your per-guild avatar.
+pub fn delete_current_member_avatar(
+  modify: ModifyCurrentMember,
+) -> ModifyCurrentMember {
+  ModifyCurrentMember(..modify, avatar: Delete)
+}
+
+/// Modifies your per-guild bio.
+pub fn modify_current_member_bio(
+  modify: ModifyCurrentMember,
+  new bio: String,
+) -> ModifyCurrentMember {
+  ModifyCurrentMember(..modify, bio: Modify(bio))
+}
+
+/// Modifies your per-guild bio.
+pub fn delete_current_member_bio(
+  modify: ModifyCurrentMember,
+) -> ModifyCurrentMember {
+  ModifyCurrentMember(..modify, bio: Delete)
+}
+
+fn modify_current_member_to_json(modify: ModifyCurrentMember) -> Json {
+  [
+    modification_to_json(modify.nick, "nick", json.string),
+    modification_to_json(modify.banner, "banner", image_data_to_json),
+    modification_to_json(modify.avatar, "avatar", image_data_to_json),
+    modification_to_json(modify.bio, "bio", json.string),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn modify_current_member(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using modify: ModifyCurrentMember,
+  because reason: Option(String),
+) -> Result(GuildMember, RestError) {
+  let body = modify |> modify_current_member_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/members/@me",
+    method: http.Patch,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_member_decoder())
+}
+
+/// Requires the `AllowManagingRoles` permission.
+pub fn add_guild_member_role(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  to_member_with_id user_id: Snowflake(User),
+  with_id role_id: Snowflake(Role),
+  because reason: Option(String),
+) -> Result(Nil, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/members/"
+      <> snowflake_to_string(user_id)
+      <> "/roles/"
+      <> snowflake_to_string(role_id),
+    method: http.Put,
+  )
+  |> request_with_reason(reason)
+  |> send_no_content_request
+}
+
+/// Requires the `AllowManagingRoles` permission.
+/// 
+/// Doesn't actually delete the role, only removes it from the user's profile.
+pub fn delete_guild_member_role(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  from_member_with_id user_id: Snowflake(User),
+  with_id role_id: Snowflake(Role),
+  because reason: Option(String),
+) -> Result(Nil, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/members/"
+      <> snowflake_to_string(user_id)
+      <> "/roles/"
+      <> snowflake_to_string(role_id),
+    method: http.Delete,
+  )
+  |> request_with_reason(reason)
+  |> send_no_content_request
+}
+
+/// Requires the `AllowKickingMembers` permission
+pub fn kick_guild_member(
+  token token: Token,
+  with_id user_id: Snowflake(User),
+  from_guild_with_id guild_id: Snowflake(Guild),
+  because reason: Option(String),
+) -> Result(Nil, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/members/"
+      <> snowflake_to_string(user_id),
+    method: http.Delete,
+  )
+  |> request_with_reason(reason)
+  |> send_no_content_request
+}
+
+pub type GuildBan {
+  GuildBan(reason: Option(String), user: User)
+}
+
+fn guild_ban_decoder() -> Decoder(GuildBan) {
+  use reason <- decode.field("reason", decode.optional(decode.string))
+  use user <- decode.field("user", user_decoder())
+  decode.success(GuildBan(reason:, user:))
+}
+
+pub opaque type GetGuildBansOptions {
+  GetGuildBansOptions(
+    limit: Option(Int),
+    before: Option(Snowflake(User)),
+    after: Option(Snowflake(User)),
+  )
+}
+
+pub fn new_get_guild_bans_options() -> GetGuildBansOptions {
+  GetGuildBansOptions(None, None, None)
+}
+
+/// Between 1-1000 bans.
+pub fn get_guild_bans_with_limit(
+  options: GetGuildBansOptions,
+  limit: Int,
+) -> GetGuildBansOptions {
+  GetGuildBansOptions(..options, limit: Some(int.clamp(limit, 1, 1000)))
+}
+
+/// Used for pagination. Takes priority over `get_guild_bans_after_id`.
+pub fn get_guild_bans_before_id(
+  options: GetGuildBansOptions,
+  id: Snowflake(User),
+) -> GetGuildBansOptions {
+  GetGuildBansOptions(..options, before: Some(id))
+}
+
+/// Used for pagination. The parameter should be the highest user ID in the previous page.
+pub fn get_guild_bans_after_id(
+  options: GetGuildBansOptions,
+  id: Snowflake(User),
+) -> GetGuildBansOptions {
+  GetGuildBansOptions(..options, after: Some(id))
+}
+
+fn get_guild_bans_options_to_query(
+  options: GetGuildBansOptions,
+) -> List(#(String, String)) {
+  [
+    optional_to_string(options.limit, "limit", int.to_string),
+    optional_to_string(options.before, "before", snowflake_to_string),
+    optional_to_string(options.after, "after", snowflake_to_string),
+  ]
+  |> list.filter_map(function.identity)
+}
+
+/// Requires the `AllowBanningMembers` permission.
+pub fn get_guild_bans(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+  options options: Option(GetGuildBansOptions),
+) -> Result(List(GuildBan), RestError) {
+  let query = case options {
+    Some(options) -> options |> get_guild_bans_options_to_query
+    None -> []
+  }
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/bans",
+    method: http.Get,
+  )
+  |> request.set_query(query)
+  |> send_request(decode_with: decode.list(of: guild_ban_decoder()))
+}
+
+/// Requires the `AllowBanningMembers` permission.
+pub fn get_guild_ban(
+  token token: Token,
+  of_user_with_id user_id: Snowflake(Guild),
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(GuildBan, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/bans/"
+      <> snowflake_to_string(user_id),
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_ban_decoder())
+}
+
+/// Requires the `AllowBanningMembers` permission.
+/// 
+/// `delete_messages_since` will delete the messages the user has sent in the guild that are at most 7 days old.
+pub fn ban_guild_member(
+  token token: Token,
+  with_id user_id: Snowflake(User),
+  from_guild_with_id guild_id: Snowflake(Guild),
+  delete_messages_since delete_messages_since: Option(Duration),
+  because reason: Option(String),
+) -> Result(Nil, RestError) {
+  let json = case delete_messages_since {
+    Some(duration) -> [
+      #("delete_message_seconds", duration_to_json_seconds(duration)),
+    ]
+    None -> []
+  }
+
+  let body = json |> json.object |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/bans/"
+      <> snowflake_to_string(user_id),
+    method: http.Put,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_no_content_request
+}
+
+// not really a guild member if you're banned, are you?
+//
+// might rename this, if you read through this code and have a better idea then make an issue
+// i'll happily deprecate this function (i don't wanna use remove_guild_ban because i don't think it fits ban_guild_member)
+/// Requires the `AllowBanningMembers` permission.
+pub fn unban_guild_member(
+  token token: Token,
+  with_id user_id: Snowflake(User),
+  from_guild_with_id guild_id: Snowflake(Guild),
+  because reason: Option(String),
+) -> Result(Nil, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/bans/"
+      <> snowflake_to_string(user_id),
+    method: http.Delete,
+  )
+  |> request_with_reason(reason)
+  |> send_no_content_request
+}
+
+pub type BulkGuildBanResponse {
+  BulkGuildBanResponse(
+    banned_users: List(Snowflake(User)),
+    failed_users: List(Snowflake(User)),
+  )
+}
+
+fn bulk_guild_ban_response_decoder() -> Decoder(BulkGuildBanResponse) {
+  use banned_users <- decode.field(
+    "banned_users",
+    decode.list(snowflake_decoder()),
+  )
+  use failed_users <- decode.field(
+    "failed_users",
+    decode.list(snowflake_decoder()),
+  )
+  decode.success(BulkGuildBanResponse(banned_users:, failed_users:))
+}
+
+/// Requires the `AllowBanningMembers` and `AllowManagingGuild` permissions.
+pub fn bulk_guild_ban(
+  token token: Token,
+  users_with_ids user_ids: List(Snowflake(User)),
+  from_guild_with_id guild_id: Snowflake(Guild),
+  delete_messages_since delete_messages_since: Option(Duration),
+  because reason: Option(String),
+) -> Result(BulkGuildBanResponse, RestError) {
+  let body =
+    [
+      Ok(#("user_ids", json.array(user_ids, snowflake_to_json))),
+      optional_to_json(
+        delete_messages_since,
+        "delete_message_seconds",
+        duration_to_json_seconds,
+      ),
+    ]
+    |> list.filter_map(function.identity)
+    |> json.object
+    |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/bulk-ban",
+    method: http.Post,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: bulk_guild_ban_response_decoder())
 }
