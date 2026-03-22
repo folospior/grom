@@ -13,9 +13,9 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
-import gleam/uri
 import gleam_community/colour.{type Colour}
 import status_code
 
@@ -5833,6 +5833,7 @@ pub fn modify_role_as_unmentionable(modify: ModifyRole) -> ModifyRole {
   ModifyRole(..modify, is_mentionable: Modify(False))
 }
 
+/// Requires the `AllowManagingRoles` permission.
 pub fn modify_role(
   token token: Token,
   with_id role_id: Snowflake(Role),
@@ -5855,6 +5856,7 @@ pub fn modify_role(
   |> send_request(decode_with: role_decoder())
 }
 
+/// Requires the `AllowManagingRoles` permission.
 pub fn delete_role(
   token token: Token,
   with_id role_id: Snowflake(Role),
@@ -5871,4 +5873,181 @@ pub fn delete_role(
   )
   |> request_with_reason(reason)
   |> send_no_content_request
+}
+
+/// Requires the `AllowManagingGuild` and `AllowKickingMembers` permissions.
+///
+/// Returns the amount of members that would be kicked if a prune starts.
+///
+/// Pruning will, by default, only kick members with no roles. Include any roles which you count as prunable.
+///
+/// The minimum number of days is 1 and the maximum number of days is 30. Numbers not within these bounds will return the closest result (1 or 30 days)
+pub fn get_guild_prunable_count(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+  required_inactive_days days: Int,
+  include_roles_with_ids include_roles: List(Snowflake(Role)),
+) -> Result(Int, RestError) {
+  let query = [
+    #("days", int.to_string(int.clamp(days, 1, 30))),
+    #(
+      "include_roles",
+      string.join(
+        include_roles
+          |> list.map(snowflake_to_string),
+        ",",
+      ),
+    ),
+  ]
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/prune",
+    method: http.Get,
+  )
+  |> request.set_query(query)
+  |> send_request(decode_with: decode.field(
+    "pruned",
+    decode.int,
+    decode.success,
+  ))
+}
+
+pub opaque type PruneGuild {
+  PruneGuild(
+    days: Option(Int),
+    compute_prune_count: Bool,
+    include_roles: Option(List(Snowflake(Role))),
+  )
+}
+
+fn prune_guild_to_json(prune: PruneGuild) -> Json {
+  [
+    Ok(#("compute_prune_count", json.bool(prune.compute_prune_count))),
+    optional_to_json(prune.days, "days", json.int),
+    optional_to_json(prune.include_roles, "include_roles", json.array(
+      _,
+      snowflake_to_json,
+    )),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Defaults:
+/// * days: 7
+/// * include_roles: None
+pub fn new_prune_guild() -> PruneGuild {
+  PruneGuild(None, False, None)
+}
+
+/// The minimum number of days is 1 and the maximum number of days is 30. Numbers not within these bounds will kick the closest amount of time (1 or 30 days).
+pub fn prune_guild_with_required_inactive_days(
+  prune: PruneGuild,
+  days: Int,
+) -> PruneGuild {
+  PruneGuild(..prune, days: Some(int.clamp(days, 1, 30)))
+}
+
+/// Pruning will, by default, only kick members with no roles. Include any roles which you count as prunable.
+pub fn prune_guild_with_included_roles(
+  prune: PruneGuild,
+  roles: List(Snowflake(Role)),
+) -> PruneGuild {
+  PruneGuild(..prune, include_roles: Some(roles))
+}
+
+/// Not recommended for large guilds, use [`prune_guild`](#prune_guild) instead.
+/// 
+/// Requires the `AllowManagingGuild` and `AllowKickingMembers` permissions.
+/// 
+/// Kicks inactive members based on the provided options.
+///
+/// Returns the amount of members who have been kicked. 
+pub fn prune_guild_with_count(
+  token token: Token,
+  with_id guild_id: Snowflake(Guild),
+  using prune: PruneGuild,
+  reason reason: Option(String),
+) -> Result(Int, RestError) {
+  let prune = PruneGuild(..prune, compute_prune_count: True)
+
+  let body = prune |> prune_guild_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/prune",
+    method: http.Post,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+  |> send_request(decode_with: decode.field(
+    "pruned",
+    decode.int,
+    decode.success,
+  ))
+}
+
+/// Requires the `AllowManagingGuild` and `AllowKickingMembers` permissions.
+/// 
+/// Kicks inactive members based on the provided options.
+pub fn prune_guild(
+  token token: Token,
+  with_id guild_id: Snowflake(Guild),
+  using prune: PruneGuild,
+  reason reason: Option(String),
+) -> Result(Nil, RestError) {
+  let prune = PruneGuild(..prune, compute_prune_count: False)
+
+  let body = prune |> prune_guild_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/prune",
+    method: http.Post,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+  |> send_no_content_request
+}
+
+pub type VoiceRegion {
+  VoiceRegion(
+    id: String,
+    name: String,
+    /// Whether the region is the closest one to the current user.
+    is_optimal: Bool,
+    /// Avoid connecting to deprecated regions.
+    is_deprecated: Bool,
+    /// Whether the region is a custom one (used for Discord events)
+    is_custom: Bool,
+  )
+}
+
+fn voice_region_decoder() -> Decoder(VoiceRegion) {
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use is_optimal <- decode.field("optimal", decode.bool)
+  use is_deprecated <- decode.field("deprecated", decode.bool)
+  use is_custom <- decode.field("custom", decode.bool)
+  decode.success(VoiceRegion(
+    id:,
+    name:,
+    is_optimal:,
+    is_deprecated:,
+    is_custom:,
+  ))
+}
+
+/// Unlike the similar [`get_voice_regions`](#get_voice_regions), this returns VIP regions if the guild is VIP-enabled.
+pub fn get_guild_voice_regions(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(List(VoiceRegion), RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/regions",
+    method: http.Get,
+  )
+  |> send_request(decode_with: decode.list(of: voice_region_decoder()))
 }
