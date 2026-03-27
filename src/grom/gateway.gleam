@@ -2992,6 +2992,7 @@ fn on_message(
   message: stratus.Message(StratusUserMessage),
   connection: stratus.Connection,
 ) -> stratus.Next(Connection, StratusUserMessage) {
+  echo message
   case message {
     stratus.Text(text_message) ->
       on_text_message(connection_state, connection, text_message)
@@ -3423,7 +3424,10 @@ fn on_hello_event(
           // heartbeat manager. The RESUME payload was already queued
           // in resume(), so we must not send IDENTIFY here.
           stratus.continue(
-            Identified(..connection_state, heartbeat_manager: heartbeat_manager.data),
+            Identified(
+              ..connection_state,
+              heartbeat_manager: heartbeat_manager.data,
+            ),
           )
         }
       }
