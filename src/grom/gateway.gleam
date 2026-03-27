@@ -2837,7 +2837,7 @@ fn resume(connection_state: Connection, resuming_info: ResumingInfo) -> Nil {
     connection_state.manager,
     SendUserMessage(StartSendResume(resuming_info)),
   )
-  process.send(resuming_info.heartbeat_manager, ResetHeartbeatCount)
+  process.send(resuming_info.heartbeat_manager, StopHeartbeats)
 }
 
 fn reconnect(connection_state: Connection) -> Nil {
@@ -3385,6 +3385,15 @@ fn on_hello_event(
   connection_state: Connection,
   event: HelloMessage,
 ) -> stratus.Next(Connection, a) {
+  // Stop any existing heartbeat manager before creating a new one.
+  // This is necessary when reconnecting or resuming, where a heartbeat manager
+  // from the previous connection may still be running.
+  case connection_state {
+    Welcomed(heartbeat_manager:, ..) | Identified(heartbeat_manager:, ..) ->
+      process.send(heartbeat_manager, StopHeartbeats)
+    GettingReady(..) -> Nil
+  }
+
   let heartbeat_start_result =
     start_heartbeats(
       every: event.heartbeat_interval,
@@ -3392,19 +3401,32 @@ fn on_hello_event(
     )
 
   case heartbeat_start_result {
-    Ok(heartbeat_manager) -> {
-      let state =
-        Welcomed(
-          gateway_url: connection_state.gateway_url,
-          identify: connection_state.identify,
-          subject: connection_state.subject,
-          manager: connection_state.manager,
-          heartbeat_manager: heartbeat_manager.data,
-          sequence: None,
-        )
-      send_identify(state)
-      stratus.continue(state)
-    }
+    Ok(heartbeat_manager) ->
+      case connection_state {
+        GettingReady(..) | Welcomed(..) -> {
+          // Fresh connection: transition to Welcomed and send IDENTIFY.
+          let state =
+            Welcomed(
+              gateway_url: connection_state.gateway_url,
+              identify: connection_state.identify,
+              subject: connection_state.subject,
+              manager: connection_state.manager,
+              heartbeat_manager: heartbeat_manager.data,
+              sequence: None,
+            )
+          send_identify(state)
+          stratus.continue(state)
+        }
+        Identified(..) -> {
+          // Resume: keep the Identified state (preserving session_id,
+          // resume_gateway_url, and sequence) and only replace the
+          // heartbeat manager. The RESUME payload was already queued
+          // in resume(), so we must not send IDENTIFY here.
+          stratus.continue(
+            Identified(..connection_state, heartbeat_manager: heartbeat_manager.data),
+          )
+        }
+      }
     Error(err) -> send_error(err, connection_state)
   }
 }
