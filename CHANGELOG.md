@@ -1,3 +1,6 @@
+# v5.1.4 (27/03/2026)
+* Fix the gateway failing to heartbeat after reconnecting (Copilot/Filip Hoffmann)
+
 # v5.1.3 (05/03/2026)
 * Fix some components not being serialized with the `type` field (Filip Hoffmann)
 * Fix the invalid session event being improperly parsed as a bool (not the data field) (Filip Hoffmann)
