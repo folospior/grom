@@ -6061,3 +6061,51 @@ pub fn get_guild_voice_regions(
   )
   |> send_request(decode_with: decode.list(of: voice_region_decoder()))
 }
+
+pub type Invite {
+  Invite(
+    /// 
+    code: String,
+    guild: Guild,
+    channel: Option(GuildChannel),
+    inviter: Option(User),
+    target: InviteTarget,
+    expires_at: Option(Timestamp),
+    scheduled_event: Option(ScheduledEvent),
+    flags: List(InviteFlag),
+    roles: List(InviteRole),
+    metadata: Option(InviteMetadata),
+  )
+}
+
+pub type InviteRole {
+  InviteRole(
+    id: Snowflake(Role),
+    name: String,
+    position: Int,
+    colours: RoleColours,
+    icon_hash: Option(ImageHash),
+    unicode_emoji: Option(String),
+  )
+}
+
+pub type InviteMetadata {
+  InviteMetadata(
+    uses: Int,
+    max_uses: Int,
+    max_age: Int,
+    is_temporary: Bool,
+    created_at: Timestamp,
+  )
+}
+
+pub type InviteFlag {
+  InviteIsGuestInvite
+}
+
+pub type ScheduledEvent
+
+pub type InviteTarget {
+  StreamInvite(streaming_user: User)
+  EmbeddedApplicationInvite(application: Application)
+}
