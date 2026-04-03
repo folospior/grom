@@ -2850,9 +2850,14 @@ fn reconnect(connection_state: Connection) -> Nil {
 
   // yes, i know this was done before in start
   // cry about it or make a PR lol, it's too late for me to do ts
+  let request_url =
+    connection_state.gateway_url
+    |> string.replace(each: "wss://", with: "https://")
+    |> string.append(suffix: "?v=10&encoding=json")
+
   let request_result =
-    request.to(connection_state.gateway_url)
-    |> result.replace_error(grom.InvalidGatewayUrl(connection_state.gateway_url))
+    request.to(request_url)
+    |> result.replace_error(grom.InvalidGatewayUrl(request_url))
 
   use request <-
     fn(next) {
