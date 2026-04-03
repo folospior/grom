@@ -2735,6 +2735,8 @@ fn try_reconnect(
   connection_state: Connection,
   reason: stratus.CloseReason,
 ) -> Nil {
+  echo reason as "Close reason:"
+
   let can_reconnect = case reason {
     stratus.NotProvided -> True
     stratus.Custom(custom_reason) -> {
