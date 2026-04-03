@@ -1,3 +1,6 @@
+# v5.1.5 (03/04/2026)
+* Fix the bot dying when a shard reconnects (not resumes) due to non-fatal WebSocket close codes being treated as fatal (Copilot/Filip Hoffmann)
+
 # v5.1.4 (27/03/2026)
 * Fix the gateway failing to heartbeat after reconnecting (Copilot/Filip Hoffmann)
 

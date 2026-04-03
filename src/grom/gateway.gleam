@@ -2735,15 +2735,16 @@ fn try_reconnect(
   reason: stratus.CloseReason,
 ) -> Nil {
   let can_reconnect = case reason {
-    stratus.NotProvided -> True
     stratus.Custom(custom_reason) -> {
       let code = stratus.get_custom_code(custom_reason)
-      let allowed_codes = [4000, 4001, 4002, 4003, 4005, 4007, 4008, 4009]
+      let no_reconnect_codes = [4004, 4010, 4011, 4012, 4013, 4014]
 
-      allowed_codes
-      |> list.contains(code)
+      case list.contains(no_reconnect_codes, code) {
+        True -> False
+        False -> True
+      }
     }
-    _ -> False
+    _ -> True
   }
 
   case can_reconnect, connection_state {
