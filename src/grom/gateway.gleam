@@ -2722,7 +2722,7 @@ fn start_connection(
     |> stratus.on_message(on_message)
     |> stratus.on_close(try_reconnect)
     |> stratus.start
-    |> result.map_error(grom.CouldNotInitializeWebsocketConnection),
+    |> result.replace_error(grom.CouldNotInitializeWebsocketConnection),
   )
 
   process.send(connection_manager.data, UpdateWebsocket(to: websocket.data))
@@ -2861,7 +2861,7 @@ fn reconnect(connection_state: Connection) -> Nil {
     |> stratus.on_message(on_message)
     |> stratus.on_close(try_reconnect)
     |> stratus.start
-    |> result.map_error(grom.CouldNotInitializeWebsocketConnection)
+    |> result.replace_error(grom.CouldNotInitializeWebsocketConnection)
 
   use
     websocket: actor.Started(
