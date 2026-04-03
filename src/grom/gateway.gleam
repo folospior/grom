@@ -2,7 +2,7 @@ import gleam/dynamic/decode
 import gleam/erlang/process.{type Subject}
 import gleam/float
 import gleam/http
-import gleam/http/request
+import gleam/http/request.{type Request}
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -784,13 +784,13 @@ type ConnectionManagerState {
 
 type Connection {
   GettingReady(
-    gateway_url: String,
+    gateway_request: Request(String),
     manager: Subject(ConnectionManagerMessage),
     subject: Subject(Message),
     identify: IdentifyMessage,
   )
   Welcomed(
-    gateway_url: String,
+    gateway_request: Request(String),
     manager: Subject(ConnectionManagerMessage),
     subject: Subject(Message),
     identify: IdentifyMessage,
@@ -798,7 +798,7 @@ type Connection {
     sequence: Option(Int),
   )
   Identified(
-    gateway_url: String,
+    gateway_request: Request(String),
     manager: Subject(ConnectionManagerMessage),
     subject: Subject(Message),
     identify: IdentifyMessage,
@@ -2710,7 +2710,7 @@ fn start_connection(
 
   let initial_connection_state =
     GettingReady(
-      gateway_url: builder.data.url,
+      gateway_request: request,
       manager: connection_manager.data,
       subject:,
       identify:,
@@ -2847,25 +2847,11 @@ fn reconnect(connection_state: Connection) -> Nil {
     _ -> Nil
   }
 
-  // yes, i know this was done before in start
-  // cry about it or make a PR lol, it's too late for me to do ts
-  let request_result =
-    request.to(connection_state.gateway_url)
-    |> result.replace_error(grom.InvalidGatewayUrl(connection_state.gateway_url))
-
-  use request <-
-    fn(next) {
-      case request_result {
-        Ok(request) -> next(request)
-        Error(_) -> Nil
-      }
-    }
-
   let start_result =
     stratus.new(
-      request,
+      connection_state.gateway_request,
       GettingReady(
-        gateway_url: connection_state.gateway_url,
+        gateway_request: connection_state.gateway_request,
         manager: connection_state.manager,
         subject: connection_state.subject,
         identify: connection_state.identify,
@@ -3345,7 +3331,7 @@ fn on_ready(
 
   let new_state =
     Identified(
-      gateway_url: connection_state.gateway_url,
+      gateway_request: connection_state.gateway_request,
       manager: connection_state.manager,
       subject: connection_state.subject,
       identify: connection_state.identify,
@@ -3407,7 +3393,7 @@ fn on_hello_event(
           // Fresh connection: transition to Welcomed and send IDENTIFY.
           let state =
             Welcomed(
-              gateway_url: connection_state.gateway_url,
+              gateway_request: connection_state.gateway_request,
               identify: connection_state.identify,
               subject: connection_state.subject,
               manager: connection_state.manager,
