@@ -1,4 +1,5 @@
 import gleam/dynamic/decode
+
 import gleam/erlang/process.{type Subject}
 import gleam/float
 import gleam/http
@@ -2978,6 +2979,7 @@ fn on_message(
   message: stratus.Message(StratusUserMessage),
   connection: stratus.Connection,
 ) -> stratus.Next(Connection, StratusUserMessage) {
+  echo message
   case message {
     stratus.Text(text_message) ->
       on_text_message(connection_state, connection, text_message)
