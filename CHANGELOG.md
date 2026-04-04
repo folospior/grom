@@ -1,5 +1,8 @@
+# v5.1.5 (04/04/2026)
+* Fix the gateway failing to reconnect (Filip Hoffmann)
+
 # v5.1.4 (27/03/2026)
-* Fix the gateway failing to heartbeat after reconnecting (Copilot/Filip Hoffmann)
+* Fix the gateway failing to heartbeat after resuming (Copilot/Filip Hoffmann)
 
 # v5.1.3 (05/03/2026)
 * Fix some components not being serialized with the `type` field (Filip Hoffmann)
