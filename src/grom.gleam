@@ -1,6 +1,6 @@
+import datebook/weekday.{type Weekday}
 import gleam/bit_array
 import gleam/dict.{type Dict}
-import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode.{type Decoder}
 import gleam/float
 import gleam/function
@@ -14,9 +14,11 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import gleam/time/calendar
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import gleam_community/colour.{type Colour}
+import json_value
 import status_code
 
 const version: String = "v6.0.0"
@@ -644,10 +646,10 @@ pub type ErrorResponse {
     code: Int,
     /// User-friendly message briefly explaining what error happened.
     message: String,
-    /// This is a dynamic object that is best not parsed. I recommend just printing it if needed.
+    /// This contains a JSON string that is best not parsed. I recommend just printing/logging it if needed.
     /// It contains detailed information regarding what error happened.
     /// It would be nearly impossible to properly parse it. It is also sometimes absent from the response.
-    errors: Option(Dynamic),
+    errors: Option(String),
   )
 }
 
@@ -657,7 +659,7 @@ fn error_response_decoder() -> Decoder(ErrorResponse) {
   use errors <- decode.optional_field(
     "errors",
     None,
-    decode.optional(decode.dynamic),
+    decode.optional(decode.map(json_value.decoder(), json_value.to_string)),
   )
   decode.success(ErrorResponse(code:, message:, errors:))
 }
@@ -835,9 +837,7 @@ pub type Role {
     colours: RoleColours,
     /// Whether the role is pinned in the guild user list.
     is_hoisted: Bool,
-    /// Is `None` if the role doesn't have an icon.
     icon_hash: Option(ImageHash),
-    /// Is `None` if the role doesn't have an associated emoji.
     unicode_emoji: Option(String),
     /// Position of this role in the hierarchy.
     /// Roles with the same position are sorted by ID.
@@ -850,7 +850,7 @@ pub type Role {
     /// Whether this role is mentionable in text channels.
     is_mentionable: Bool,
     /// The ID of the bot user associated with this role.
-    /// Is `None` if the role isn't a bot's rle.
+    /// Is `None` if the role isn't a bot's role.
     bot_id: Option(Snowflake(User)),
     /// The ID of the integration associated with this role.
     /// Is `None` if the role isn't an integration's role.
@@ -2758,8 +2758,418 @@ fn bits_guild_system_channel_flags() -> List(#(Int, GuildSystemChannelFlag)) {
   ]
 }
 
-// TODO: GET RID OF ME! USE ACTUAL APPLICATIONS
-pub type Application
+pub type Application {
+  Application(
+    id: Snowflake(Application),
+    name: String,
+    icon_hash: Option(ImageHash),
+    /// Appears in a bot's biography.
+    description: String,
+    /// List of RPC origin URLs, if RPC is enabled.
+    rpc_origins: Option(List(String)),
+    /// If `False`, only the owner can add the app to guilds.
+    is_bot_public: Bool,
+    /// If `True`, the bot will only join a guild upon completion of the full OAuth2 code grant flow.
+    bot_requires_code_grant: Bool,
+    /// Is `None` if there's no bot associated with the app.
+    bot: Option(User),
+    /// The app's Terms of Service.
+    /// 
+    /// Is `None` if the developer didn't specify any Terms of Service.
+    terms_of_service_url: Option(String),
+    /// The app's Privacy Policy.
+    /// 
+    /// Is `None` if the developer didn't specify any Privacy Policy.
+    privacy_policy_url: Option(String),
+    owner: ApplicationOwner,
+    // Hex-encoded key for verification in interactions and the GameSDK's GetTicket.
+    verify_key: String,
+    /// Guild associated with the app - for example, a developer support server.
+    guild: Option(Guild),
+    /// If this app is a game sold on Discord, this field will be the ID of the Game SKU.
+    primary_sku_id: Option(Snowflake(Sku)),
+    /// If this app is a game sold on Discord, this field will be the URL slug that links to the store page.
+    slug: Option(String),
+    /// Default rich presence invite cover image.
+    cover_image_hash: Option(ImageHash),
+    flags: List(ApplicationFlag),
+    /// Approximately, how many guilds has the app been added to?
+    ///
+    /// Is `None` if not computed yet.
+    approximate_guild_count: Option(Int),
+    /// Approximately, how many users installed the app?
+    ///
+    /// Is `None` if not computed yet.
+    approximate_user_install_count: Option(Int),
+    /// Approximately, how many users have completed OAuth2 authorizations for the app?
+    ///
+    /// Is `None` if not computed yet.
+    approximate_user_authorization_count: Option(Int),
+    /// OAuth2 redirect URIs.
+    redirect_uris: List(String),
+    /// The URL for webhook-based interactions.
+    interactions_endpoint_url: Option(String),
+    /// The URL for verification to link an app to a user's Discord profile.
+    role_connections_verification_url: Option(String),
+    /// The URL for webhook-based events.
+    webhook_events_url: Option(String),
+    webhook_events_status: ApplicationWebhookEventStatus,
+    /// The types of events the application is subscribed to (if any)
+    webhook_events_types: Option(List(String)),
+    /// A list of maximum 5 tags describing the application.
+    tags: List(String),
+    /// Installation settings for the default in-app authorization link.
+    in_app_installation_settings: Option(ApplicationInstallationSettings),
+    /// Default installation settings for guild installation.
+    guild_installation_settings: Option(ApplicationInstallationSettings),
+    /// Default installation settings for user installation.
+    user_installation_settings: Option(ApplicationInstallationSettings),
+    /// Custom authorization URL.
+    custom_installation_url: Option(String),
+  )
+}
+
+fn application_decoder() -> Decoder(Application) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use icon_hash <- decode.field("icon", decode.optional(image_hash_decoder()))
+  use description <- decode.field("description", decode.string)
+  use rpc_origins <- decode.optional_field(
+    "rpc_origins",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+  use is_bot_public <- decode.field("bot_public", decode.bool)
+  use bot_requires_code_grant <- decode.field(
+    "bot_require_code_grant",
+    decode.bool,
+  )
+  use bot <- decode.optional_field("bot", None, decode.optional(user_decoder()))
+  use terms_of_service_url <- decode.optional_field(
+    "terms_of_service_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use privacy_policy_url <- decode.optional_field(
+    "privacy_policy_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use owner <- decode.then(application_owner_decoder())
+  use verify_key <- decode.field("verify_key", decode.string)
+  use guild <- decode.optional_field(
+    "guild",
+    None,
+    decode.optional(guild_decoder()),
+  )
+  use primary_sku_id <- decode.optional_field(
+    "primary_sku_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use slug <- decode.optional_field(
+    "slug",
+    None,
+    decode.optional(decode.string),
+  )
+  use cover_image_hash <- decode.optional_field(
+    "cover_image",
+    None,
+    decode.optional(image_hash_decoder()),
+  )
+  use flags <- decode.optional_field(
+    "flags",
+    [],
+    flags_decoder(bits_application_flags()),
+  )
+  use approximate_guild_count <- decode.optional_field(
+    "approximate_guild_count",
+    None,
+    decode.optional(decode.int),
+  )
+  use approximate_user_install_count <- decode.optional_field(
+    "approximate_user_install_count",
+    None,
+    decode.optional(decode.int),
+  )
+  use approximate_user_authorization_count <- decode.optional_field(
+    "approximate_user_authorization_count",
+    None,
+    decode.optional(decode.int),
+  )
+  use redirect_uris <- decode.optional_field(
+    "redirect_uris",
+    [],
+    decode.list(decode.string),
+  )
+  use interactions_endpoint_url <- decode.optional_field(
+    "interactions_endpoint_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use role_connections_verification_url <- decode.optional_field(
+    "role_connections_verification_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use webhook_events_url <- decode.optional_field(
+    "events_webhooks_url",
+    None,
+    decode.optional(decode.string),
+  )
+  use webhook_events_status <- decode.optional_field(
+    "events_webhooks_status",
+    ApplicationWebhookEventsDisabled,
+    application_webhook_event_status_decoder(),
+  )
+  use webhook_events_types <- decode.optional_field(
+    "event_webhooks_types",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+  use tags <- decode.optional_field("tags", [], decode.list(decode.string))
+  use in_app_installation_settings <- decode.optional_field(
+    "install_params",
+    None,
+    decode.optional(application_installation_settings_decoder()),
+  )
+  use guild_installation_settings <- decode.then(decode.optionally_at(
+    ["integration_types_config", "0", "oauth2_install_params"],
+    None,
+    decode.optional(application_installation_settings_decoder()),
+  ))
+  use user_installation_settings <- decode.then(decode.optionally_at(
+    ["integration_types_config", "1", "oauth2_install_params"],
+    None,
+    decode.optional(application_installation_settings_decoder()),
+  ))
+  use custom_installation_url <- decode.optional_field(
+    "custom_install_url",
+    None,
+    decode.optional(decode.string),
+  )
+  decode.success(Application(
+    id:,
+    name:,
+    icon_hash:,
+    description:,
+    rpc_origins:,
+    is_bot_public:,
+    bot_requires_code_grant:,
+    bot:,
+    terms_of_service_url:,
+    privacy_policy_url:,
+    owner:,
+    verify_key:,
+    guild:,
+    primary_sku_id:,
+    slug:,
+    cover_image_hash:,
+    flags:,
+    approximate_guild_count:,
+    approximate_user_install_count:,
+    approximate_user_authorization_count:,
+    redirect_uris:,
+    interactions_endpoint_url:,
+    role_connections_verification_url:,
+    webhook_events_url:,
+    webhook_events_status:,
+    webhook_events_types:,
+    tags:,
+    in_app_installation_settings:,
+    guild_installation_settings:,
+    user_installation_settings:,
+    custom_installation_url:,
+  ))
+}
+
+fn application_owner_decoder() -> Decoder(ApplicationOwner) {
+  let user_decoder = {
+    use user <- decode.field("owner", user_decoder())
+    decode.success(ApplicationOwnerUser(user:))
+  }
+
+  let team_decoder = {
+    use team <- decode.field("team", developer_team_decoder())
+    decode.success(ApplicationOwnerTeam(team:))
+  }
+
+  decode.one_of(user_decoder, or: [team_decoder])
+}
+
+/// Describes variable values during application installation.
+pub type ApplicationInstallationSettings {
+  ApplicationInstallationSettings(
+    /// The OAuth2 scopes the app will be installed with.
+    scopes: List(String),
+    /// The permissions the app will be installed with.
+    permissions: List(Permission),
+  )
+}
+
+fn application_installation_settings_decoder() -> Decoder(
+  ApplicationInstallationSettings,
+) {
+  use scopes <- decode.field("scopes", decode.list(decode.string))
+  use permissions <- decode.field("permissions", permissions_decoder())
+  decode.success(ApplicationInstallationSettings(scopes:, permissions:))
+}
+
+pub type ApplicationWebhookEventStatus {
+  /// The application isn't receiving webhook events
+  ApplicationWebhookEventsDisabled
+  /// The application's receiving webhook events
+  ApplicationWebhookEventsEnabled
+  /// The application's webhook events were disabled by Discord (usually due to inactivity)
+  ApplicationWebhookEventsDisabledByDiscord
+}
+
+fn application_webhook_event_status_decoder() -> Decoder(
+  ApplicationWebhookEventStatus,
+) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    1 -> decode.success(ApplicationWebhookEventsDisabled)
+    2 -> decode.success(ApplicationWebhookEventsEnabled)
+    3 -> decode.success(ApplicationWebhookEventsDisabledByDiscord)
+    _ ->
+      decode.failure(
+        ApplicationWebhookEventsDisabled,
+        "ApplicationWebhookEventStatus",
+      )
+  }
+}
+
+pub type ApplicationFlag {
+  /// The application was awarded a badge for creating an auto moderation rule
+  ApplicationCreatedAutoModerationRule
+  /// The application is approved for the privileged presence intent. (100+ guilds)
+  ApplicationApprovedForPresenceIntent
+  /// The application is temporarily approved for the privileged presence intent (0-99 guilds)
+  ApplicationTemporarilyApprovedForPresenceIntent
+  /// The application is approved for the privileged guild members intent. (100+ guilds)
+  ApplicationApprovedForGuildMembersIntent
+  /// The application is temporarily approved for the privileged guild members intent (0-99 guilds)
+  ApplicationTemporarilyApprovedForGuildMembersIntent
+  /// Indicates unusual growth of an app that prevents verification.
+  ApplicationGrowsUnusuallyFast
+  /// The application is embedded within the Discord client (unavailable publicly)
+  ApplicationIsEmbedded
+  /// The application is approved for the privileged message content intent. (100+ guilds)
+  ApplicationApprovedForMessageContentIntent
+  /// The application is temporarily approved for the privileged message content intent (0-99 guilds)
+  ApplicationTemporarilyApprovedForMessageContentIntent
+  /// The application was awarded a badge for creating a global command
+  ApplicationRegisteredGlobalCommand
+}
+
+fn bits_application_flags() -> List(#(Int, ApplicationFlag)) {
+  [
+    #(int.bitwise_shift_left(1, 6), ApplicationCreatedAutoModerationRule),
+    #(int.bitwise_shift_left(1, 12), ApplicationApprovedForPresenceIntent),
+    #(
+      int.bitwise_shift_left(1, 13),
+      ApplicationTemporarilyApprovedForPresenceIntent,
+    ),
+    #(int.bitwise_shift_left(1, 14), ApplicationApprovedForGuildMembersIntent),
+    #(
+      int.bitwise_shift_left(1, 15),
+      ApplicationTemporarilyApprovedForGuildMembersIntent,
+    ),
+    #(int.bitwise_shift_left(1, 16), ApplicationGrowsUnusuallyFast),
+    #(int.bitwise_shift_left(1, 17), ApplicationIsEmbedded),
+    #(int.bitwise_shift_left(1, 18), ApplicationApprovedForMessageContentIntent),
+    #(
+      int.bitwise_shift_left(1, 19),
+      ApplicationTemporarilyApprovedForMessageContentIntent,
+    ),
+    #(int.bitwise_shift_left(1, 23), ApplicationRegisteredGlobalCommand),
+  ]
+}
+
+pub type ApplicationOwner {
+  ApplicationOwnerUser(user: User)
+  ApplicationOwnerTeam(team: DeveloperTeam)
+}
+
+pub type DeveloperTeam {
+  DeveloperTeam(
+    id: Snowflake(DeveloperTeam),
+    members: List(DeveloperTeamMember),
+    icon_hash: Option(ImageHash),
+    name: String,
+    owner_id: Snowflake(User),
+  )
+}
+
+fn developer_team_decoder() -> Decoder(DeveloperTeam) {
+  use id <- decode.field("id", snowflake_decoder())
+  use members <- decode.field(
+    "members",
+    decode.list(developer_team_member_decoder()),
+  )
+  use icon_hash <- decode.field("icon", decode.optional(image_hash_decoder()))
+  use name <- decode.field("name", decode.string)
+  use owner_id <- decode.field("owner_user_id", snowflake_decoder())
+  decode.success(DeveloperTeam(id:, members:, icon_hash:, name:, owner_id:))
+}
+
+pub type DeveloperTeamMember {
+  DeveloperTeamMember(
+    user: User,
+    role: DeveloperTeamMemberRole,
+    team_id: Snowflake(DeveloperTeam),
+    membership_state: DeveloperTeamMembershipState,
+  )
+}
+
+fn developer_team_member_decoder() -> Decoder(DeveloperTeamMember) {
+  use user <- decode.field("user", user_decoder())
+  use role <- decode.field("role", developer_team_member_role_decoder())
+  use team_id <- decode.field("team_id", snowflake_decoder())
+  use membership_state <- decode.field(
+    "membership_state",
+    developer_team_membership_state_decoder(),
+  )
+  decode.success(DeveloperTeamMember(user:, role:, team_id:, membership_state:))
+}
+
+pub type DeveloperTeamMemberRole {
+  /// Owners and admins have the admin role.
+  ///
+  /// Use the [`DeveloperTeam.owner_id`](#DeveloperTeam) property to determine who is the owner of the team.
+  DeveloperTeamAdmin
+  DeveloperTeamDeveloper
+  DeveloperTeamReadOnlyAccess
+}
+
+fn developer_team_member_role_decoder() -> Decoder(DeveloperTeamMemberRole) {
+  use variant <- decode.then(decode.string)
+  case variant {
+    "admin" -> decode.success(DeveloperTeamAdmin)
+    "developer" -> decode.success(DeveloperTeamDeveloper)
+    "read_only" -> decode.success(DeveloperTeamReadOnlyAccess)
+    _ -> decode.failure(DeveloperTeamAdmin, "DeveloperTeamMemberRole")
+  }
+}
+
+pub type DeveloperTeamMembershipState {
+  /// The developer was invited to the team and accepted the invite.
+  DeveloperIsAccepted
+  /// The developer was invited to the team and has not accepted the invite (yet).
+  DeveloperIsInvited
+}
+
+fn developer_team_membership_state_decoder() -> Decoder(
+  DeveloperTeamMembershipState,
+) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    1 -> decode.success(DeveloperIsInvited)
+    2 -> decode.success(DeveloperIsAccepted)
+    _ -> decode.failure(DeveloperIsAccepted, "DeveloperTeamMembershipState")
+  }
+}
 
 pub type GuildRequiredMfaLevel {
   GuildDoesNotRequireMfa
@@ -2829,53 +3239,51 @@ fn guild_features_decoder() -> Decoder(List(GuildFeature)) {
   strings
   |> list.map(fn(string) {
     case string {
-      "ANIMATED_BANNER" -> [GuildCanUseAnimatedBanner]
-      "ANIMATED_ICON" -> [GuildCanUseAnimatedIcon]
-      "APPLICATION_COMMAND_PERMISSIONS_V2" -> [
-        GuildUsesOldPermissionConfigurationBehavior,
-      ]
-      "AUTO_MODERATION" -> [GuildCreatedAutoModerationRules]
-      "BANNER" -> [GuildCanUseBanner]
-      "COMMUNITY" -> [GuildIsCommunity]
-      "CREATOR_MONETIZABLE_PROVISIONAL" -> [GuildUsesMonetization]
-      "CREATOR_STORE_PAGE" -> [GuildUsesRoleSubscriptionPromoPage]
-      "DEVELOPER_SUPPORT_SERVER" -> [GuildIsDeveloperSupportServer]
-      "DISCOVERABLE" -> [GuildIsDiscoverable]
-      "FEATURABLE" -> [GuildIsFeaturable]
-      "INVITES_DISABLED" -> [GuildHasPausedInvites]
-      "INVITE_SPLASH" -> [GuildCanUseInviteSplash]
-      "MEMBER_VERIFICATION_GATE_ENABLED" -> [GuildUsesMembershipScreening]
-      "MORE_SOUNDBOARD" -> [GuildHasMoreSoundboardSoundSlots]
-      "MORE_STICKERS" -> [GuildHasMoreStickerSlots]
-      "NEWS" -> [GuildCanCreateAnnouncementChannels]
-      "PARTNERED" -> [GuildIsPartnered]
-      "PREVIEW_ENABLED" -> [GuildCanBePreviewed]
-      "RAID_ALERTS_DISABLED" -> [GuildDisabledRaidAlerts]
-      "ROLE_ICONS" -> [GuildCanUseRoleIcons]
-      "ROLE_SUBSCRIPTIONS_AVAILABLE_FOR_PURCHASE" -> [
-        GuildHasPurchasableRoleSubscriptions,
-      ]
-      "ROLE_SUBSCRIPTIONS_ENABLED" -> [GuildUsesRoleSubscriptions]
-      "SOUNDBOARD" -> [GuildCreatedSoundboardSounds]
-      "TICKETED_EVENTS_ENABLED" -> [GuildUsesTicketedEvents]
-      "VANITY_URL" -> [GuildCanUseVanityUrl]
-      "VIP_REGIONS" -> [GuildCanUse384KbpsVoiceBitrate]
-      "WELCOME_SCREEN_ENABLED" -> [GuildUsesWelcomeScreen]
-      "GUESTS_ENABLED" -> [GuildCanUseGuestInvites]
-      "GUILD_TAGS" -> [GuildCanUseGuildTags]
-      "ENHANCED_ROLE_COLORS" -> [GuildCanUseEnhancedRoleColours]
-      _ -> []
+      "ANIMATED_BANNER" -> Ok(GuildCanUseAnimatedBanner)
+      "ANIMATED_ICON" -> Ok(GuildCanUseAnimatedIcon)
+      "APPLICATION_COMMAND_PERMISSIONS_V2" ->
+        Ok(GuildUsesOldPermissionConfigurationBehavior)
+      "AUTO_MODERATION" -> Ok(GuildCreatedAutoModerationRules)
+      "BANNER" -> Ok(GuildCanUseBanner)
+      "COMMUNITY" -> Ok(GuildIsCommunity)
+      "CREATOR_MONETIZABLE_PROVISIONAL" -> Ok(GuildUsesMonetization)
+      "CREATOR_STORE_PAGE" -> Ok(GuildUsesRoleSubscriptionPromoPage)
+      "DEVELOPER_SUPPORT_SERVER" -> Ok(GuildIsDeveloperSupportServer)
+      "DISCOVERABLE" -> Ok(GuildIsDiscoverable)
+      "FEATURABLE" -> Ok(GuildIsFeaturable)
+      "INVITES_DISABLED" -> Ok(GuildHasPausedInvites)
+      "INVITE_SPLASH" -> Ok(GuildCanUseInviteSplash)
+      "MEMBER_VERIFICATION_GATE_ENABLED" -> Ok(GuildUsesMembershipScreening)
+      "MORE_SOUNDBOARD" -> Ok(GuildHasMoreSoundboardSoundSlots)
+      "MORE_STICKERS" -> Ok(GuildHasMoreStickerSlots)
+      "NEWS" -> Ok(GuildCanCreateAnnouncementChannels)
+      "PARTNERED" -> Ok(GuildIsPartnered)
+      "PREVIEW_ENABLED" -> Ok(GuildCanBePreviewed)
+      "RAID_ALERTS_DISABLED" -> Ok(GuildDisabledRaidAlerts)
+      "ROLE_ICONS" -> Ok(GuildCanUseRoleIcons)
+      "ROLE_SUBSCRIPTIONS_AVAILABLE_FOR_PURCHASE" ->
+        Ok(GuildHasPurchasableRoleSubscriptions)
+      "ROLE_SUBSCRIPTIONS_ENABLED" -> Ok(GuildUsesRoleSubscriptions)
+      "SOUNDBOARD" -> Ok(GuildCreatedSoundboardSounds)
+      "TICKETED_EVENTS_ENABLED" -> Ok(GuildUsesTicketedEvents)
+      "VANITY_URL" -> Ok(GuildCanUseVanityUrl)
+      "VIP_REGIONS" -> Ok(GuildCanUse384KbpsVoiceBitrate)
+      "WELCOME_SCREEN_ENABLED" -> Ok(GuildUsesWelcomeScreen)
+      "GUESTS_ENABLED" -> Ok(GuildCanUseGuestInvites)
+      "GUILD_TAGS" -> Ok(GuildCanUseGuildTags)
+      "ENHANCED_ROLE_COLORS" -> Ok(GuildCanUseEnhancedRoleColours)
+      _ -> Error(Nil)
     }
   })
-  |> list.flatten
+  |> list.filter_map(function.identity)
   |> decode.success
 }
 
 // REACTIONS: DO NOT USE THIS OBJECT, IT WILL NOT HAVE THE NAME FIELD
 pub type Emoji {
   EmojiUnicode(character: String)
-  EmojiCustom(CustomEmoji)
-  EmojiApplication(ApplicationEmoji)
+  EmojiCustom(emoji: CustomEmoji)
+  EmojiApplication(emoji: ApplicationEmoji)
 }
 
 pub type CustomEmoji {
@@ -6064,24 +6472,75 @@ pub fn get_guild_voice_regions(
 
 pub type Invite {
   Invite(
-    /// 
+    /// Every invite has an unique ID (code), which is used in the link.
+    ///
+    /// Example: <https://discord.gg/Fm8Pwmy> -> `Fm8Pwmy` is the code!
     code: String,
     guild: Guild,
+    /// Some invites point to guild channels.
     channel: Option(GuildChannel),
+    /// Auto-generated invites aren't made by users.
     inviter: Option(User),
-    target: InviteTarget,
-    expires_at: Option(Timestamp),
+    /// Some invites point to an activity - such as a stream.
+    target: Option(InviteTarget),
+    expiration: Option(Timestamp),
+    /// Some invites point to a scheduled event.
     scheduled_event: Option(ScheduledEvent),
     flags: List(InviteFlag),
-    roles: List(InviteRole),
+    /// The roles that are automatically given to a user which accepts the invite. 
+    automatically_awarded_roles: List(InviteRole),
     metadata: Option(InviteMetadata),
   )
 }
 
+fn invite_decoder() -> Decoder(Invite) {
+  use code <- decode.field("code", decode.string)
+  use guild <- decode.field("guild", guild_decoder())
+  use channel <- decode.field(
+    "channel",
+    decode.optional(guild_channel_decoder()),
+  )
+  use inviter <- decode.optional_field(
+    "inviter",
+    None,
+    decode.optional(user_decoder()),
+  )
+  use target <- decode.then(invite_target_decoder())
+  use expiration <- decode.field(
+    "expires_at",
+    decode.optional(rfc3339_decoder()),
+  )
+  use scheduled_event <- decode.field(
+    "guild_scheduled_event",
+    decode.optional(scheduled_event_decoder()),
+  )
+  use flags <- decode.field("flags", flags_decoder(bits_invite_flags()))
+  use automatically_awarded_roles <- decode.field(
+    "roles",
+    decode.list(invite_role_decoder()),
+  )
+  use metadata <- decode.then(invite_metadata_decoder())
+  decode.success(Invite(
+    code:,
+    guild:,
+    channel:,
+    inviter:,
+    target:,
+    expiration:,
+    scheduled_event:,
+    flags:,
+    automatically_awarded_roles:,
+    metadata:,
+  ))
+}
+
+/// A partial role object for invites.
 pub type InviteRole {
   InviteRole(
     id: Snowflake(Role),
     name: String,
+    /// Position of this role in the hierarchy.
+    /// Roles with the same position are sorted by ID.
     position: Int,
     colours: RoleColours,
     icon_hash: Option(ImageHash),
@@ -6089,23 +6548,480 @@ pub type InviteRole {
   )
 }
 
+fn invite_role_decoder() -> Decoder(InviteRole) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use position <- decode.field("position", decode.int)
+  use colours <- decode.field("colors", role_colours_decoder())
+  use icon_hash <- decode.optional_field(
+    "icon",
+    None,
+    decode.optional(image_hash_decoder()),
+  )
+  use unicode_emoji <- decode.optional_field(
+    "unicode_emoji",
+    None,
+    decode.optional(decode.string),
+  )
+  decode.success(InviteRole(
+    id:,
+    name:,
+    position:,
+    colours:,
+    icon_hash:,
+    unicode_emoji:,
+  ))
+}
+
 pub type InviteMetadata {
   InviteMetadata(
+    /// How many times has the invite been used?
     uses: Int,
+    /// How many times can the invite be used?
     max_uses: Int,
-    max_age: Int,
-    is_temporary: Bool,
-    created_at: Timestamp,
+    /// Duration after which the invite expires.
+    max_age: Duration,
+    grants_temporary_membership: Bool,
+    creation: Timestamp,
   )
+}
+
+fn invite_metadata_decoder() -> Decoder(Option(InviteMetadata)) {
+  use uses <- decode.optional_field("uses", None, decode.optional(decode.int))
+
+  case uses {
+    Some(uses) -> {
+      use max_uses <- decode.field("max_uses", decode.int)
+      use max_age <- decode.field(
+        "max_age",
+        decode.map(decode.int, duration.seconds),
+      )
+      use grants_temporary_membership <- decode.field("temporary", decode.bool)
+      use creation <- decode.field("created_at", rfc3339_decoder())
+      decode.success(
+        Some(InviteMetadata(
+          uses:,
+          max_uses:,
+          max_age:,
+          grants_temporary_membership:,
+          creation:,
+        )),
+      )
+    }
+    None -> decode.success(None)
+  }
 }
 
 pub type InviteFlag {
   InviteIsGuestInvite
 }
 
-pub type ScheduledEvent
+fn bits_invite_flags() -> List(#(Int, InviteFlag)) {
+  [#(int.bitwise_shift_left(1, 0), InviteIsGuestInvite)]
+}
+
+pub type ScheduledEvent {
+  ScheduledEvent(
+    id: Snowflake(ScheduledEvent),
+    guild_id: Snowflake(Guild),
+    location: ScheduledEventLocation,
+    /// Is `None` for events created before October 25th, 2021
+    creator: Option(User),
+    name: String,
+    description: Option(String),
+    /// Match on the `location` to check the scheduled end time.
+    /// Only external events are guaranteed to have an end time.
+    scheduled_start_time: Timestamp,
+    status: ScheduledEventStatus,
+    /// How many users are subscribed to the event?
+    ///
+    /// It is undisclosed when this field is `None`
+    user_count: Option(Int),
+    cover_image_hash: Option(ImageHash),
+    /// The definition for how often this event should happen.
+    recurrence_rule: Option(ScheduledEventRecurrenceRule),
+  )
+}
+
+fn scheduled_event_decoder() -> Decoder(ScheduledEvent) {
+  use id <- decode.field("id", snowflake_decoder())
+  use guild_id <- decode.field("guild_id", snowflake_decoder())
+  use location <- decode.then(scheduled_event_location_decoder())
+  use creator <- decode.optional_field(
+    "creator",
+    None,
+    decode.optional(user_decoder()),
+  )
+  use name <- decode.field("name", decode.string)
+  use description <- decode.optional_field(
+    "description",
+    None,
+    decode.optional(decode.string),
+  )
+  use scheduled_start_time <- decode.field(
+    "scheduled_start_time",
+    rfc3339_decoder(),
+  )
+  use status <- decode.field("status", scheduled_event_status_decoder())
+  use user_count <- decode.optional_field(
+    "user_count",
+    None,
+    decode.optional(decode.int),
+  )
+  use cover_image_hash <- decode.optional_field(
+    "image",
+    None,
+    decode.optional(image_hash_decoder()),
+  )
+  use recurrence_rule <- decode.field(
+    "recurrence_rule",
+    decode.optional(scheduled_event_recurrence_rule_decoder()),
+  )
+  decode.success(ScheduledEvent(
+    id:,
+    guild_id:,
+    location:,
+    creator:,
+    name:,
+    description:,
+    scheduled_start_time:,
+    status:,
+    user_count:,
+    cover_image_hash:,
+    recurrence_rule:,
+  ))
+}
+
+pub fn stage_channel_id_to_guild_channel_id(
+  id: Snowflake(StageChannel),
+) -> Snowflake(GuildChannel) {
+  Snowflake(id.id)
+}
+
+pub fn stage_channel_id_to_channel_id(
+  id: Snowflake(StageChannel),
+) -> Snowflake(Channel) {
+  Snowflake(id.id)
+}
+
+pub fn voice_channel_id_to_guild_channel_id(
+  id: Snowflake(VoiceChannel),
+) -> Snowflake(GuildChannel) {
+  Snowflake(id.id)
+}
+
+pub fn voice_channel_id_to_channel_id(
+  id: Snowflake(VoiceChannel),
+) -> Snowflake(Channel) {
+  Snowflake(id.id)
+}
+
+pub type ScheduledEventLocation {
+  ScheduledEventInStageChannel(
+    channel_id: Snowflake(StageChannel),
+    /// The type of this field is dependent on the location, hence why you must first match on the location.
+    scheduled_end_time: Option(Timestamp),
+  )
+  ScheduledEventInVoiceChannel(
+    channel_id: Snowflake(VoiceChannel),
+    /// The type of this field is dependent on the location, hence why you must first match on the location.
+    scheduled_end_time: Option(Timestamp),
+  )
+  ExternalScheduledEvent(
+    /// Where will the event be held?
+    location: String,
+    /// The type of this field is dependent on the location, hence why you must first match on the location.
+    scheduled_end_time: Timestamp,
+  )
+}
+
+fn scheduled_event_location_decoder() -> Decoder(ScheduledEventLocation) {
+  use entity_type <- decode.field("entity_type", decode.int)
+
+  case entity_type {
+    1 -> {
+      use channel_id <- decode.field("channel_id", snowflake_decoder())
+      use scheduled_end_time <- decode.field(
+        "scheduled_end_time",
+        decode.optional(rfc3339_decoder()),
+      )
+      decode.success(ScheduledEventInStageChannel(
+        channel_id:,
+        scheduled_end_time:,
+      ))
+    }
+    2 -> {
+      use channel_id <- decode.field("channel_id", snowflake_decoder())
+      use scheduled_end_time <- decode.field(
+        "scheduled_end_time",
+        decode.optional(rfc3339_decoder()),
+      )
+      decode.success(ScheduledEventInVoiceChannel(
+        channel_id:,
+        scheduled_end_time:,
+      ))
+    }
+    3 -> {
+      use location <- decode.subfield(
+        ["entity_metadata", "location"],
+        decode.string,
+      )
+      use scheduled_end_time <- decode.field(
+        "scheduled_end_time",
+        rfc3339_decoder(),
+      )
+      decode.success(ExternalScheduledEvent(location:, scheduled_end_time:))
+    }
+    _ ->
+      decode.failure(
+        ScheduledEventInStageChannel(Snowflake(0), None),
+        "ScheduledEventLocation",
+      )
+  }
+}
+
+pub type ScheduledEventStatus {
+  /// The event is planned to happen.
+  ScheduledEventIsPlanned
+  /// The event is happening.
+  ScheduledEventIsActive
+  /// The event has happened.
+  ScheduledEventIsCompleted
+  /// The event was cancelled.
+  ScheduledEventIsCancelled
+}
+
+fn scheduled_event_status_decoder() -> Decoder(ScheduledEventStatus) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    1 -> decode.success(ScheduledEventIsPlanned)
+    2 -> decode.success(ScheduledEventIsActive)
+    3 -> decode.success(ScheduledEventIsCompleted)
+    4 -> decode.success(ScheduledEventIsCancelled)
+    _ -> decode.failure(ScheduledEventIsPlanned, "ScheduledEventStatus")
+  }
+}
 
 pub type InviteTarget {
   StreamInvite(streaming_user: User)
   EmbeddedApplicationInvite(application: Application)
+}
+
+fn invite_target_decoder() -> Decoder(Option(InviteTarget)) {
+  use type_ <- decode.optional_field(
+    "target_type",
+    None,
+    decode.optional(decode.int),
+  )
+  case type_ {
+    Some(1) -> {
+      use streaming_user <- decode.field("target_user", user_decoder())
+      decode.success(Some(StreamInvite(streaming_user:)))
+    }
+    Some(2) -> {
+      use application <- decode.field(
+        "target_application",
+        application_decoder(),
+      )
+      decode.success(Some(EmbeddedApplicationInvite(application:)))
+    }
+    Some(_) ->
+      decode.failure(
+        Some(
+          StreamInvite(User(
+            Snowflake(0),
+            "",
+            "",
+            None,
+            None,
+            False,
+            False,
+            None,
+            None,
+            None,
+            None,
+            None,
+            [],
+            None,
+            [],
+            None,
+            None,
+            None,
+          )),
+        ),
+        "InviteTarget",
+      )
+    None -> decode.success(None)
+  }
+}
+
+/// Describes how often an event recurs.
+///
+/// Important! System limitations: <https://docs.discord.com/developers/resources/guild-scheduled-event#system-limitations>
+pub type ScheduledEventRecurrenceRule {
+  ScheduledEventRecurrenceRule(
+    start: Timestamp,
+    end: Option(Timestamp),
+    frequency: ScheduledEventRecurrenceRuleFrequency,
+    /// On which weekdays should the event recur?
+    ///
+    /// Example: Every Thursday.
+    every_weekday: Option(List(Weekday)),
+    /// On which weekdays of specific weeks of the month should the event recur?
+    /// 
+    /// Example: Every Thursday of the 3rd week of the month.
+    every_nth_weekday: Option(List(ScheduledEventRecurrenceRuleNthWeekday)),
+    /// In which months should the event recur?
+    ///
+    /// Example: Every October. 
+    every_month: Option(List(calendar.Month)),
+    /// On which days of the month should the event recur?
+    ///
+    /// Example: On the 27th day of the month.
+    every_month_day: Option(List(Int)),
+    /// On which day of the year should the event recur?
+    ///
+    /// Example: On the 67th day of the year.
+    every_year_day: Option(List(Int)),
+    /// How many times does the event recur before it stops?
+    count: Option(Int),
+  )
+}
+
+fn scheduled_event_recurrence_rule_decoder() -> Decoder(
+  ScheduledEventRecurrenceRule,
+) {
+  use start <- decode.field("start", rfc3339_decoder())
+  use end <- decode.field("end", decode.optional(rfc3339_decoder()))
+  use frequency <- decode.then(
+    scheduled_event_recurrence_rule_frequency_decoder(),
+  )
+  use every_weekday <- decode.field(
+    "by_weekday",
+    decode.optional(decode.list(weekday_decoder())),
+  )
+  use every_nth_weekday <- decode.field(
+    "by_n_weekday",
+    decode.optional(
+      decode.list(scheduled_event_recurrence_rule_nth_weekday_decoder()),
+    ),
+  )
+  use every_month <- decode.field(
+    "by_month",
+    decode.optional(decode.list(month_decoder())),
+  )
+  use every_month_day <- decode.field(
+    "by_month_day",
+    decode.optional(decode.list(decode.int)),
+  )
+  use every_year_day <- decode.field(
+    "by_year_day",
+    decode.optional(decode.list(decode.int)),
+  )
+  use count <- decode.field("count", decode.optional(decode.int))
+  decode.success(ScheduledEventRecurrenceRule(
+    start:,
+    end:,
+    frequency:,
+    every_weekday:,
+    every_nth_weekday:,
+    every_month:,
+    every_month_day:,
+    every_year_day:,
+    count:,
+  ))
+}
+
+fn weekday_decoder() -> Decoder(Weekday) {
+  use weekday <- decode.then(decode.int)
+  case weekday {
+    0 -> decode.success(weekday.Monday)
+    1 -> decode.success(weekday.Tuesday)
+    2 -> decode.success(weekday.Wednesday)
+    3 -> decode.success(weekday.Thursday)
+    4 -> decode.success(weekday.Friday)
+    5 -> decode.success(weekday.Saturday)
+    6 -> decode.success(weekday.Sunday)
+    _ -> decode.failure(weekday.Monday, "Weekday")
+  }
+}
+
+fn month_decoder() -> Decoder(calendar.Month) {
+  use month <- decode.then(decode.int)
+  case month {
+    1 -> decode.success(calendar.January)
+    2 -> decode.success(calendar.February)
+    3 -> decode.success(calendar.March)
+    4 -> decode.success(calendar.April)
+    5 -> decode.success(calendar.May)
+    6 -> decode.success(calendar.June)
+    7 -> decode.success(calendar.July)
+    8 -> decode.success(calendar.August)
+    9 -> decode.success(calendar.September)
+    10 -> decode.success(calendar.October)
+    11 -> decode.success(calendar.November)
+    12 -> decode.success(calendar.December)
+    _ -> decode.failure(calendar.January, "Month")
+  }
+}
+
+/// `interval` describes the spacing between events.
+/// 
+/// For example, `ScheduledEventRecursWeekly(interval: 2)` means "every two weeks".
+pub type ScheduledEventRecurrenceRuleFrequency {
+  ScheduledEventRecursYearly(interval: Int)
+  ScheduledEventRecursMonthly(interval: Int)
+  ScheduledEventRecursWeekly(interval: Int)
+  ScheduledEventRecursDaily(interval: Int)
+}
+
+fn scheduled_event_recurrence_rule_frequency_decoder() -> Decoder(
+  ScheduledEventRecurrenceRuleFrequency,
+) {
+  use interval <- decode.field("interval", decode.int)
+  use frequency <- decode.field("frequency", decode.int)
+
+  case frequency {
+    0 -> decode.success(ScheduledEventRecursYearly(interval:))
+    1 -> decode.success(ScheduledEventRecursMonthly(interval:))
+    2 -> decode.success(ScheduledEventRecursWeekly(interval:))
+    3 -> decode.success(ScheduledEventRecursDaily(interval:))
+    _ ->
+      decode.failure(
+        ScheduledEventRecursYearly(0),
+        "ScheduledEventRecurrenceRuleFrequency",
+      )
+  }
+}
+
+pub type ScheduledEventRecurrenceRuleNthWeekday {
+  ScheduledEventRecurrenceRuleNthWeekday(
+    /// On which week of the month should the event recur? (1-5)
+    n: Int,
+    /// On which day of the `n`th should the event recur?
+    day: Weekday,
+  )
+}
+
+fn scheduled_event_recurrence_rule_nth_weekday_decoder() -> Decoder(
+  ScheduledEventRecurrenceRuleNthWeekday,
+) {
+  use n <- decode.field("n", decode.int)
+  use day <- decode.field("day", weekday_decoder())
+  decode.success(ScheduledEventRecurrenceRuleNthWeekday(n:, day:))
+}
+
+/// Requires the `AllowManagingGuild` or `AllowViewingAuditLog` permission.
+///
+/// Will include metadata with the `AllowManagingGuild` permission.
+pub fn get_guild_invites(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(List(Invite), RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/invites",
+    method: http.Get,
+  )
+  |> send_request(decode_with: decode.list(invite_decoder()))
 }
