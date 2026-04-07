@@ -227,11 +227,15 @@ pub type User {
     id: Snowflake(User),
     username: String,
     /// Mostly deprecated. Only bots have discriminators nowadays.
+    /// 
     /// Users will very likely have their discriminator set to `0`.
+    /// 
     /// Used in the past when usernames weren't user-specific.
+    /// 
     /// Doesn't include the `#` prefix.
     discriminator: String,
     /// Also called a display name.
+    /// 
     /// Is `None` when the user doesn't have a global name, and rather uses their username as their display name.
     global_name: Option(String),
     /// Is `None` when the user uses a default avatar.
@@ -241,23 +245,28 @@ pub type User {
     /// Whether the user is Discord's official system account.
     is_system: Bool,
     /// Is `None` if it isn't known whether the user has enabled MFA.
+    /// 
     /// MFA = multi-factor authentication.
     has_mfa_enabled: Option(Bool),
     /// Is `None` when the user doesn't use a custom banner.
     banner_hash: Option(ImageHash),
     /// The user's banner accent colour in RGB hexadecimal format.
+    /// 
     /// Is `None` when the user uses a default color based on avatar.
     accent_colour: Option(Colour),
     /// The user's chosen locale.
+    /// 
     /// Discord hasn't disclosed when this field could be `None`. 
     locale: Option(Locale),
     /// The user's banner accent color in RGB hexadecimal format.
+    /// 
     /// Is `None` when the user uses a default color based on avatar.
     accent_color: Option(Int),
     flags: List(UserFlag),
     /// Is `None` if the user's premium type isn't known.
     premium_type: Option(UserPremiumType),
     /// Publicly visible flags - aka Discord badges.
+    /// 
     /// Visible in the top right corner of a person's profile in the apps.
     public_flags: List(UserFlag),
     /// Is `None` when the user has no avatar decorations.
@@ -2236,19 +2245,26 @@ pub type Guild {
     id: Snowflake(Guild),
     name: String,
     /// Image hash of the guild icon.
+    ///
     /// An icon is the picture shown in the server list.
+    ///
     /// Is `None` when the guild doesn't have an icon.
     icon_hash: Option(ImageHash),
     /// Image hash of the guild splash.
+    ///
     /// A splash is the picture shown when a user joins a guild, at the "Accept Invite" UI.
+    ///
     /// Is `None` when the guild doesn't have a splash. 
     splash_hash: Option(ImageHash),
     /// Image hash of the guild discovery splash.
+    ///
     /// A discovery splash is the picture shown when a user clicks on a guild in the "Server Discovery" UI.
-    /// Is `None` when the guild isn't discoverable or doesn't have a discovery splash.
+    ///
+    ///  Is `None` when the guild isn't discoverable or doesn't have a discovery splash.
     discovery_splash_hash: Option(ImageHash),
     owner_id: Snowflake(User),
     /// The "AFK channel" is the channel to which inactive voice channel users are moved.
+    /// 
     /// Is `None` when the guild doesn't have a configured AFK channel.
     afk_channel_id: Option(Snowflake(Channel)),
     /// The time of inactivity after a voice channel user is marked as AFK in this guild.
@@ -2257,11 +2273,13 @@ pub type Guild {
     /// The server widget is a feature allowing guild advertisements on websites.
     is_widget_enabled: Bool,
     /// The channel to which the widget will generate an invite to.
+    /// 
     /// Is `None` if the widget was configured to not generate invites or is disabled.
     widget_channel_id: Option(Snowflake(Channel)),
     /// The verification level required for a guild member to be able to communicate in a guild.
     required_verification_level: GuildMemberVerificationLevel,
     /// The default setting regarding sending push notifications to members' devices.
+    /// 
     /// Note that this can be overriden on a per-member basis.
     default_message_notification_setting: GuildDefaultMessageNotificationSetting,
     explicit_content_filter_setting: GuildExplicitContentFilterSetting,
@@ -2274,12 +2292,14 @@ pub type Guild {
     /// Application ID of the guild creator if it is created by a bot.
     application_id: Option(Snowflake(Application)),
     /// The system channel is the channel where certain notifications, such as on-boost messages are sent.
-    /// Is `None` if the guild does not use system messages.
+    ///
+    ///  Is `None` if the guild does not use system messages.
     system_channel_id: Option(Snowflake(Channel)),
     system_channel_flags: List(GuildSystemChannelFlag),
     /// Is `None` if the guild doesn't have a rules channel.
     rules_channel_id: Option(Snowflake(Channel)),
     /// The maximum number of presences for the guild.
+    ///
     /// Is always `None`, apart from the largest of guilds.
     max_presences: Option(Int),
     /// According to [discord.py](https://discordpy.readthedocs.io/en/latest/api.html?highlight=max_members#discord.Guild.max_members), this is always `None`, unless the guild is received from `get_guild()`.
@@ -2295,9 +2315,11 @@ pub type Guild {
     /// The guild's current amount of active server boosts.
     premium_subscription_count: Int,
     /// Is present for all guilds, but only community guilds have the ability to change it.
+    ///
     /// Defaults to `en-US` if not selected by the guild's admins. 
     preferred_locale: Locale,
     /// ID of the channel where admins and moderators of a Community guild receive notices from Discord.
+    ///
     /// Is `None` if the guild isn't a community guild.
     public_updates_channel_id: Option(Snowflake(Channel)),
     /// The maximum amount of webcam-sharing users in a voice channel for this guild.
@@ -2667,25 +2689,75 @@ pub type GuildWelcomeScreenChannel {
   GuildWelcomeScreenChannel(
     id: Snowflake(Channel),
     description: String,
-    /// ID of the channel's associated emoji, if the emoji is custom.
-    emoji_id: Option(Snowflake(Emoji)),
-    /// The emoji's name if custom, or its unicode character if standard.
-    /// Is `None` if the channel doesn't have an associated emoji.
-    emoji_name: Option(String),
+    emoji: Option(GuildWelcomeScreenChannelEmoji),
   )
+}
+
+fn guild_welcome_screen_channel_to_json(
+  channel: GuildWelcomeScreenChannel,
+) -> Json {
+  [
+    #("id", snowflake_to_json(channel.id)),
+    #("description", json.string(channel.description)),
+  ]
+  |> list.append(case channel.emoji {
+    Some(emoji) ->
+      case emoji {
+        StandardGuildWelcomeScreenChannelEmoji(character) -> [
+          #("emoji_name", json.string(character)),
+        ]
+        CustomGuildWelcomeScreenChannelEmoji(id, name) -> [
+          #("emoji_id", snowflake_to_json(id)),
+          #("emoji_name", json.string(name)),
+        ]
+      }
+    None -> []
+  })
+  |> json.object
+}
+
+pub type GuildWelcomeScreenChannelEmoji {
+  StandardGuildWelcomeScreenChannelEmoji(character: String)
+  CustomGuildWelcomeScreenChannelEmoji(id: Snowflake(Emoji), name: String)
+}
+
+pub fn new_guild_welcome_screen_channel(
+  with_id id: Snowflake(Channel),
+  description description: String,
+) -> GuildWelcomeScreenChannel {
+  GuildWelcomeScreenChannel(id:, description:, emoji: None)
+}
+
+pub fn guild_welcome_screen_channel_with_emoji(
+  channel: GuildWelcomeScreenChannel,
+  emoji: GuildWelcomeScreenChannelEmoji,
+) -> GuildWelcomeScreenChannel {
+  GuildWelcomeScreenChannel(..channel, emoji: Some(emoji))
 }
 
 fn guild_welcome_screen_channel_decoder() -> Decoder(GuildWelcomeScreenChannel) {
   use id <- decode.field("channel_id", snowflake_decoder())
   use description <- decode.field("description", decode.string)
-  use emoji_id <- decode.field("emoji_id", decode.optional(snowflake_decoder()))
-  use emoji_name <- decode.field("emoji_name", decode.optional(decode.string))
-  decode.success(GuildWelcomeScreenChannel(
-    id:,
-    description:,
-    emoji_id:,
-    emoji_name:,
-  ))
+  use emoji_id <- decode.optional_field(
+    "emoji_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use emoji_name <- decode.optional_field(
+    "emoji_name",
+    None,
+    decode.optional(decode.string),
+  )
+
+  let emoji = case emoji_id, emoji_name {
+    Some(id), Some(name) ->
+      Some(CustomGuildWelcomeScreenChannelEmoji(id:, name:))
+    None, Some(character) ->
+      Some(StandardGuildWelcomeScreenChannelEmoji(character:))
+    _, _ -> None
+  }
+
+  decode.success(GuildWelcomeScreenChannel(id:, description:, emoji:))
 }
 
 pub type GuildApproximateCounts {
@@ -3284,6 +3356,21 @@ pub type Emoji {
   EmojiUnicode(character: String)
   EmojiCustom(emoji: CustomEmoji)
   EmojiApplication(emoji: ApplicationEmoji)
+}
+
+fn emoji_decoder() -> Decoder(Emoji) {
+  use id <- decode.field("id", decode.optional(snowflake_decoder()))
+
+  case id {
+    Some(_id) ->
+      decode.one_of(decode.map(custom_emoji_decoder(), EmojiCustom), or: [
+        decode.map(application_emoji_decoder(), EmojiApplication),
+      ])
+    None -> {
+      use character <- decode.field("name", decode.string)
+      decode.success(EmojiUnicode(character:))
+    }
+  }
 }
 
 pub type CustomEmoji {
@@ -6475,6 +6562,8 @@ pub type Invite {
     /// Every invite has an unique ID (code), which is used in the link.
     ///
     /// Example: <https://discord.gg/Fm8Pwmy> -> `Fm8Pwmy` is the code!
+    /// 
+    /// Prepend `https://discord.gg/` to the code to create an invite link!
     code: String,
     guild: Guild,
     /// Some invites point to guild channels.
@@ -7377,4 +7466,544 @@ pub fn modify_guild_widget_settings(
   |> request.set_body(body)
   |> request_with_reason(reason)
   |> send_request(decode_with: guild_widget_settings_decoder())
+}
+
+pub type GuildWidget {
+  GuildWidget(
+    guild_id: Snowflake(Guild),
+    guild_name: String,
+    instant_invite_url: Option(String),
+    /// Contains voice and stage channels which are accessible by @everyone
+    channels: List(GuildWidgetChannel),
+    users: List(GuildWidgetUser),
+    /// Amount of online members in the guild.
+    presence_count: Int,
+  )
+}
+
+fn guild_widget_decoder() -> Decoder(GuildWidget) {
+  use guild_id <- decode.field("id", snowflake_decoder())
+  use guild_name <- decode.field("name", decode.string)
+  use instant_invite_url <- decode.field(
+    "instant_invite",
+    decode.optional(decode.string),
+  )
+  use channels <- decode.field(
+    "channels",
+    decode.list(guild_widget_channel_decoder()),
+  )
+  use users <- decode.field("members", decode.list(guild_widget_user_decoder()))
+  use presence_count <- decode.field("presence_count", decode.int)
+  decode.success(GuildWidget(
+    guild_id:,
+    guild_name:,
+    instant_invite_url:,
+    channels:,
+    users:,
+    presence_count:,
+  ))
+}
+
+/// A partial user object used in guild widgets.
+/// 
+/// Includes the user's status + a specific avatar URL.
+pub type GuildWidgetUser {
+  GuildWidgetUser(
+    id: Snowflake(User),
+    username: String,
+    /// Mostly deprecated. Only bots have discriminators nowadays.
+    /// 
+    /// Users will very likely have their discriminator set to `0`.
+    /// 
+    /// Used in the past when usernames weren't user-specific.
+    /// 
+    /// Doesn't include the `#` prefix.
+    discriminator: String,
+    avatar_hash: Option(ImageHash),
+    status: UserStatus,
+    avatar_url: Option(String),
+  )
+}
+
+fn guild_widget_user_decoder() -> Decoder(GuildWidgetUser) {
+  use id <- decode.field("id", snowflake_decoder())
+  use username <- decode.field("username", decode.string)
+  use discriminator <- decode.field("discriminator", decode.string)
+  use avatar_hash <- decode.optional_field(
+    "avatar",
+    None,
+    decode.optional(image_hash_decoder()),
+  )
+  use status <- decode.field("status", user_status_decoder())
+  use avatar_url <- decode.optional_field(
+    "avatar_url",
+    None,
+    decode.optional(decode.string),
+  )
+  decode.success(GuildWidgetUser(
+    id:,
+    username:,
+    discriminator:,
+    avatar_hash:,
+    status:,
+    avatar_url:,
+  ))
+}
+
+/// A partial channel object used in guild widgets.
+///
+/// Represents an `@everyone`-accessible voice or stage channel.
+pub type GuildWidgetChannel {
+  GuildWidgetChannel(
+    id: Snowflake(GuildChannel),
+    name: String,
+    /// Channels with the same position are sorted by ID.
+    position: Int,
+  )
+}
+
+fn guild_widget_channel_decoder() -> Decoder(GuildWidgetChannel) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use position <- decode.field("position", decode.int)
+  decode.success(GuildWidgetChannel(id:, name:, position:))
+}
+
+pub type UserStatus {
+  /// Green circle icon displayed in the client.
+  UserIsOnline
+  /// Red do-not-disturb icon displayed in the client.
+  UserIsNotToBeDisturbed
+  /// Yellow crescent moon icon displayed in the client.
+  UserIsIdle
+  /// Looks offline in the client, is actually online.
+  ///
+  /// Gray empty circle icon displayed in the client.
+  UserIsInvisible
+  /// Gray empty circle icon displayed in the client.
+  UserIsOffline
+}
+
+fn user_status_decoder() -> Decoder(UserStatus) {
+  use variant <- decode.then(decode.string)
+  case variant {
+    "online" -> decode.success(UserIsOnline)
+    "dnd" -> decode.success(UserIsNotToBeDisturbed)
+    "idle" -> decode.success(UserIsIdle)
+    "invisible" -> decode.success(UserIsInvisible)
+    "offline" -> decode.success(UserIsOffline)
+    _ -> decode.failure(UserIsOnline, "UserStatus")
+  }
+}
+
+// I don't know how useful this actually is - this library is erlang-only and this seems like a lustre job
+//
+// (unless you use HTMX)
+/// Useful for creating custom website widgets.
+pub fn get_guild_widget(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(GuildWidget, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/widget.json",
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_widget_decoder())
+}
+
+pub type GuildVanityInvite {
+  GuildVanityInvite(
+    /// Prepend `https://discord.gg/` to the code to create an invite link!
+    code: String,
+    /// How many times the invite has been used.
+    uses: Int,
+  )
+}
+
+fn guild_vanity_invite_decoder() -> Decoder(Option(GuildVanityInvite)) {
+  use code <- decode.field("code", decode.optional(decode.string))
+
+  case code {
+    Some(code) -> {
+      use uses <- decode.field("uses", decode.int)
+      decode.success(Some(GuildVanityInvite(code:, uses:)))
+    }
+    None -> decode.success(None)
+  }
+}
+
+/// Requires the `AllowManagingGuild` permission.
+///
+/// Use [`Guild.vanity_url_code`](#Guild) to get the vanity URL code without this permission.
+///
+/// This endpoint is only necessary to get the use count. Returns `Ok(None)` if the guild can have a vanity URL but doesn't.
+pub fn get_guild_vanity_invite(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(Option(GuildVanityInvite), RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/vanity-url",
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_vanity_invite_decoder())
+}
+
+/// Requires the `AllowManagingGuild` permission if the welcome screen is disabled.
+pub fn get_guild_welcome_screen(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(GuildWelcomeScreen, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/welcome-screen",
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_welcome_screen_decoder())
+}
+
+pub opaque type ModifyGuildWelcomeScreen {
+  ModifyGuildWelcomeScreen(
+    is_enabled: Modification(Bool),
+    welcome_channels: Modification(List(GuildWelcomeScreenChannel)),
+    description: Modification(String),
+  )
+}
+
+fn modify_guild_welcome_screen_to_json(modify: ModifyGuildWelcomeScreen) -> Json {
+  [
+    modification_to_json(modify.is_enabled, "enabled", json.bool),
+    modification_to_json(
+      modify.welcome_channels,
+      "welcome_channels",
+      json.array(_, guild_welcome_screen_channel_to_json),
+    ),
+    modification_to_json(modify.description, "description", json.string),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_modify_guild_welcome_screen() -> ModifyGuildWelcomeScreen {
+  ModifyGuildWelcomeScreen(Skip, Skip, Skip)
+}
+
+pub fn enable_guild_welcome_screen(
+  modify: ModifyGuildWelcomeScreen,
+) -> ModifyGuildWelcomeScreen {
+  ModifyGuildWelcomeScreen(..modify, is_enabled: Modify(True))
+}
+
+pub fn disable_guild_welcome_screen(
+  modify: ModifyGuildWelcomeScreen,
+) -> ModifyGuildWelcomeScreen {
+  ModifyGuildWelcomeScreen(..modify, is_enabled: Modify(False))
+}
+
+pub fn modify_guild_welcome_screen_channels(
+  modify: ModifyGuildWelcomeScreen,
+  new channels: List(GuildWelcomeScreenChannel),
+) -> ModifyGuildWelcomeScreen {
+  ModifyGuildWelcomeScreen(..modify, welcome_channels: Modify(channels))
+}
+
+pub fn modify_guild_welcome_screen_description(
+  modify: ModifyGuildWelcomeScreen,
+  new description: String,
+) -> ModifyGuildWelcomeScreen {
+  ModifyGuildWelcomeScreen(..modify, description: Modify(description))
+}
+
+pub fn delete_guild_welcome_screen_description(
+  modify: ModifyGuildWelcomeScreen,
+) -> ModifyGuildWelcomeScreen {
+  ModifyGuildWelcomeScreen(..modify, description: Delete)
+}
+
+/// Requires the `AllowManagingGuild` permission.
+pub fn modify_guild_welcome_screen(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+  using modify: ModifyGuildWelcomeScreen,
+  reason reason: Option(String),
+) -> Result(GuildWelcomeScreen, RestError) {
+  let body = modify |> modify_guild_welcome_screen_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/welcome-screen",
+    method: http.Patch,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+  |> send_request(decode_with: guild_welcome_screen_decoder())
+}
+
+pub type GuildOnboarding {
+  GuildOnboarding(
+    guild_id: Snowflake(Guild),
+    prompts: List(GuildOnboardingPrompt),
+    /// IDs of the channels that members get opted-into automatically.
+    default_channel_ids: List(Snowflake(Channel)),
+    is_enabled: Bool,
+    mode: GuildOnboardingMode,
+  )
+}
+
+fn guild_onboarding_decoder() -> Decoder(GuildOnboarding) {
+  use guild_id <- decode.field("guild_id", snowflake_decoder())
+  use prompts <- decode.field(
+    "prompts",
+    decode.list(guild_onboarding_prompt_decoder()),
+  )
+  use default_channel_ids <- decode.field(
+    "default_channel_ids",
+    decode.list(snowflake_decoder()),
+  )
+  use is_enabled <- decode.field("enabled", decode.bool)
+  use mode <- decode.field("mode", guild_onboarding_mode_decoder())
+  decode.success(GuildOnboarding(
+    guild_id:,
+    prompts:,
+    default_channel_ids:,
+    is_enabled:,
+    mode:,
+  ))
+}
+
+pub type GuildOnboardingMode {
+  /// Assigns only default channels.
+  DefaultOnboardingMode
+  /// Asks pre-join questions to add people to channels & roles based on their answers.
+  AdvancedOnboardingMode
+}
+
+fn guild_onboarding_mode_decoder() -> Decoder(GuildOnboardingMode) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(DefaultOnboardingMode)
+    1 -> decode.success(AdvancedOnboardingMode)
+    _ -> decode.failure(DefaultOnboardingMode, "GuildOnboardingMode")
+  }
+}
+
+pub type GuildOnboardingPrompt {
+  GuildOnboardingPrompt(
+    id: Snowflake(GuildOnboardingPrompt),
+    type_: GuildOnboardingPromptType,
+    options: List(GuildOnboardingPromptOption),
+    title: String,
+    is_single_select: Bool,
+    is_required: Bool,
+    /// If `False`, the prompt will only appear in the "Channels & Roles" tab.
+    is_present_in_onboarding_flow: Bool,
+  )
+}
+
+fn guild_onboarding_prompt_decoder() -> Decoder(GuildOnboardingPrompt) {
+  use id <- decode.field("id", snowflake_decoder())
+  use type_ <- decode.field("type", guild_onboarding_prompt_type_decoder())
+  use options <- decode.field(
+    "options",
+    decode.list(guild_onboarding_prompt_option_decoder()),
+  )
+  use title <- decode.field("title", decode.string)
+  use is_single_select <- decode.field("single_select", decode.bool)
+  use is_required <- decode.field("required", decode.bool)
+  use is_present_in_onboarding_flow <- decode.field(
+    "in_onboarding",
+    decode.bool,
+  )
+  decode.success(GuildOnboardingPrompt(
+    id:,
+    type_:,
+    options:,
+    title:,
+    is_single_select:,
+    is_required:,
+    is_present_in_onboarding_flow:,
+  ))
+}
+
+pub type GuildOnboardingPromptType {
+  MultipleChoiceGuildOnboardingPrompt
+  DropdownGuildOnboardingPrompt
+}
+
+fn guild_onboarding_prompt_type_decoder() -> Decoder(GuildOnboardingPromptType) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(MultipleChoiceGuildOnboardingPrompt)
+    1 -> decode.success(DropdownGuildOnboardingPrompt)
+    _ ->
+      decode.failure(
+        MultipleChoiceGuildOnboardingPrompt,
+        "GuildOnboardingPromptType",
+      )
+  }
+}
+
+pub type GuildOnboardingPromptOption {
+  GuildOnboadingPromptOption(
+    id: Snowflake(GuildOnboardingPromptOption),
+    /// The channels the user will be added to if they select this option.
+    channel_ids: List(Snowflake(Channel)),
+    /// The roles the user will be awarded if they select this option.
+    role_ids: List(Snowflake(Role)),
+    emoji: Option(Emoji),
+    title: String,
+    description: Option(String),
+  )
+}
+
+fn guild_onboarding_prompt_option_decoder() -> Decoder(
+  GuildOnboardingPromptOption,
+) {
+  use id <- decode.field("id", snowflake_decoder())
+  use channel_ids <- decode.field(
+    "channel_ids",
+    decode.list(snowflake_decoder()),
+  )
+  use role_ids <- decode.field("role_ids", decode.list(snowflake_decoder()))
+  use emoji <- decode.optional_field(
+    "emoji",
+    None,
+    decode.optional(emoji_decoder()),
+  )
+  use title <- decode.field("title", decode.string)
+  use description <- decode.field("description", decode.optional(decode.string))
+  decode.success(GuildOnboadingPromptOption(
+    id:,
+    channel_ids:,
+    role_ids:,
+    emoji:,
+    title:,
+    description:,
+  ))
+}
+
+pub fn get_guild_onboarding(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(GuildOnboarding, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/onboarding",
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_onboarding_decoder())
+}
+
+// Modify Guild Onboarding was left unimplemented here due to doubts as to whether one has to reuse prompts or if they can be created
+// (i'm lazy and this probably won't be used)
+
+pub opaque type ModifyGuildIncidentsData {
+  ModifyGuildIncidentsData(
+    invites_disabled_until: Modification(Timestamp),
+    dms_disabled_until: Modification(Timestamp),
+  )
+}
+
+fn modify_guild_incidents_data_to_json(modify: ModifyGuildIncidentsData) -> Json {
+  [
+    modification_to_json(
+      modify.invites_disabled_until,
+      "invites_disabled_until",
+      timestamp_to_json,
+    ),
+    modification_to_json(
+      modify.dms_disabled_until,
+      "dms_disabled_until",
+      timestamp_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_modify_guild_incidents_data() -> ModifyGuildIncidentsData {
+  ModifyGuildIncidentsData(Skip, Skip)
+}
+
+/// Disable invites in response to an incident.
+///
+/// You can only disable invites for up to 24 hours.
+pub fn disable_guild_invites(
+  modify: ModifyGuildIncidentsData,
+  until timestamp: Timestamp,
+) -> ModifyGuildIncidentsData {
+  ModifyGuildIncidentsData(..modify, invites_disabled_until: Modify(timestamp))
+}
+
+/// Enable guild invites after they were disabled in response to an incident.
+pub fn enable_guild_invites(
+  modify: ModifyGuildIncidentsData,
+) -> ModifyGuildIncidentsData {
+  ModifyGuildIncidentsData(..modify, invites_disabled_until: Delete)
+}
+
+/// Disable DMs between guild members as a response to an incident.
+///
+/// You can only disable DMs for up to 24 hours.
+pub fn disable_guild_dms(
+  modify: ModifyGuildIncidentsData,
+  until timestamp: Timestamp,
+) -> ModifyGuildIncidentsData {
+  ModifyGuildIncidentsData(..modify, dms_disabled_until: Modify(timestamp))
+}
+
+/// Enable DMs between guild members after they were disabled in response to an incident.
+pub fn enable_guild_dms(
+  modify: ModifyGuildIncidentsData,
+) -> ModifyGuildIncidentsData {
+  ModifyGuildIncidentsData(..modify, dms_disabled_until: Delete)
+}
+
+/// Requires the `AllowManagingGuild` permission.
+pub fn modify_guild_incidents_data(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+  using modify: ModifyGuildIncidentsData,
+) -> Result(GuildIncidentsData, RestError) {
+  let body = modify |> modify_guild_incidents_data_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/incident-actions",
+    method: http.Put,
+  )
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_incidents_data_decoder())
+}
+
+/// Do not use this endpoint as means of notifying everyone in a server about something.
+///
+/// DMs should be initiated by user action - for example, interactions.
+///
+/// Even then, if you create a significant amount of DMs too quickly, your bot may be quarantined.
+pub fn create_dm_channel(
+  token token: Token,
+  to_user_with_id user_id: Snowflake(User),
+) -> Result(DmChannel, RestError) {
+  let body =
+    [#("recipient_id", snowflake_to_json(user_id))]
+    |> json.object
+    |> json.to_string
+
+  new_request(token:, to: "/users/@me/channels", method: http.Post)
+  |> request.set_body(body)
+  |> send_request(decode_with: dm_channel_decoder())
+}
+
+pub fn get_channel(
+  token token: Token,
+  with_id channel_id: Snowflake(Channel),
+) -> Result(Channel, RestError) {
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(channel_id),
+    method: http.Get,
+  )
+  |> send_request(decode_with: channel_decoder())
 }
