@@ -7025,3 +7025,356 @@ pub fn get_guild_invites(
   )
   |> send_request(decode_with: decode.list(invite_decoder()))
 }
+
+/// Discord has some integrations with YouTube/Twitch for member/subscriber-only guilds.
+///
+/// Additionally, a guild may also be integrated with a Discord bot.
+pub type GuildIntegration {
+  GuildIntegration(
+    id: Snowflake(GuildIntegration),
+    name: String,
+    is_enabled: Bool,
+    account: GuildIntegrationAccount,
+    /// The user who added the integration.
+    ///
+    /// Some older integrations do not have an attached user, most will though.
+    integrator: Option(User),
+    data: GuildIntegrationData,
+  )
+}
+
+fn guild_integration_decoder() -> Decoder(GuildIntegration) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use is_enabled <- decode.field("enabled", decode.bool)
+  use account <- decode.field("account", guild_integration_account_decoder())
+  use integrator <- decode.optional_field(
+    "user",
+    None,
+    decode.optional(user_decoder()),
+  )
+  use data <- decode.then(guild_integration_data_decoder())
+  decode.success(GuildIntegration(
+    id:,
+    name:,
+    is_enabled:,
+    account:,
+    integrator:,
+    data:,
+  ))
+}
+
+fn guild_integration_data_decoder() -> Decoder(GuildIntegrationData) {
+  use type_ <- decode.field("type", decode.string)
+  case type_ {
+    "twitch" | "youtube" ->
+      decode.map(guild_social_integration_decoder(), GuildIntegrationSocial)
+    "discord" ->
+      decode.map(
+        guild_discord_bot_integration_decoder(),
+        GuildIntegrationDiscordBot,
+      )
+    "guild_subscription" -> decode.success(GuildIntegrationGuildSubscription)
+    _ ->
+      decode.failure(GuildIntegrationGuildSubscription, "GuildIntegrationData")
+  }
+}
+
+pub type GuildIntegrationData {
+  GuildIntegrationDiscordBot(data: GuildDiscordBotIntegration)
+  GuildIntegrationSocial(data: GuildSocialIntegration)
+  // i've got no idea what a "guild subscription" is
+  GuildIntegrationGuildSubscription
+}
+
+pub type GuildDiscordBotIntegration {
+  GuildDiscordBotIntegration(
+    application: GuildIntegrationApplication,
+    /// OAuth2 scopes the application has been authorized for.
+    scopes: List(String),
+  )
+}
+
+fn guild_discord_bot_integration_decoder() -> Decoder(
+  GuildDiscordBotIntegration,
+) {
+  use application <- decode.field(
+    "application",
+    guild_integration_application_decoder(),
+  )
+  use scopes <- decode.field("scopes", decode.list(decode.string))
+  decode.success(GuildDiscordBotIntegration(application:, scopes:))
+}
+
+/// The account is the integration's pseudo-user.
+pub type GuildIntegrationAccount {
+  GuildIntegrationAccount(id: Snowflake(User), name: String)
+}
+
+fn guild_integration_account_decoder() -> Decoder(GuildIntegrationAccount) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  decode.success(GuildIntegrationAccount(id:, name:))
+}
+
+/// Partial application object used by guild integrations.
+pub type GuildIntegrationApplication {
+  GuildIntegrationApplication(
+    id: Snowflake(Application),
+    name: String,
+    icon_hash: Option(ImageHash),
+    description: String,
+    bot: Option(User),
+  )
+}
+
+fn guild_integration_application_decoder() -> Decoder(
+  GuildIntegrationApplication,
+) {
+  use id <- decode.field("id", snowflake_decoder())
+  use name <- decode.field("name", decode.string)
+  use icon_hash <- decode.field("icon", decode.optional(image_hash_decoder()))
+  use description <- decode.field("description", decode.string)
+  use bot <- decode.optional_field("bot", None, decode.optional(user_decoder()))
+  decode.success(GuildIntegrationApplication(
+    id:,
+    name:,
+    icon_hash:,
+    description:,
+    bot:,
+  ))
+}
+
+/// A social integration is an integration between a Discord guild and Youtube/Twitch.
+///
+/// It's used to make subscriber-only guilds/roles.
+///
+/// Vocabulary:
+/// - Subscriber - A paid supporter of a YouTube/Twitch channel (Twitch subscriber/YouTube channel member)
+pub type GuildSocialIntegration {
+  GuildSocialIntegration(
+    data: GuildSocialIntegrationData,
+    is_syncing: Bool,
+    /// Role given to subscribers (not required)
+    subscriber_role_id: Option(Snowflake(Role)),
+    /// What to do after a subscription expires
+    subscription_expiration_behavior: GuildSocialIntegrationSubscriptionExpirationBehavior,
+    /// Grace period before acting on an expiration
+    subscription_expiration_grace_period: Duration,
+    last_sync_timestamp: Option(Timestamp),
+    subscriber_count: Int,
+    is_revoked: Bool,
+  )
+}
+
+fn guild_social_integration_decoder() -> Decoder(GuildSocialIntegration) {
+  use data <- decode.then(guild_social_integration_data_decoder())
+  use is_syncing <- decode.field("syncing", decode.bool)
+  use subscriber_role_id <- decode.optional_field(
+    "role_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use subscription_expiration_behavior <- decode.field(
+    "expire_behavior",
+    guild_social_integration_subscription_expiration_behavior_decoder(),
+  )
+  use subscription_expiration_grace_period <- decode.optional_field(
+    "expire_grace_period",
+    duration.seconds(0),
+    days_decoder(),
+  )
+  use last_sync_timestamp <- decode.optional_field(
+    "synced_at",
+    None,
+    decode.optional(rfc3339_decoder()),
+  )
+  use subscriber_count <- decode.field("subscriber_count", decode.int)
+  use is_revoked <- decode.field("revoked", decode.bool)
+  decode.success(GuildSocialIntegration(
+    data:,
+    is_syncing:,
+    subscriber_role_id:,
+    subscription_expiration_behavior:,
+    subscription_expiration_grace_period:,
+    last_sync_timestamp:,
+    subscriber_count:,
+    is_revoked:,
+  ))
+}
+
+fn days_decoder() -> Decoder(Duration) {
+  use days <- decode.then(decode.int)
+  decode.success(duration.hours(days * 24))
+}
+
+pub type GuildSocialIntegrationData {
+  // no specific data :(
+  YoutubeGuildIntegration
+  TwitchGuildIntegration(is_syncing_emoticons: Bool)
+}
+
+fn guild_social_integration_data_decoder() -> Decoder(
+  GuildSocialIntegrationData,
+) {
+  use variant <- decode.field("type", decode.string)
+  case variant {
+    "youtube" -> decode.success(YoutubeGuildIntegration)
+    "twitch" -> {
+      use is_syncing_emoticons <- decode.field("enable_emoticons", decode.bool)
+      decode.success(TwitchGuildIntegration(is_syncing_emoticons:))
+    }
+    _ -> decode.failure(YoutubeGuildIntegration, "GuildSocialIntegrationData")
+  }
+}
+
+pub type GuildSocialIntegrationSubscriptionExpirationBehavior {
+  /// Remove the subscriber-only role when the subscription expires.
+  RemoveRoleOnSubscriptionExpiration
+  /// Kick the ex-subscriber from the guild when the subscription expires.
+  KickOnSubscriptionExpiration
+}
+
+fn guild_social_integration_subscription_expiration_behavior_decoder() -> Decoder(
+  GuildSocialIntegrationSubscriptionExpirationBehavior,
+) {
+  use variant <- decode.then(decode.int)
+  case variant {
+    0 -> decode.success(RemoveRoleOnSubscriptionExpiration)
+    1 -> decode.success(KickOnSubscriptionExpiration)
+    _ ->
+      decode.failure(
+        RemoveRoleOnSubscriptionExpiration,
+        "GuildSocialIntegrationSubscriptionExpirationBehavior",
+      )
+  }
+}
+
+/// Requires the `AllowManagingGuild` permission.
+///
+/// Returns a maximum of 50 integrations. If a guild has more, they cannot be accessed.
+pub fn get_guild_integrations(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(List(GuildIntegration), RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/integrations",
+    method: http.Get,
+  )
+  |> send_request(decode_with: decode.list(of: guild_integration_decoder()))
+}
+
+/// Requires the `AllowManagingGuild` permission.
+///
+/// Deletes any associated webhooks and kicks the associated bot (if there is one).
+pub fn delete_guild_integration(
+  token token: Token,
+  with_id integration_id: Snowflake(GuildIntegration),
+  from_guild_with_id guild_id: Snowflake(Guild),
+  reason reason: Option(String),
+) -> Result(Nil, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/"
+      <> snowflake_to_string(guild_id)
+      <> "/integrations/"
+      <> snowflake_to_string(integration_id),
+    method: http.Delete,
+  )
+  |> request_with_reason(reason)
+  |> send_no_content_request
+}
+
+/// A guild's settings pertaining to the website widget.
+pub type GuildWidgetSettings {
+  GuildWidgetSettings(is_enabled: Bool, channel_id: Option(Snowflake(Channel)))
+}
+
+fn guild_widget_settings_decoder() -> Decoder(GuildWidgetSettings) {
+  use is_enabled <- decode.field("enabled", decode.bool)
+  use channel_id <- decode.field(
+    "channel_id",
+    decode.optional(snowflake_decoder()),
+  )
+  decode.success(GuildWidgetSettings(is_enabled:, channel_id:))
+}
+
+/// Requires the `AllowManagingGuild` permission.
+pub fn get_guild_widget_settings(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+) -> Result(GuildWidgetSettings, RestError) {
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/widget",
+    method: http.Get,
+  )
+  |> send_request(decode_with: guild_widget_settings_decoder())
+}
+
+pub opaque type ModifyGuildWidgetSettings {
+  ModifyGuildWidgetSettings(
+    is_enabled: Option(Bool),
+    channel_id: Modification(Snowflake(Channel)),
+  )
+}
+
+pub fn new_modify_guild_widget_settings() -> ModifyGuildWidgetSettings {
+  ModifyGuildWidgetSettings(None, Skip)
+}
+
+pub fn enable_guild_widget(
+  modify: ModifyGuildWidgetSettings,
+) -> ModifyGuildWidgetSettings {
+  ModifyGuildWidgetSettings(..modify, is_enabled: Some(True))
+}
+
+pub fn disable_guild_widget(
+  modify: ModifyGuildWidgetSettings,
+) -> ModifyGuildWidgetSettings {
+  ModifyGuildWidgetSettings(..modify, is_enabled: Some(False))
+}
+
+pub fn modify_guild_widget_channel_id(
+  modify: ModifyGuildWidgetSettings,
+  new id: Snowflake(Channel),
+) -> ModifyGuildWidgetSettings {
+  ModifyGuildWidgetSettings(..modify, channel_id: Modify(id))
+}
+
+pub fn unset_guild_widget_channel_id(
+  modify: ModifyGuildWidgetSettings,
+) -> ModifyGuildWidgetSettings {
+  ModifyGuildWidgetSettings(..modify, channel_id: Delete)
+}
+
+fn modify_guild_widget_settings_to_json(
+  modify: ModifyGuildWidgetSettings,
+) -> Json {
+  [
+    optional_to_json(modify.is_enabled, "enabled", json.bool),
+    modification_to_json(modify.channel_id, "channel_id", snowflake_to_json),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingGuild` permission.
+pub fn modify_guild_widget_settings(
+  token token: Token,
+  for_guild_with_id guild_id: Snowflake(Guild),
+  using modify: ModifyGuildWidgetSettings,
+  reason reason: Option(String),
+) -> Result(GuildWidgetSettings, RestError) {
+  let body = modify |> modify_guild_widget_settings_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/widget",
+    method: http.Patch,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+  |> send_request(decode_with: guild_widget_settings_decoder())
+}
