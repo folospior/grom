@@ -219,7 +219,6 @@ fn permissions_to_json(permissions: List(Permission)) -> Json {
   |> flags_to_int(bits_permissions())
   |> int.to_string
   |> json.string
-  json.int(permissions |> flags_to_int(bits_permissions()))
 }
 
 pub type User {
@@ -610,7 +609,7 @@ fn send_request(
   // If httpc.send succeeded, check if the response is an error response.
   // If it is - return an Error with the ErrorResponse inside.
   |> result.try(parse_error_response)
-  // If the response isn't errorneous - check if the response has a successful status code.
+  // If the response isn't erroneous - check if the response has a successful status code.
   // If it doesn't - return an Error with the Response object inside
   |> result.try(ensure_status_code_success)
   // If all of the checks above succeeded - parse the response body based on the provided decoder.
@@ -630,7 +629,7 @@ fn send_no_content_request(request: Request(String)) -> Result(Nil, RestError) {
   // If httpc.send succeeded, check if the response is an error response.
   // If it is - return an Error with the ErrorResponse inside.
   |> result.try(parse_error_response)
-  // If the response isn't errorneous - check if the response has a successful status code.
+  // If the response isn't erroneous - check if the response has a successful status code.
   // If it doesn't - return an Error with the Response object inside
   |> result.try(ensure_status_code_success)
   // If all the checks above succeeded, return Ok(Nil)
@@ -712,7 +711,7 @@ pub fn get_user(
   |> send_request(decode_with: user_decoder())
 }
 
-/// This type is used to diffrentiate between the ways of modifying an object.
+/// This type is used to differentiate between the ways of modifying an object.
 /// Some parts of an object can be changed to a different value, but not deleted - for this, grom uses the Option type.
 /// Other parts can be changed to a different value or deleted - for this, grom uses the Modification type.
 /// 
@@ -953,11 +952,11 @@ fn role_decoder() -> Decoder(Role) {
 }
 
 pub type RoleFlag {
-  RoleCanBeSeletedInOnboardingPrompt
+  RoleCanBeSelectedInOnboardingPrompt
 }
 
 fn bits_role_flags() -> List(#(Int, RoleFlag)) {
-  [#(int.bitwise_shift_left(1, 0), RoleCanBeSeletedInOnboardingPrompt)]
+  [#(int.bitwise_shift_left(1, 0), RoleCanBeSelectedInOnboardingPrompt)]
 }
 
 // TODO: GET RID OF ME! USE ACTUAL INTEGRATIONS!
@@ -2333,7 +2332,7 @@ pub type Guild {
     stickers: Option(List(GuildSticker)),
     /// Whether the guild has the boost progress bar enabled.
     is_premium_progress_bar_enabled: Bool,
-    /// ID of the chanel where moderators of Community guilds receive safety alerts from Discord.
+    /// ID of the channel where moderators of Community guilds receive safety alerts from Discord.
     /// Is `None` if the guild isn't a community guild.
     safety_alerts_channel_id: Option(Snowflake(Channel)),
     /// Is `None` if there is no active incident.
@@ -2547,7 +2546,7 @@ pub type Sticker {
   /// Stickers available on all guilds to every user.
   StickerStandardType(StandardSticker)
   /// Stickers available:
-  /// * in the guild of registratrion for that guild's members
+  /// * in the guild of registration for that guild's members
   /// * in all guilds for Nitro subscribers who are also members of the guild of registration
   StickerGuildType(GuildSticker)
 }
