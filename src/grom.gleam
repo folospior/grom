@@ -77,7 +77,7 @@ fn snowflake_to_json(snowflake: Snowflake(a)) -> Json {
   |> json.string
 }
 
-pub fn snowflake_to_string(snowflake: Snowflake(a)) -> String {
+fn snowflake_to_string(snowflake: Snowflake(a)) -> String {
   snowflake.id
   |> int.to_string
 }
@@ -219,7 +219,6 @@ fn permissions_to_json(permissions: List(Permission)) -> Json {
   |> flags_to_int(bits_permissions())
   |> int.to_string
   |> json.string
-  json.int(permissions |> flags_to_int(bits_permissions()))
 }
 
 pub type User {
@@ -8006,4 +8005,165 @@ pub fn get_channel(
     method: http.Get,
   )
   |> send_request(decode_with: channel_decoder())
+}
+
+pub opaque type ModifyTextChannel {
+  ModifyTextChannel(
+    name: Option(String),
+    switch_to_announcement: Option(Bool),
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Modification(Snowflake(CategoryChannel)),
+    default_thread_auto_archive_duration: Modification(
+      ThreadAutoArchiveDuration,
+    ),
+  )
+}
+
+fn modify_text_channel_to_json(modify: ModifyTextChannel) -> Json {
+  let type_ = case modify.switch_to_announcement {
+    Some(True) -> Ok(#("type", json.int(5)))
+    _ -> Error(Nil)
+  }
+
+  [
+    optional_to_json(modify.name, "name", json.string),
+    type_,
+    modification_to_json(modify.position, "position", json.int),
+    modification_to_json(modify.topic, "topic", json.string),
+    optional_to_json(modify.is_nsfw, "nsfw", json.bool),
+    modification_to_json(
+      modify.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(
+      modify.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    modification_to_json(modify.parent_id, "parent_id", snowflake_to_json),
+    modification_to_json(
+      modify.default_thread_auto_archive_duration,
+      "default_auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_modify_text_channel() -> ModifyTextChannel {
+  ModifyTextChannel(None, None, Skip, Skip, None, Skip, None, Skip, Skip)
+}
+
+pub fn modify_text_channel_name(
+  modify: ModifyTextChannel,
+  new name: String,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, name: Some(name))
+}
+
+/// Requires the guild to have the `GuildCanCreateAnnouncementChannels` feature.
+pub fn convert_text_channel_to_announcement_channel(
+  modify: ModifyTextChannel,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, switch_to_announcement: Some(True))
+}
+
+pub fn modify_text_channel_position(
+  modify: ModifyTextChannel,
+  new position: Int,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, position: Modify(position))
+}
+
+pub fn unset_text_channel_position(
+  modify: ModifyTextChannel,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, position: Delete)
+}
+
+pub fn set_text_channel_as_nsfw(modify: ModifyTextChannel) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, is_nsfw: Some(True))
+}
+
+pub fn set_text_channel_as_sfw(modify: ModifyTextChannel) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, is_nsfw: Some(False))
+}
+
+/// Modify the amount of time between a user has to wait between sending a message or creating a thread.
+/// 
+/// Between 0 and 21600 seconds.
+///
+/// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+pub fn modify_text_channel_rate_limit_per_user(
+  modify: ModifyTextChannel,
+  new limit: Duration,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, rate_limit_per_user: Modify(limit))
+}
+
+/// AKA remove slowmode.
+pub fn delete_text_channel_rate_limit_per_user(
+  modify: ModifyTextChannel,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, rate_limit_per_user: Delete)
+}
+
+pub fn modify_text_channel_permission_ovewrites(
+  modify: ModifyTextChannel,
+  new overwrites: List(PermissionOverwrite),
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, permission_overwrites: Some(overwrites))
+}
+
+pub fn modify_text_channel_parent_id(
+  modify: ModifyTextChannel,
+  new id: Snowflake(CategoryChannel),
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, parent_id: Modify(id))
+}
+
+pub fn unset_text_channel_parent_id(
+  modify: ModifyTextChannel,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, parent_id: Delete)
+}
+
+pub fn modify_text_channel_default_thread_auto_archive_duration(
+  modify: ModifyTextChannel,
+  new duration: ThreadAutoArchiveDuration,
+) -> ModifyTextChannel {
+  ModifyTextChannel(
+    ..modify,
+    default_thread_auto_archive_duration: Modify(duration),
+  )
+}
+
+pub fn unset_text_channel_default_thread_auto_archive_duration(
+  modify: ModifyTextChannel,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, default_thread_auto_archive_duration: Delete)
+}
+
+pub fn modify_text_channel(
+  token token: Token,
+  with_id channel_id: Snowflake(Channel),
+  using modify: ModifyTextChannel,
+  reason reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  let body = modify |> modify_text_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(channel_id),
+    method: http.Patch,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+  |> send_request(decode_with: guild_channel_decoder())
 }
