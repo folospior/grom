@@ -31,7 +31,7 @@ pub opaque type Snowflake(a) {
 
 /// An authentication token, required to identify the user (bot) making requests.
 /// See [`bot`](#bot) for creating bot tokens.
-/// 
+///
 /// In the future, this will be extended to also support OAuth2 bearer tokens.
 pub opaque type Token {
   BotToken(token: String)
@@ -226,15 +226,15 @@ pub type User {
     id: Snowflake(User),
     username: String,
     /// Mostly deprecated. Only bots have discriminators nowadays.
-    /// 
+    ///
     /// Users will very likely have their discriminator set to `0`.
-    /// 
+    ///
     /// Used in the past when usernames weren't user-specific.
-    /// 
+    ///
     /// Doesn't include the `#` prefix.
     discriminator: String,
     /// Also called a display name.
-    /// 
+    ///
     /// Is `None` when the user doesn't have a global name, and rather uses their username as their display name.
     global_name: Option(String),
     /// Is `None` when the user uses a default avatar.
@@ -244,28 +244,28 @@ pub type User {
     /// Whether the user is Discord's official system account.
     is_system: Bool,
     /// Is `None` if it isn't known whether the user has enabled MFA.
-    /// 
+    ///
     /// MFA = multi-factor authentication.
     has_mfa_enabled: Option(Bool),
     /// Is `None` when the user doesn't use a custom banner.
     banner_hash: Option(ImageHash),
     /// The user's banner accent colour in RGB hexadecimal format.
-    /// 
+    ///
     /// Is `None` when the user uses a default color based on avatar.
     accent_colour: Option(Colour),
     /// The user's chosen locale.
-    /// 
-    /// Discord hasn't disclosed when this field could be `None`. 
+    ///
+    /// Discord hasn't disclosed when this field could be `None`.
     locale: Option(Locale),
     /// The user's banner accent color in RGB hexadecimal format.
-    /// 
+    ///
     /// Is `None` when the user uses a default color based on avatar.
     accent_color: Option(Int),
     flags: List(UserFlag),
     /// Is `None` if the user's premium type isn't known.
     premium_type: Option(UserPremiumType),
     /// Publicly visible flags - aka Discord badges.
-    /// 
+    ///
     /// Visible in the top right corner of a person's profile in the apps.
     public_flags: List(UserFlag),
     /// Is `None` when the user has no avatar decorations.
@@ -714,7 +714,7 @@ pub fn get_user(
 /// This type is used to diffrentiate between the ways of modifying an object.
 /// Some parts of an object can be changed to a different value, but not deleted - for this, grom uses the Option type.
 /// Other parts can be changed to a different value or deleted - for this, grom uses the Modification type.
-/// 
+///
 /// The default behavior of modify functions is to not modify anything - for options: `None`, for modifications: `Skip`
 type Modification(a) {
   /// Will modify the value to the new, provided value
@@ -1039,7 +1039,7 @@ pub type Permission {
   AllowSendingVoiceMessages
   AllowSendingPolls
   /// Allows user-installed applications to send public responses.
-  /// 
+  ///
   /// When disabled, users will still be able to use their apps, but their responses will be ephemeral.
   /// This only applies to apps that are not installed at the guild level.
   AllowUsingExternalApplications
@@ -1102,7 +1102,7 @@ fn role_colours_decoder() -> Decoder(RoleColours) {
 
 // MESSAGE_CREATE && MESSAGE_UPDATE: DO NOT USE THIS TYPE
 // CREATE A NEW TYPE FOR THESE EVENTS: THEY WILL NOT HAVE THE USER FIELD
-// 
+//
 // VOICE_STATE_UPDATE: DO NOT USE THIS TYPE
 // CREATE A NEW TYPE FOR THIS EVENT: IT WILL NOT HAVE THE JOINED_AT FIELD IF THE MEMBER WAS INVITED AS A GUEST
 //
@@ -1113,7 +1113,7 @@ pub type GuildMember {
     /// Corresponding user object.
     user: User,
     /// Guild-specific nickname.
-    /// Is `None` when the member doesn't have a guild-specific nickname. 
+    /// Is `None` when the member doesn't have a guild-specific nickname.
     nick: Option(String),
     /// Guild-specific avatar hash.
     /// Is `None` if the member chose not to use a guild-specific avatar.
@@ -1283,7 +1283,7 @@ pub type Thread {
     /// Is `None` if there are no messages in the channel.
     last_message_id: Option(Snowflake(Message)),
     /// The amount of time between a user has to wait between sending a message or creating a thread.
-    /// 
+    ///
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
@@ -1554,7 +1554,7 @@ pub type TextChannel {
     /// Is `None` if there are no messages in the channel.
     last_message_id: Option(Snowflake(Message)),
     /// The amount of time between a user has to wait between sending a message or creating a thread.
-    /// 
+    ///
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
@@ -1637,7 +1637,7 @@ pub type VoiceChannel {
     bitrate: Int,
     user_limit: Option(Int),
     /// The amount of time between a user has to wait between sending a message in the voice channel adjacent text channel.
-    /// 
+    ///
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
@@ -1820,7 +1820,7 @@ pub type StageChannel {
     bitrate: Int,
     user_limit: Option(Int),
     /// The amount of time between a user has to wait between sending a message in the stage channel adjacent text channel.
-    /// 
+    ///
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
@@ -1888,7 +1888,7 @@ pub type ForumChannel {
     id: Snowflake(ForumChannel),
     topic: Option(String),
     /// The amount of time between a user has to wait between creating threads.
-    /// 
+    ///
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
@@ -1973,7 +1973,7 @@ pub type MediaChannel {
     id: Snowflake(MediaChannel),
     topic: Option(String),
     /// The amount of time between a user has to wait between creating threads.
-    /// 
+    ///
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
@@ -2253,7 +2253,7 @@ pub type Guild {
     ///
     /// A splash is the picture shown when a user joins a guild, at the "Accept Invite" UI.
     ///
-    /// Is `None` when the guild doesn't have a splash. 
+    /// Is `None` when the guild doesn't have a splash.
     splash_hash: Option(ImageHash),
     /// Image hash of the guild discovery splash.
     ///
@@ -2263,7 +2263,7 @@ pub type Guild {
     discovery_splash_hash: Option(ImageHash),
     owner_id: Snowflake(User),
     /// The "AFK channel" is the channel to which inactive voice channel users are moved.
-    /// 
+    ///
     /// Is `None` when the guild doesn't have a configured AFK channel.
     afk_channel_id: Option(Snowflake(Channel)),
     /// The time of inactivity after a voice channel user is marked as AFK in this guild.
@@ -2272,13 +2272,13 @@ pub type Guild {
     /// The server widget is a feature allowing guild advertisements on websites.
     is_widget_enabled: Bool,
     /// The channel to which the widget will generate an invite to.
-    /// 
+    ///
     /// Is `None` if the widget was configured to not generate invites or is disabled.
     widget_channel_id: Option(Snowflake(Channel)),
     /// The verification level required for a guild member to be able to communicate in a guild.
     required_verification_level: GuildMemberVerificationLevel,
     /// The default setting regarding sending push notifications to members' devices.
-    /// 
+    ///
     /// Note that this can be overriden on a per-member basis.
     default_message_notification_setting: GuildDefaultMessageNotificationSetting,
     explicit_content_filter_setting: GuildExplicitContentFilterSetting,
@@ -2315,7 +2315,7 @@ pub type Guild {
     premium_subscription_count: Int,
     /// Is present for all guilds, but only community guilds have the ability to change it.
     ///
-    /// Defaults to `en-US` if not selected by the guild's admins. 
+    /// Defaults to `en-US` if not selected by the guild's admins.
     preferred_locale: Locale,
     /// ID of the channel where admins and moderators of a Community guild receive notices from Discord.
     ///
@@ -2845,11 +2845,11 @@ pub type Application {
     /// Is `None` if there's no bot associated with the app.
     bot: Option(User),
     /// The app's Terms of Service.
-    /// 
+    ///
     /// Is `None` if the developer didn't specify any Terms of Service.
     terms_of_service_url: Option(String),
     /// The app's Privacy Policy.
-    /// 
+    ///
     /// Is `None` if the developer didn't specify any Privacy Policy.
     privacy_policy_url: Option(String),
     owner: ApplicationOwner,
@@ -3853,7 +3853,7 @@ pub fn delete_guild_discovery_splash(modify: ModifyGuild) -> ModifyGuild {
 ///
 /// If animated, the banner must be a GIF image with a 16:9 aspect ratio
 /// and the guild must have the `GuildCanUseAnimatedBanner` feature.
-/// 
+///
 /// In all cases, the guild must have the `GuildCanUseBanner` feature.
 pub fn modify_guild_banner(
   modify: ModifyGuild,
@@ -4033,7 +4033,7 @@ pub fn modify_guild_preferred_locale(
   ModifyGuild(..modify, preferred_locale: Modify(preferred_locale))
 }
 
-/// Modifies the guild's features to the provided list. 
+/// Modifies the guild's features to the provided list.
 ///
 /// You can only modify the following features:
 /// * `GuildIsCommunity` - requires the `AdministratorPermission` permission
@@ -4568,7 +4568,7 @@ pub fn create_voice_channel_with_rate_limit_per_user(
 /// * Premium tier 2 - `256000`
 /// * Premium tier 3 - `384000`
 ///
-/// Additionally, servers with the `GuildCanUse384KbpsVoiceBitrate` can specify the bitrate up to `384000`. 
+/// Additionally, servers with the `GuildCanUse384KbpsVoiceBitrate` can specify the bitrate up to `384000`.
 pub fn create_voice_channel_with_bitrate(
   create: CreateVoiceChannel,
   bitrate: Int,
@@ -4781,7 +4781,7 @@ pub fn create_stage_channel_with_rate_limit_per_user(
 /// * Premium tier 2 - `256000`
 /// * Premium tier 3 - `384000`
 ///
-/// Additionally, servers with the `GuildCanUse384KbpsstageBitrate` can specify the bitrate up to `384000`. 
+/// Additionally, servers with the `GuildCanUse384KbpsstageBitrate` can specify the bitrate up to `384000`.
 pub fn create_stage_channel_with_bitrate(
   create: CreateStageChannel,
   bitrate: Int,
@@ -5510,7 +5510,7 @@ pub fn modify_guild_member_roles(
 }
 
 /// Requires the `AllowManagingRoles` permission.
-/// 
+///
 /// Does not actually delete the roles - only removes them from the member.
 pub fn delete_guild_member_roles(modify: ModifyGuildMember) -> ModifyGuildMember {
   ModifyGuildMember(..modify, roles: Delete)
@@ -5519,7 +5519,7 @@ pub fn delete_guild_member_roles(modify: ModifyGuildMember) -> ModifyGuildMember
 /// Requires the `AllowMutingMembersInVoiceChannels` permission.
 ///
 /// Denies the user's permission to speak in all the guild's voice channels.
-/// 
+///
 /// Will return a bad request if the user is not in a voice channel.
 pub fn mute_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
   ModifyGuildMember(..modify, is_mute: Modify(True))
@@ -5528,7 +5528,7 @@ pub fn mute_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
 /// Requires the `AllowMutingMembersInVoiceChannels` permission.
 ///
 /// Allows the user to speak in all the guild's voice channels.
-/// 
+///
 /// Will return a bad request if the user is not in a voice channel.
 pub fn unmute_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
   ModifyGuildMember(..modify, is_mute: Modify(False))
@@ -5537,7 +5537,7 @@ pub fn unmute_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
 /// Requires the `AllowDeafeningMembersInVoiceChannels` permission.
 ///
 /// Denies the user's permission to listen and speak in all the guild's voice channels.
-/// 
+///
 /// Will return a bad request if the user is not in a voice channel.
 pub fn deafen_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
   ModifyGuildMember(..modify, is_deaf: Modify(True))
@@ -5572,7 +5572,7 @@ pub fn disconnect_guild_member(modify: ModifyGuildMember) -> ModifyGuildMember {
 /// Requires the `AllowModeratingMembers` permission.
 ///
 /// The timeout can be issued for a maximum of 28 days.
-/// 
+///
 /// Will override all previous timeouts.
 ///
 /// Will return a `Forbidden (403)` status code if the member has the `AdministratorPermission` or is the guild's owner.
@@ -5777,7 +5777,7 @@ pub fn add_guild_member_role(
 }
 
 /// Requires the `AllowManagingRoles` permission.
-/// 
+///
 /// Doesn't actually delete the role, only removes it from the user's profile.
 pub fn delete_guild_member_role(
   token token: Token,
@@ -5914,7 +5914,7 @@ pub fn get_guild_ban(
 }
 
 /// Requires the `AllowBanningMembers` permission.
-/// 
+///
 /// `delete_messages_since` will delete the messages the user has sent in the guild that are at most 7 days old.
 pub fn ban_guild_member(
   token token: Token,
@@ -6152,7 +6152,7 @@ pub fn create_role_with_icon(create: CreateRole, icon: ImageData) -> CreateRole 
 }
 
 /// Requires the `GuildCanUseRoleIcons` feature.
-/// 
+///
 /// Accepts a unicode emoji character (e.g. 🔨)
 pub fn create_role_with_unicode_emoji(
   create: CreateRole,
@@ -6462,12 +6462,12 @@ pub fn prune_guild_with_included_roles(
 }
 
 /// Not recommended for large guilds, use [`prune_guild`](#prune_guild) instead.
-/// 
+///
 /// Requires the `AllowManagingGuild` and `AllowKickingMembers` permissions.
-/// 
+///
 /// Kicks inactive members based on the provided options.
 ///
-/// Returns the amount of members who have been kicked. 
+/// Returns the amount of members who have been kicked.
 pub fn prune_guild_with_count(
   token token: Token,
   with_id guild_id: Snowflake(Guild),
@@ -6493,7 +6493,7 @@ pub fn prune_guild_with_count(
 }
 
 /// Requires the `AllowManagingGuild` and `AllowKickingMembers` permissions.
-/// 
+///
 /// Kicks inactive members based on the provided options.
 pub fn prune_guild(
   token token: Token,
@@ -6561,7 +6561,7 @@ pub type Invite {
     /// Every invite has an unique ID (code), which is used in the link.
     ///
     /// Example: <https://discord.gg/Fm8Pwmy> -> `Fm8Pwmy` is the code!
-    /// 
+    ///
     /// Prepend `https://discord.gg/` to the code to create an invite link!
     code: String,
     guild: Guild,
@@ -6575,7 +6575,7 @@ pub type Invite {
     /// Some invites point to a scheduled event.
     scheduled_event: Option(ScheduledEvent),
     flags: List(InviteFlag),
-    /// The roles that are automatically given to a user which accepts the invite. 
+    /// The roles that are automatically given to a user which accepts the invite.
     automatically_awarded_roles: List(InviteRole),
     metadata: Option(InviteMetadata),
   )
@@ -6956,12 +6956,12 @@ pub type ScheduledEventRecurrenceRule {
     /// Example: Every Thursday.
     every_weekday: Option(List(Weekday)),
     /// On which weekdays of specific weeks of the month should the event recur?
-    /// 
+    ///
     /// Example: Every Thursday of the 3rd week of the month.
     every_nth_weekday: Option(List(ScheduledEventRecurrenceRuleNthWeekday)),
     /// In which months should the event recur?
     ///
-    /// Example: Every October. 
+    /// Example: Every October.
     every_month: Option(List(calendar.Month)),
     /// On which days of the month should the event recur?
     ///
@@ -7054,7 +7054,7 @@ fn month_decoder() -> Decoder(calendar.Month) {
 }
 
 /// `interval` describes the spacing between events.
-/// 
+///
 /// For example, `ScheduledEventRecursWeekly(interval: 2)` means "every two weeks".
 pub type ScheduledEventRecurrenceRuleFrequency {
   ScheduledEventRecursYearly(interval: Int)
@@ -7504,18 +7504,18 @@ fn guild_widget_decoder() -> Decoder(GuildWidget) {
 }
 
 /// A partial user object used in guild widgets.
-/// 
+///
 /// Includes the user's status + a specific avatar URL.
 pub type GuildWidgetUser {
   GuildWidgetUser(
     id: Snowflake(User),
     username: String,
     /// Mostly deprecated. Only bots have discriminators nowadays.
-    /// 
+    ///
     /// Users will very likely have their discriminator set to `0`.
-    /// 
+    ///
     /// Used in the past when usernames weren't user-specific.
-    /// 
+    ///
     /// Doesn't include the `#` prefix.
     discriminator: String,
     avatar_hash: Option(ImageHash),
@@ -8096,8 +8096,8 @@ pub fn set_text_channel_as_sfw(modify: ModifyTextChannel) -> ModifyTextChannel {
 }
 
 /// Modify the amount of time between a user has to wait between sending a message or creating a thread.
-/// 
-/// Between 0 and 21600 seconds.
+///
+/// Must be between 0 and 21600 seconds.
 ///
 /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
 pub fn modify_text_channel_rate_limit_per_user(
@@ -8152,7 +8152,7 @@ pub fn unset_text_channel_default_thread_auto_archive_duration(
 
 pub fn modify_text_channel(
   token token: Token,
-  with_id channel_id: Snowflake(Channel),
+  with_id channel_id: Snowflake(TextChannel),
   using modify: ModifyTextChannel,
   reason reason: Option(String),
 ) -> Result(GuildChannel, RestError) {
@@ -8166,4 +8166,173 @@ pub fn modify_text_channel(
   |> request_with_reason(reason)
   |> request.set_body(body)
   |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub opaque type ModifyVoiceChannel {
+  ModifyVoiceChannel(
+    name: Option(String),
+    position: Modification(Int),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    bitrate: Modification(Int),
+    user_limit: Modification(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Modification(Snowflake(CategoryChannel)),
+    rtc_region_id: Modification(String),
+    video_quality_mode: Modification(VideoQualityMode),
+  )
+}
+
+pub fn new_modify_voice_channel() -> ModifyVoiceChannel {
+  ModifyVoiceChannel(None, Skip, None, Skip, Skip, Skip, None, Skip, Skip, Skip)
+}
+
+pub fn modify_voice_channel_name(
+  modify: ModifyVoiceChannel,
+  new name: String,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, name: Some(name))
+}
+
+pub fn modify_voice_channel_position(
+  modify: ModifyVoiceChannel,
+  new position: Int,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, position: Modify(position))
+}
+
+pub fn unset_voice_channel_position(
+  modify: ModifyVoiceChannel,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, position: Delete)
+}
+
+pub fn set_voice_channel_as_nsfw(
+  modify: ModifyVoiceChannel,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, is_nsfw: Some(True))
+}
+
+pub fn set_voice_channel_as_sfw(
+  modify: ModifyVoiceChannel,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, is_nsfw: Some(False))
+}
+
+/// Modifies the slowmode for the voice-channel-attached text channel.
+///
+/// Must be between 0 and 21600 seconds.
+///
+/// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+pub fn modify_voice_channel_rate_limit_per_user(
+  modify: ModifyVoiceChannel,
+  new limit: Duration,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, rate_limit_per_user: Modify(limit))
+}
+
+pub fn delete_voice_channel_rate_limit_per_user(
+  modify: ModifyVoiceChannel,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, rate_limit_per_user: Delete)
+}
+
+pub fn modify_voice_channel_bitrate(
+  modify: ModifyVoiceChannel,
+  new bitrate: Int,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, bitrate: Modify(bitrate))
+}
+
+pub fn reset_voice_channel_bitrate(
+  modify: ModifyVoiceChannel,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, bitrate: Delete)
+}
+
+pub fn modify_voice_channel_user_limit(
+  modify: ModifyVoiceChannel,
+  new limit: Int,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, user_limit: Modify(limit))
+}
+
+pub fn modify_voice_channel_permission_overwrites(
+  modify: ModifyVoiceChannel,
+  new overwrites: List(PermissionOverwrite),
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, permission_overwrites: Some(overwrites))
+}
+
+pub fn delete_voice_channel_permission_overwrites(
+  modify: ModifyVoiceChannel,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, permission_overwrites: None)
+}
+
+pub fn modify_voice_channel_parent_id(
+  modify: ModifyVoiceChannel,
+  new parent_id: Snowflake(CategoryChannel),
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, parent_id: Modify(parent_id))
+}
+
+pub fn unset_voice_channel_parent_id(
+  modify: ModifyVoiceChannel,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, parent_id: Delete)
+}
+
+pub fn modify_voice_channel_rtc_region_id(
+  modify: ModifyVoiceChannel,
+  new rtc_region_id: String,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, rtc_region_id: Modify(rtc_region_id))
+}
+
+/// Makes the RTC region automatically selected by Discord.
+pub fn unset_voice_channel_rtc_region_id(
+  modify: ModifyVoiceChannel,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, rtc_region_id: Delete)
+}
+
+pub fn modify_voice_channel_video_quality_mode(
+  modify: ModifyVoiceChannel,
+  new video_quality_mode: VideoQualityMode,
+) -> ModifyVoiceChannel {
+  ModifyVoiceChannel(..modify, video_quality_mode: Modify(video_quality_mode))
+}
+
+fn modify_voice_channel_to_json(modify: ModifyVoiceChannel) -> Json {
+  [
+    optional_to_json(modify.name, "name", json.string),
+    modification_to_json(modify.position, "position", json.int),
+    optional_to_json(modify.is_nsfw, "nsfw", json.bool),
+    modification_to_json(
+      modify.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    modification_to_json(modify.bitrate, "bitrate", json.int),
+    modification_to_json(modify.user_limit, "user_limit", json.int),
+    optional_to_json(
+      modify.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    modification_to_json(modify.parent_id, "parent_id", snowflake_to_json),
+    modification_to_json(modify.rtc_region_id, "rtc_region", json.string),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn modify_voice_channel(
+  token token: Token,
+  with_id channel_id: Snowflake(VoiceChannel),
+  using modify: ModifyVoiceChannel,
+  reason reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  todo
 }
