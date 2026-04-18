@@ -8323,6 +8323,11 @@ fn modify_voice_channel_to_json(modify: ModifyVoiceChannel) -> Json {
     ),
     modification_to_json(modify.parent_id, "parent_id", snowflake_to_json),
     modification_to_json(modify.rtc_region_id, "rtc_region", json.string),
+    modification_to_json(
+      modify.video_quality_mode,
+      "video_quality_mode",
+      video_quality_mode_to_json,
+    ),
   ]
   |> list.filter_map(function.identity)
   |> json.object
@@ -8334,5 +8339,14 @@ pub fn modify_voice_channel(
   using modify: ModifyVoiceChannel,
   reason reason: Option(String),
 ) -> Result(GuildChannel, RestError) {
-  todo
+  let body = modify |> modify_voice_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(channel_id),
+    method: http.Patch,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+  |> send_request(decode_with: guild_channel_decoder())
 }
