@@ -17,7 +17,7 @@ pub type Error {
   ResponseNotValidUtf8(BitArray)
   InvalidGatewayUrl(String)
   NoConnectionFound
-  CouldNotInitializeWebsocketConnection(stratus.InitializationError)
+  CouldNotInitializeWebsocketConnection(actor.StartError)
   CouldNotStartActor(actor.StartError)
   CouldNotSendEvent(stratus.SocketReason)
   CouldNotCloseWebsocketConnection(stratus.SocketReason)
