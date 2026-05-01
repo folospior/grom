@@ -3728,7 +3728,9 @@ pub fn modify_guild_member_verification_level(
 }
 
 /// Resets the guild's member verification level back to default.
-pub fn reset_guild_member_verification_level(modify: ModifyGuild) -> ModifyGuild {
+pub fn reset_guild_member_verification_level(
+  modify: ModifyGuild,
+) -> ModifyGuild {
   ModifyGuild(..modify, member_verification_level: Delete)
 }
 
@@ -4458,7 +4460,9 @@ pub fn create_text_channel_with_parent_id(
 }
 
 /// Creates an age-restricted text channel.
-pub fn create_nsfw_text_channel(create: CreateTextChannel) -> CreateTextChannel {
+pub fn create_nsfw_text_channel(
+  create: CreateTextChannel,
+) -> CreateTextChannel {
   CreateTextChannel(..create, is_nsfw: Some(True))
 }
 
@@ -4674,7 +4678,9 @@ pub fn create_category_channel(
   |> send_request(decode_with: guild_channel_decoder())
 }
 
-pub fn new_create_category_channel(named name: String) -> CreateCategoryChannel {
+pub fn new_create_category_channel(
+  named name: String,
+) -> CreateCategoryChannel {
   CreateCategoryChannel(name, None, None)
 }
 
@@ -5243,6 +5249,7 @@ pub fn new_modify_guild_channel_position(
   ModifyGuildChannelPosition(id, Skip, None, Skip)
 }
 
+/// Channels with the same position are sorted by ID (newer channel will be lower)
 pub fn modify_guild_channel_position(
   modify: ModifyGuildChannelPosition,
   new position: Int,
@@ -5495,7 +5502,9 @@ pub fn modify_guild_member_nick(
 }
 
 /// Requires the `AllowManagingNicknames` permission.
-pub fn delete_guild_member_nick(modify: ModifyGuildMember) -> ModifyGuildMember {
+pub fn delete_guild_member_nick(
+  modify: ModifyGuildMember,
+) -> ModifyGuildMember {
   ModifyGuildMember(..modify, nick: Delete)
 }
 
@@ -5512,7 +5521,9 @@ pub fn modify_guild_member_roles(
 /// Requires the `AllowManagingRoles` permission.
 ///
 /// Does not actually delete the roles - only removes them from the member.
-pub fn delete_guild_member_roles(modify: ModifyGuildMember) -> ModifyGuildMember {
+pub fn delete_guild_member_roles(
+  modify: ModifyGuildMember,
+) -> ModifyGuildMember {
   ModifyGuildMember(..modify, roles: Delete)
 }
 
@@ -6147,7 +6158,10 @@ pub fn create_hoisted_role(create: CreateRole) -> CreateRole {
 }
 
 /// Requires the `GuildCanUseRoleIcons` feature.
-pub fn create_role_with_icon(create: CreateRole, icon: ImageData) -> CreateRole {
+pub fn create_role_with_icon(
+  create: CreateRole,
+  icon: ImageData,
+) -> CreateRole {
   CreateRole(..create, icon: Some(icon))
 }
 
@@ -7670,7 +7684,9 @@ pub opaque type ModifyGuildWelcomeScreen {
   )
 }
 
-fn modify_guild_welcome_screen_to_json(modify: ModifyGuildWelcomeScreen) -> Json {
+fn modify_guild_welcome_screen_to_json(
+  modify: ModifyGuildWelcomeScreen,
+) -> Json {
   [
     modification_to_json(modify.is_enabled, "enabled", json.bool),
     modification_to_json(
@@ -7904,7 +7920,9 @@ pub opaque type ModifyGuildIncidentsData {
   )
 }
 
-fn modify_guild_incidents_data_to_json(modify: ModifyGuildIncidentsData) -> Json {
+fn modify_guild_incidents_data_to_json(
+  modify: ModifyGuildIncidentsData,
+) -> Json {
   [
     modification_to_json(
       modify.invites_disabled_until,
@@ -8020,7 +8038,21 @@ pub opaque type ModifyTextChannel {
     default_thread_auto_archive_duration: Modification(
       ThreadAutoArchiveDuration,
     ),
+    default_thread_rate_limit_per_user: Option(Duration),
   )
+}
+
+pub fn modify_text_channel_topic(
+  modify: ModifyTextChannel,
+  new topic: String,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, topic: Modify(topic))
+}
+
+pub fn delete_text_channel_topic(
+  modify: ModifyTextChannel,
+) -> ModifyTextChannel {
+  ModifyTextChannel(..modify, topic: Delete)
 }
 
 fn modify_text_channel_to_json(modify: ModifyTextChannel) -> Json {
@@ -8051,13 +8083,29 @@ fn modify_text_channel_to_json(modify: ModifyTextChannel) -> Json {
       "default_auto_archive_duration",
       thread_auto_archive_duration_to_json,
     ),
+    optional_to_json(
+      modify.default_thread_rate_limit_per_user,
+      "default_thread_rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
   ]
   |> list.filter_map(function.identity)
   |> json.object
 }
 
 pub fn new_modify_text_channel() -> ModifyTextChannel {
-  ModifyTextChannel(None, None, Skip, Skip, None, Skip, None, Skip, Skip)
+  ModifyTextChannel(None, None, Skip, Skip, None, Skip, None, Skip, Skip, None)
+}
+
+/// The modified value will only apply to new threads - existing threads won't auto-update. 
+pub fn modify_text_channel_default_thread_rate_limit_per_user(
+  modify: ModifyTextChannel,
+  new duration: Duration,
+) -> ModifyTextChannel {
+  ModifyTextChannel(
+    ..modify,
+    default_thread_rate_limit_per_user: Some(duration),
+  )
 }
 
 pub fn modify_text_channel_name(
@@ -8074,6 +8122,7 @@ pub fn convert_text_channel_to_announcement_channel(
   ModifyTextChannel(..modify, switch_to_announcement: Some(True))
 }
 
+/// Channels with the same position are sorted by ID (newer channel will be lower)
 pub fn modify_text_channel_position(
   modify: ModifyTextChannel,
   new position: Int,
@@ -8081,13 +8130,16 @@ pub fn modify_text_channel_position(
   ModifyTextChannel(..modify, position: Modify(position))
 }
 
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
 pub fn unset_text_channel_position(
   modify: ModifyTextChannel,
 ) -> ModifyTextChannel {
   ModifyTextChannel(..modify, position: Delete)
 }
 
-pub fn set_text_channel_as_nsfw(modify: ModifyTextChannel) -> ModifyTextChannel {
+pub fn set_text_channel_as_nsfw(
+  modify: ModifyTextChannel,
+) -> ModifyTextChannel {
   ModifyTextChannel(..modify, is_nsfw: Some(True))
 }
 
@@ -8114,6 +8166,8 @@ pub fn delete_text_channel_rate_limit_per_user(
   ModifyTextChannel(..modify, rate_limit_per_user: Delete)
 }
 
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
 pub fn modify_text_channel_permission_ovewrites(
   modify: ModifyTextChannel,
   new overwrites: List(PermissionOverwrite),
@@ -8150,6 +8204,7 @@ pub fn unset_text_channel_default_thread_auto_archive_duration(
   ModifyTextChannel(..modify, default_thread_auto_archive_duration: Delete)
 }
 
+/// Requires the `AllowManagingChannels` permission. 
 pub fn modify_text_channel(
   token token: Token,
   with_id channel_id: Snowflake(TextChannel),
@@ -8194,6 +8249,7 @@ pub fn modify_voice_channel_name(
   ModifyVoiceChannel(..modify, name: Some(name))
 }
 
+/// Channels with the same position are sorted by ID (newer channel will be lower)
 pub fn modify_voice_channel_position(
   modify: ModifyVoiceChannel,
   new position: Int,
@@ -8201,6 +8257,7 @@ pub fn modify_voice_channel_position(
   ModifyVoiceChannel(..modify, position: Modify(position))
 }
 
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
 pub fn unset_voice_channel_position(
   modify: ModifyVoiceChannel,
 ) -> ModifyVoiceChannel {
@@ -8257,17 +8314,13 @@ pub fn modify_voice_channel_user_limit(
   ModifyVoiceChannel(..modify, user_limit: Modify(limit))
 }
 
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
 pub fn modify_voice_channel_permission_overwrites(
   modify: ModifyVoiceChannel,
   new overwrites: List(PermissionOverwrite),
 ) -> ModifyVoiceChannel {
   ModifyVoiceChannel(..modify, permission_overwrites: Some(overwrites))
-}
-
-pub fn delete_voice_channel_permission_overwrites(
-  modify: ModifyVoiceChannel,
-) -> ModifyVoiceChannel {
-  ModifyVoiceChannel(..modify, permission_overwrites: None)
 }
 
 pub fn modify_voice_channel_parent_id(
@@ -8333,6 +8386,7 @@ fn modify_voice_channel_to_json(modify: ModifyVoiceChannel) -> Json {
   |> json.object
 }
 
+/// Requires the `AllowManagingChannels` permission. 
 pub fn modify_voice_channel(
   token token: Token,
   with_id channel_id: Snowflake(VoiceChannel),
@@ -8349,4 +8403,127 @@ pub fn modify_voice_channel(
   |> request.set_body(body)
   |> request_with_reason(reason)
   |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub opaque type ModifyCategoryChannel {
+  ModifyCategoryChannel(
+    name: Option(String),
+    position: Modification(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+  )
+}
+
+pub fn new_modify_category_channel() -> ModifyCategoryChannel {
+  ModifyCategoryChannel(None, Skip, None)
+}
+
+pub fn modify_category_channel_name(
+  modify: ModifyCategoryChannel,
+  new name: String,
+) -> ModifyCategoryChannel {
+  ModifyCategoryChannel(..modify, name: Some(name))
+}
+
+/// Channels with the same position are sorted by ID (newer channel will be lower)
+pub fn modify_category_channel_position(
+  modify: ModifyCategoryChannel,
+  new position: Int,
+) -> ModifyCategoryChannel {
+  ModifyCategoryChannel(..modify, position: Modify(position))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+pub fn unset_category_channel_position(
+  modify: ModifyCategoryChannel,
+) -> ModifyCategoryChannel {
+  ModifyCategoryChannel(..modify, position: Delete)
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn modify_category_channel_permission_overwrites(
+  modify: ModifyCategoryChannel,
+  new overwrites: List(PermissionOverwrite),
+) -> ModifyCategoryChannel {
+  ModifyCategoryChannel(..modify, permission_overwrites: Some(overwrites))
+}
+
+fn modify_category_channel_to_json(modify: ModifyCategoryChannel) -> Json {
+  [
+    optional_to_json(modify.name, "name", json.string),
+    modification_to_json(modify.position, "position", json.int),
+    optional_to_json(
+      modify.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission. 
+pub fn modify_category_channel(
+  token token: Token,
+  with_id channel_id: Snowflake(CategoryChannel),
+  using modify: ModifyCategoryChannel,
+  reason reason: Option(String),
+) -> Result(GuildChannel, RestError) {
+  let body = modify |> modify_category_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(channel_id),
+    method: http.Patch,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub opaque type ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(
+    name: Option(String),
+    switch_to_text: Option(Bool),
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Modification(Snowflake(CategoryChannel)),
+    default_thread_auto_archive_duration: Modification(
+      ThreadAutoArchiveDuration,
+    ),
+  )
+}
+
+pub fn new_modify_announcement_channel() -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(None, None, Skip, Skip, None, None, Skip, Skip)
+}
+
+pub fn modify_announcement_channel_name(
+  modify: ModifyAnnouncementChannel,
+  new name: String,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, name: Some(name))
+}
+
+pub fn convert_announcement_channel_to_text_channel(
+  modify: ModifyAnnouncementChannel,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, switch_to_text: Some(True))
+}
+
+/// Channels with the same position are sorted by ID (newer channel will be lower)
+pub fn modify_announcement_channel_position(
+  modify: ModifyAnnouncementChannel,
+  new position: Int,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, position: Modify(position))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+pub fn unset_announcement_channel_position(
+  modify: ModifyAnnouncementChannel,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, position: Delete)
 }
