@@ -140,6 +140,10 @@ fn handle_request(
   request: wisp.Request,
   context: RequestHandlerContext,
 ) -> wisp.Response {
+  // Some common wisp middleware.
+  use <- wisp.log_request(request)
+  use <- wisp.rescue_crashes()
+
   case wisp.path_segments(request) {
     // We only want to handle requests on the /discord-interactions path.
     ["discord-interactions"] -> {
