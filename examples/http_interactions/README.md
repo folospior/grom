@@ -77,8 +77,8 @@ Some stuff I like to use:
 
 Now, you got it facing the internet, amazing. It's time to let Discord know about it.
 
-In your bot's General Information page of the Discord Development Portal,
-paste in the URL of your interactions endpoint - for example: https://grom.folospior.dev/discord-interactions
+In your bot's [General Information page](https://discord.com/developers/applications/select/information) of the Discord Development Portal,
+paste in the Interaction Endpoint URL - for example: https://grom.folospior.dev/discord-interactions
 
 Discord will send you two PING requests, and if those pass, it will display a successful message in the development portal.
 
