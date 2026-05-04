@@ -1,6 +1,7 @@
 import gleam/bit_array
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
+import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response
@@ -8,6 +9,9 @@ import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/otp/actor
+import gleam/otp/factory_supervisor
+import gleam/otp/supervision
 import gleam/result
 import grom
 import grom/application
@@ -1881,6 +1885,3 @@ fn handle_ping_interaction() -> response.Response(String) {
   |> response.set_header("content-type", "application/json")
   |> response.set_body(body)
 }
-// fn handle_http_interaction(request: Request(String), next: a) -> response.Response(String) {
-
-// }
