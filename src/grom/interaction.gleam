@@ -1837,7 +1837,7 @@ fn validate_security_headers(
   )
 
   use public_key <- result.try(
-    eddsa.public_key_from_bytes(eddsa.Ed25519, <<public_key>>)
+    eddsa.public_key_from_bytes(eddsa.Ed25519, <<public_key:size(32)-unit(8)>>)
     |> result.replace_error(PublicKeyHasImproperLength),
   )
 
@@ -1859,7 +1859,8 @@ fn validate_security_headers(
     |> result.replace_error(HttpRequestTimestampNotProvided),
   )
 
-  let signature = <<signature>>
+  // Ed25519 signatures are 64 bytes
+  let signature = <<signature:size(64)-unit(8)>>
   let message = <<{ timestamp <> request.body }:utf8>>
 
   let is_verified = eddsa.verify(public_key, message, signature)
