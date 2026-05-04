@@ -25,6 +25,7 @@ operating_system = ">= 1.0.1 and < 2.0.0"
 status_code = ">= 1.0.0 and < 2.0.0"
 stratus = ">= 3.0.0 and < 4.0.0"
 splitter = ">= 1.2.0 and < 2.0.0"
+kryptos = ">= 1.4.0 and < 2.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"

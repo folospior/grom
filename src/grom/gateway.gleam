@@ -2308,7 +2308,9 @@ fn request_guild_members_message_to_json(
   json.object([#("op", json.int(8)), #("d", data)])
 }
 
-fn update_voice_state_message_to_json(message: UpdateVoiceStateMessage) -> Json {
+fn update_voice_state_message_to_json(
+  message: UpdateVoiceStateMessage,
+) -> Json {
   json.object([
     #("op", json.int(4)),
     #(
@@ -2354,6 +2356,9 @@ pub fn stop_abnormal(reason: String) -> Next(state) {
 /// * `UpdateVoiceState`
 /// * `RequestGuildMembers`
 /// * `RequestSoundboardSounds`
+@deprecated("The gateway API is broken and shouldn't be used.
+If the only event you need is the InteractionCreated event, look into the HTTP Interactions pattern.
+If you're in need of listening to other events, at this point you're out of luck.")
 pub fn new(
   state: state,
   identify: BaseIdentifyMessage,
@@ -2823,8 +2828,7 @@ fn resume(connection_state: Connection, resuming_info: ResumingInfo) -> Nil {
     fn(
       next: fn(
         actor.Started(Subject(stratus.InternalMessage(StratusUserMessage))),
-      ) ->
-        Nil,
+      ) -> Nil,
     ) -> Nil {
       case websocket_result {
         Ok(websocket) -> next(websocket)
@@ -3009,7 +3013,7 @@ fn on_start_heartbeat_inequality_disconnect(
     connection
     |> stratus.close(because: stratus.GoingAway(body: <<>>))
 
-  reconnect(connection_state)
+  let _ = reconnect(connection_state)
 
   stratus.stop()
 }
@@ -3182,7 +3186,7 @@ fn on_reconnect_request(
 ) -> stratus.Next(a, b) {
   let _ = stratus.close(connection, because: stratus.NotProvided)
 
-  try_resume(connection_state)
+  let _ = try_resume(connection_state)
   stratus.stop()
 }
 

@@ -2,7 +2,8 @@ import gleam/bit_array
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/http
-import gleam/http/request
+import gleam/http/request.{type Request}
+import gleam/http/response
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -26,6 +27,8 @@ import grom/modal
 import grom/modification.{type Modification, Skip}
 import grom/permission.{type Permission}
 import grom/user.{type User}
+import kryptos/eddsa
+import status_code
 
 // TYPES -----------------------------------------------------------------------
 
@@ -1328,7 +1331,9 @@ pub fn modal_response_to_json(modal: ModalResponse) -> Json {
 }
 
 @internal
-pub fn modify_original_response_to_json(modify: ModifyOriginalResponse) -> Json {
+pub fn modify_original_response_to_json(
+  modify: ModifyOriginalResponse,
+) -> Json {
   [
     modification.to_json(modify.content, "content", json.string),
     modification.to_json(modify.embeds, "embeds", json.array(_, embed.to_json)),
@@ -1692,3 +1697,189 @@ pub fn delete_followup(
 pub fn new_response_message() -> ResponseMessage {
   ResponseMessage(None, None, None, None, None, None, None, None, None)
 }
+
+type PingInteraction {
+  PingInteraction
+}
+
+fn ping_interaction_decoder() -> decode.Decoder(PingInteraction) {
+  use type_ <- decode.field("type", decode.int)
+  case type_ {
+    1 -> decode.success(PingInteraction)
+    _ -> decode.failure(PingInteraction, "PingInteraction")
+  }
+}
+
+pub type HttpSecurityError {
+  /// The public key you provided is not a valid hexadecimal number.
+  /// 
+  /// This is not to be expected and results in a HTTP response with the status 500 - internal server error.
+  PublicKeyNotValidHexadecimal
+  /// Your public key's length as a number is not 32 bytes. 
+  /// 
+  /// This is not to be expected and results in a HTTP response with the status 500 - internal server error.
+  PublicKeyHasImproperLength
+  /// A request was made without a `x-signature-ed25519` header.
+  /// 
+  /// This is to be expected - discord often does "tests", verifying that your webhook validates security headers properly.
+  ///
+  /// Returns a 401 unauthorized response.
+  HttpRequestSignatureNotProvided
+  /// A request was made without a `x-signature-timestamp` header.
+  /// 
+  /// This is to be expected - discord often does "tests", verifying that your webhook validates security headers properly.
+  ///
+  /// Returns a 401 unauthorized response.
+  HttpRequestTimestampNotProvided
+  /// A request was made where the `x-signature-ed25519` was not a valid hexadecimal number.
+  /// 
+  /// This is to be expected - discord often does "tests", verifying that your webhook validates security headers properly.
+  ///
+  /// Returns a 401 unauthorized response.
+  HttpRequestSignatureNotValidHexadecimal
+  /// A request was made with the correct headers, however verifying that the message:
+  /// - was intended for your app
+  /// - was sent from Discord
+  /// has failed.
+  ///
+  /// This could happen for several reasons:
+  /// - an automated test was performed by Discord, verifying whether your app validates security headers (most common)
+  /// - you provided an inappropriate public key (for example, another app's)
+  /// - there was a forgery attempt
+  ///
+  /// Returns a 401 unauthorized response.
+  HttpRequestVerificationFailed
+}
+
+pub type HttpError {
+  /// A properly validated request was made, but it couldn't be parsed as an interaction.
+  ///
+  /// This isn't to be expected too often.
+  ///
+  /// Returns a 422 unprocessable content response.
+  CouldNotParseInteraction(json.DecodeError)
+  /// An error has happened while trying to verify the request's security headers.
+  ///
+  /// While some of these errors are to be expected, some are genuine bugs within your code.
+  ///
+  /// Check the inner field to check what error exactly happened.
+  CouldNotValidateSecurityHeaders(HttpSecurityError)
+}
+
+/// A HTTP request handler middleware that:
+/// - handles PING requests (which verify that your interaction endpoint is still up and secure)
+/// - gives you access to the interaction object, allowing you to handle your interactions
+/// - sends an HTTP response whenever you're done with handling your interactions
+///
+/// Warning: Do not use long-running code to handle your interactions, as it could trigger an HTTP timeout.
+///
+/// See the `http_interactions` example to see how to set-up HTTP interactions and how to properly handle them.
+pub fn handle_http_interaction_request(
+  request: Request(String),
+  public_key public_key: String,
+  next next: fn(Result(Interaction, HttpError)) -> Nil,
+) -> response.Response(String) {
+  case validate_security_headers(request, public_key) {
+    Ok(_) -> handle_validated_http_interaction_request(request, next)
+    Error(PublicKeyNotValidHexadecimal) as err
+    | Error(PublicKeyHasImproperLength) as err -> {
+      let Error(internal_server_error) = err
+      next(Error(CouldNotValidateSecurityHeaders(internal_server_error)))
+
+      response.new(status_code.internal_server_error)
+    }
+    Error(unauthorized) -> {
+      next(Error(CouldNotValidateSecurityHeaders(unauthorized)))
+
+      response.new(status_code.unauthorized)
+    }
+  }
+}
+
+fn handle_validated_http_interaction_request(
+  request: Request(String),
+  next: fn(Result(Interaction, HttpError)) -> Nil,
+) -> response.Response(String) {
+  let ping = json.parse(request.body, ping_interaction_decoder())
+
+  case ping {
+    Ok(_) -> handle_ping_interaction()
+    Error(_) -> handle_http_interaction(request, next)
+  }
+}
+
+fn handle_http_interaction(
+  request: Request(String),
+  next: fn(Result(Interaction, HttpError)) -> Nil,
+) -> response.Response(String) {
+  let interaction = json.parse(request.body, decoder())
+
+  case interaction {
+    Ok(interaction) -> {
+      next(Ok(interaction))
+      response.new(status_code.ok)
+    }
+    Error(err) -> {
+      next(Error(CouldNotParseInteraction(err)))
+      response.new(status_code.unprocessable_content)
+    }
+  }
+}
+
+fn validate_security_headers(
+  request: Request(String),
+  public_key: String,
+) -> Result(Nil, HttpSecurityError) {
+  use public_key <- result.try(
+    public_key
+    |> int.base_parse(16)
+    |> result.replace_error(PublicKeyNotValidHexadecimal),
+  )
+
+  use public_key <- result.try(
+    eddsa.public_key_from_bytes(eddsa.Ed25519, <<public_key>>)
+    |> result.replace_error(PublicKeyHasImproperLength),
+  )
+
+  use signature <- result.try(
+    request
+    |> request.get_header("x-signature-ed25519")
+    |> result.replace_error(HttpRequestSignatureNotProvided),
+  )
+
+  use signature <- result.try(
+    signature
+    |> int.base_parse(16)
+    |> result.replace_error(HttpRequestSignatureNotValidHexadecimal),
+  )
+
+  use timestamp <- result.try(
+    request
+    |> request.get_header("x-signature-timestamp")
+    |> result.replace_error(HttpRequestTimestampNotProvided),
+  )
+
+  let signature = <<signature>>
+  let message = <<{ timestamp <> request.body }:utf8>>
+
+  let is_verified = eddsa.verify(public_key, message, signature)
+
+  case is_verified {
+    True -> Ok(Nil)
+    False -> Error(HttpRequestVerificationFailed)
+  }
+}
+
+fn handle_ping_interaction() -> response.Response(String) {
+  let body =
+    [#("type", json.int(1))]
+    |> json.object
+    |> json.to_string
+
+  response.new(status_code.ok)
+  |> response.set_header("content-type", "application/json")
+  |> response.set_body(body)
+}
+// fn handle_http_interaction(request: Request(String), next: a) -> response.Response(String) {
+
+// }
