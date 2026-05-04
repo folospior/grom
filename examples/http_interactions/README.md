@@ -29,6 +29,19 @@ This is useful for serverless setups where the only event you handle is `INTERAC
 
 Right now, in grom, it is the only way to use interactions, seeing as the gateway is in a broken state.
 
+<details>
+<summary>Why so much boilerplate in the code? (personal rant)</summary>
+Well, it all comes down to: grom is kind of bad right now.
+
+I originally wanted to write a plug-in wisp middleware, but that would require grom to import wisp.
+
+I could create a new project for this, but I'd then miss out on all the decoders/encoders, and interactions use **lots** of them.
+
+So, a compromise is to only deal with gleam_http primitives and interactions in grom, and leave all the handling to the user.
+
+This will be improved in the grom rewrite, where everything will be much more modular.
+</details>
+
 ## How?
 
 We're going to use wisp to create a webhook handler, register it with Discord, and hopefully have HTTP interactions working by the end of the night.
