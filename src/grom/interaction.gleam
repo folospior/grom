@@ -1817,7 +1817,7 @@ fn handle_http_interaction(
   case interaction {
     Ok(interaction) -> {
       next(Ok(interaction))
-      response.new(status_code.ok)
+      response.new(status_code.accepted)
     }
     Error(err) -> {
       next(Error(CouldNotParseInteraction(err)))
