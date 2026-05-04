@@ -136,7 +136,9 @@ fn start_interaction_handler(
   actor.StartError,
 ) {
   actor.new_with_initialiser(4000, fn(subject) {
-    let selector = process.new_selector()
+    let selector =
+      process.new_selector()
+      |> process.select(subject)
 
     process.send(subject, InteractionCreated(interaction))
 
