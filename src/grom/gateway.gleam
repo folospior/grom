@@ -2376,6 +2376,9 @@ pub fn new(
 
 /// You should hold the gateway subject in your state.
 /// You'll send user messages to that subject.
+@deprecated("The gateway API is broken and shouldn't be used.
+If the only event you need is the InteractionCreated event, look into the HTTP Interactions pattern.
+If you're in need of listening to other events, at this point you're out of luck.")
 pub fn new_with_initializer(
   init: fn(Subject(Message)) -> Result(user_state, String),
   identify: BaseIdentifyMessage,
@@ -2415,6 +2418,9 @@ pub fn with_shards(
   Builder(..builder, shard_count: Some(count))
 }
 
+@deprecated("The gateway API is broken and shouldn't be used.
+If the only event you need is the InteractionCreated event, look into the HTTP Interactions pattern.
+If you're in need of listening to other events, at this point you're out of luck.")
 pub fn start(
   builder: Builder(state),
 ) -> Result(actor.Started(Subject(Message)), actor.StartError) {
