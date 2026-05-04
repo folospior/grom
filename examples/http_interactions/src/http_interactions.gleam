@@ -18,19 +18,6 @@ import mist
 import wisp
 import wisp/wisp_mist
 
-type RequestHandlerState {
-  RequestHandlerState(
-    client: grom.Client,
-    discord_public_key: String,
-    interaction_handler_name: process.Name(
-      factory_supervisor.Message(
-        Interaction,
-        process.Subject(InteractionHandlerMessage),
-      ),
-    ),
-  )
-}
-
 type InteractionHandlerState {
   InteractionHandlerState(client: grom.Client)
 }
@@ -101,10 +88,12 @@ pub fn main() -> Nil {
   // We're going to create a static supervisor later on, so let's use the `mist.supervised` function.
   let http_server =
     wisp_mist.handler(
+      // We have to create an anonymous function here, since mist expects a fn(Request),
+      // and our handler also has the context in its signature.
       fn(request) {
         handle_request(
           request,
-          RequestHandlerState(client, public_key, interaction_handler_name),
+          RequestHandlerContext(client, public_key, interaction_handler_name),
         )
       },
       secret_key_base,
@@ -122,6 +111,69 @@ pub fn main() -> Nil {
     |> static_supervisor.start
 
   process.sleep_forever()
+}
+
+type RequestHandlerContext {
+  RequestHandlerContext(
+    client: grom.Client,
+    discord_public_key: String,
+    interaction_handler_name: process.Name(
+      factory_supervisor.Message(
+        Interaction,
+        process.Subject(InteractionHandlerMessage),
+      ),
+    ),
+  )
+}
+
+fn handle_request(
+  request: wisp.Request,
+  state: RequestHandlerContext,
+) -> wisp.Response {
+  case wisp.path_segments(request) {
+    ["discord-interactions"] -> {
+      use body <- wisp.require_string_body(request)
+
+      let request = Request(..request, body:)
+
+      interaction.handle_http_interaction_request(
+        request,
+        state.discord_public_key,
+        fn(interaction) { handle_interaction_request(state, interaction) },
+      )
+      |> response.map(wisp.Text)
+    }
+    _ -> wisp.not_found()
+  }
+}
+
+fn handle_interaction_request(
+  state: RequestHandlerContext,
+  interaction: Result(Interaction, interaction.HttpError),
+) -> Nil {
+  case interaction {
+    Ok(interaction) -> {
+      let factory =
+        factory_supervisor.get_by_name(state.interaction_handler_name)
+
+      let start_result =
+        factory
+        |> factory_supervisor.start_child(interaction)
+
+      case start_result {
+        Ok(_) -> logging.log(logging.Info, "Started interaction handler worker")
+        Error(_) ->
+          logging.log(
+            logging.Warning,
+            "Could not start interaction handler worker",
+          )
+      }
+    }
+    Error(interaction.CouldNotParseInteraction(_)) ->
+      logging.log(logging.Warning, "Could not parse interaction")
+    Error(interaction.CouldNotValidateSecurityHeaders(_)) ->
+      logging.log(logging.Warning, "Could not validate security headers")
+  }
 }
 
 type InteractionHandlerMessage {
@@ -177,54 +229,4 @@ fn handle_interaction(
     )
 
   actor.continue(state)
-}
-
-fn handle_request(
-  request: wisp.Request,
-  state: RequestHandlerState,
-) -> wisp.Response {
-  case wisp.path_segments(request) {
-    ["discord-interactions"] -> {
-      use body <- wisp.require_string_body(request)
-
-      let request = Request(..request, body:)
-
-      interaction.handle_http_interaction_request(
-        request,
-        state.discord_public_key,
-        fn(interaction) { handle_interaction_request(state, interaction) },
-      )
-      |> response.map(wisp.Text)
-    }
-    _ -> wisp.not_found()
-  }
-}
-
-fn handle_interaction_request(
-  state: RequestHandlerState,
-  interaction: Result(Interaction, interaction.HttpError),
-) -> Nil {
-  case interaction {
-    Ok(interaction) -> {
-      let factory =
-        factory_supervisor.get_by_name(state.interaction_handler_name)
-
-      let start_result =
-        factory
-        |> factory_supervisor.start_child(interaction)
-
-      case start_result {
-        Ok(_) -> logging.log(logging.Info, "Started interaction handler worker")
-        Error(_) ->
-          logging.log(
-            logging.Warning,
-            "Could not start interaction handler worker",
-          )
-      }
-    }
-    Error(interaction.CouldNotParseInteraction(_)) ->
-      logging.log(logging.Warning, "Could not parse interaction")
-    Error(interaction.CouldNotValidateSecurityHeaders(_)) ->
-      logging.log(logging.Warning, "Could not validate security headers")
-  }
 }
