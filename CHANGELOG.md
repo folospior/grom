@@ -1,3 +1,11 @@
+# v6.0.0 (05/05/2026)
+* Breaking: replace stratus.InitialisationError with actor.StartError in CouldNotInitializeWebsocketConnection (Filip Hoffmann)
+* Deprecate: grom/gateway module (broken) (Filip Hoffmann)
+* New: HTTP interactions (Filip Hoffmann)
+
+# v5.1.5 (04/04/2026)
+* Fix the gateway URL being cached incorrectly (Filip Hoffmann)
+
 # v5.1.4 (27/03/2026)
 * Fix the gateway failing to heartbeat after reconnecting (Copilot/Filip Hoffmann)
 
