@@ -235,7 +235,7 @@ type InteractionHandlerMessage {
 }
 
 fn start_interaction_handler(
-  state: InteractionHandlerContext,
+  context: InteractionHandlerContext,
   interaction: Interaction,
 ) -> Result(
   actor.Started(process.Subject(InteractionHandlerMessage)),
@@ -251,7 +251,7 @@ fn start_interaction_handler(
     // Let's send a message on actor start-up.
     process.send(subject, InteractionCreated(interaction))
 
-    actor.initialised(state)
+    actor.initialised(context)
     |> actor.returning(subject)
     |> actor.selecting(selector)
     |> Ok
@@ -261,19 +261,19 @@ fn start_interaction_handler(
 }
 
 fn handle_interaction_handler_message(
-  state: InteractionHandlerContext,
+  context: InteractionHandlerContext,
   message: InteractionHandlerMessage,
 ) -> actor.Next(InteractionHandlerContext, a) {
   // We only deal with one type of message here,
   // but the case statement exists for future-proofing.
   case message {
-    InteractionCreated(interaction) -> handle_interaction(state, interaction)
+    InteractionCreated(interaction) -> handle_interaction(context, interaction)
   }
 }
 
 // Finally, we get to handle our interaction.
 fn handle_interaction(
-  state: InteractionHandlerContext,
+  context: InteractionHandlerContext,
   interaction: Interaction,
 ) -> actor.Next(InteractionHandlerContext, a) {
   // At this step, you'd:
@@ -283,7 +283,7 @@ fn handle_interaction(
   // But here, let's skip all that and just immediately respond with "Pong!" to every interaction
   // sent to our bot.
   let _result =
-    state.client
+    context.client
     |> interaction.respond(
       to: interaction,
       using: interaction.RespondWithChannelMessageWithSource(
