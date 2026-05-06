@@ -1,0 +1,1 @@
+-record(x_cha_cha20_poly1305, {key :: bitstring()}).

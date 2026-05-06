@@ -1,0 +1,9 @@
+{application, operating_system, [
+    {vsn, "1.0.1"},
+    {applications, []},
+    {description, "Gleam operating system name library"},
+    {modules, [operating_system,
+               operating_system@@main,
+               operating_system_ffi]},
+    {registered, []}
+]}.

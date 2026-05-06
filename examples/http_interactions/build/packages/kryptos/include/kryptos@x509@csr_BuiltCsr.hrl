@@ -1,0 +1,1 @@
+-record(built_csr, {der :: bitstring()}).

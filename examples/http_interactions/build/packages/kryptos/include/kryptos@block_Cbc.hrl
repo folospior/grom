@@ -1,0 +1,1 @@
+-record(cbc, {cipher :: kryptos@block:block_cipher(), iv :: bitstring()}).

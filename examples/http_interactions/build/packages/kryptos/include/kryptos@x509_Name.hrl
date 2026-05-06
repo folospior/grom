@@ -1,0 +1,1 @@
+-record(name, {rdns :: list(kryptos@x509:rdn())}).

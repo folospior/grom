@@ -1,0 +1,23 @@
+{application, glisten, [
+    {vsn, "9.0.1"},
+    {applications, [gleam_erlang,
+                    gleam_otp,
+                    gleam_stdlib,
+                    logging,
+                    ssl]},
+    {description, "a shiny Gleam TCP/TLS server"},
+    {modules, [glisten,
+               glisten@@main,
+               glisten@internal@acceptor,
+               glisten@internal@handler,
+               glisten@internal@listener,
+               glisten@socket,
+               glisten@socket@options,
+               glisten@ssl,
+               glisten@tcp,
+               glisten@transport,
+               glisten_ffi,
+               glisten_ssl_ffi,
+               glisten_tcp_ffi]},
+    {registered, []}
+]}.

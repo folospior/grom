@@ -1,0 +1,1 @@
+-record(ctr, {cipher :: kryptos@block:block_cipher(), nonce :: bitstring()}).

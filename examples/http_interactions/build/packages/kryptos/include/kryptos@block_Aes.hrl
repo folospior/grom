@@ -1,0 +1,1 @@
+-record(aes, {key_size :: integer(), key :: bitstring()}).

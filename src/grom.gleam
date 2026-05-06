@@ -758,7 +758,6 @@ fn image_data_to_json(image_data: ImageData) -> Json {
   |> json.string
 }
 
-/// Look into the `(new_)modify_current_user_*` functions to use this type using a builder pattern.
 pub opaque type ModifyCurrentUser {
   ModifyCurrentUser(
     username: Option(String),
@@ -3819,7 +3818,7 @@ pub fn modify_guild_icon(
   ModifyGuild(..modify, icon: Modify(icon))
 }
 
-pub fn delete_guild_icon(modify: ModifyGuild) -> ModifyGuild {
+pub fn remove_guild_icon(modify: ModifyGuild) -> ModifyGuild {
   ModifyGuild(..modify, icon: Delete)
 }
 
@@ -3833,7 +3832,7 @@ pub fn modify_guild_splash(
   ModifyGuild(..modify, splash: Modify(splash))
 }
 
-pub fn delete_guild_splash(modify: ModifyGuild) -> ModifyGuild {
+pub fn remove_guild_splash(modify: ModifyGuild) -> ModifyGuild {
   ModifyGuild(..modify, splash: Delete)
 }
 
@@ -3864,7 +3863,7 @@ pub fn modify_guild_banner(
   ModifyGuild(..modify, banner: Modify(banner))
 }
 
-pub fn delete_guild_banner(modify: ModifyGuild) -> ModifyGuild {
+pub fn remove_guild_banner(modify: ModifyGuild) -> ModifyGuild {
   ModifyGuild(..modify, banner: Delete)
 }
 
@@ -4058,7 +4057,7 @@ pub fn modify_guild_description(
   ModifyGuild(..modify, description: Modify(description))
 }
 
-pub fn delete_guild_description(modify: ModifyGuild) -> ModifyGuild {
+pub fn remove_guild_description(modify: ModifyGuild) -> ModifyGuild {
   ModifyGuild(..modify, description: Delete)
 }
 
@@ -5502,7 +5501,7 @@ pub fn modify_guild_member_nick(
 }
 
 /// Requires the `AllowManagingNicknames` permission.
-pub fn delete_guild_member_nick(
+pub fn remove_guild_member_nick(
   modify: ModifyGuildMember,
 ) -> ModifyGuildMember {
   ModifyGuildMember(..modify, nick: Delete)
@@ -5521,7 +5520,7 @@ pub fn modify_guild_member_roles(
 /// Requires the `AllowManagingRoles` permission.
 ///
 /// Does not actually delete the roles - only removes them from the member.
-pub fn delete_guild_member_roles(
+pub fn remove_all_guild_member_roles(
   modify: ModifyGuildMember,
 ) -> ModifyGuildMember {
   ModifyGuildMember(..modify, roles: Delete)
@@ -5729,7 +5728,7 @@ pub fn modify_current_member_bio(
   ModifyCurrentMember(..modify, bio: Modify(bio))
 }
 
-/// Modifies your per-guild bio.
+/// Deletes your per-guild bio.
 pub fn delete_current_member_bio(
   modify: ModifyCurrentMember,
 ) -> ModifyCurrentMember {
@@ -5790,7 +5789,7 @@ pub fn add_guild_member_role(
 /// Requires the `AllowManagingRoles` permission.
 ///
 /// Doesn't actually delete the role, only removes it from the user's profile.
-pub fn delete_guild_member_role(
+pub fn remove_guild_member_role(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   from_member_with_id user_id: Snowflake(User),
@@ -6221,6 +6220,8 @@ pub fn move_role(
   ModifyRolePosition(id:, position: Modify(position))
 }
 
+/// Deleting a role's position makes it lower than any role with a position.
+/// 
 /// Roles with the same position are sorted by ID.
 pub fn delete_role_position(
   of_role_with_id id: Snowflake(Role),
@@ -6229,6 +6230,7 @@ pub fn delete_role_position(
 }
 
 /// Requires the `AllowManagingRoles` permission.
+/// 
 /// Returns all of the guild's roles.
 pub fn modify_role_positions(
   token token: Token,
@@ -6286,7 +6288,7 @@ pub fn modify_role_name(modify: ModifyRole, new name: String) -> ModifyRole {
 }
 
 /// Resets the role's name to "new name".
-pub fn delete_role_name(modify: ModifyRole) -> ModifyRole {
+pub fn reset_role_name(modify: ModifyRole) -> ModifyRole {
   ModifyRole(..modify, name: Delete)
 }
 
@@ -6325,7 +6327,7 @@ pub fn modify_role_icon(modify: ModifyRole, new icon: ImageData) -> ModifyRole {
   ModifyRole(..modify, icon: Modify(icon))
 }
 
-pub fn delete_role_icon(modify: ModifyRole) -> ModifyRole {
+pub fn remove_role_icon(modify: ModifyRole) -> ModifyRole {
   ModifyRole(..modify, icon: Delete)
 }
 
@@ -8049,7 +8051,7 @@ pub fn modify_text_channel_topic(
   ModifyTextChannel(..modify, topic: Modify(topic))
 }
 
-pub fn delete_text_channel_topic(
+pub fn remove_text_channel_topic(
   modify: ModifyTextChannel,
 ) -> ModifyTextChannel {
   ModifyTextChannel(..modify, topic: Delete)

@@ -1,0 +1,1 @@
+-record(string_with_type, {content :: binary(), content_type :: binary()}).

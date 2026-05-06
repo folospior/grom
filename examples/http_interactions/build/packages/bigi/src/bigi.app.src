@@ -1,0 +1,9 @@
+{application, bigi, [
+    {vsn, "4.1.1"},
+    {applications, [gleam_stdlib]},
+    {description, "Arbitrary precision integer arithmetic for Gleam"},
+    {modules, [bigi,
+               bigi@@main,
+               bigi_ffi]},
+    {registered, []}
+]}.

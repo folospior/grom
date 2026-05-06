@@ -1,0 +1,8 @@
+{application, status_code, [
+    {vsn, "1.1.0"},
+    {applications, []},
+    {description, "Provides HTTP status codes in a human-readable way"},
+    {modules, [status_code,
+               status_code@@main]},
+    {registered, []}
+]}.

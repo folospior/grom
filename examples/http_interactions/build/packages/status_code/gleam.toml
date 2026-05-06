@@ -1,0 +1,5 @@
+name = "status_code"
+version = "1.1.0"
+description = "Provides HTTP status codes in a human-readable way"
+licences = ["MIT"]
+repository = { type = "github", user = "folospior", repo = "status_code" }

@@ -1,0 +1,328 @@
+//// Authenticated Encryption with Associated Data (AEAD).
+////
+//// AEAD provides both confidentiality and integrity for data, with optional
+//// authenticated additional data (AAD) that is integrity-protected but not
+//// encrypted.
+////
+//// ## Example
+////
+//// ```gleam
+//// import kryptos/aead
+//// import kryptos/block
+//// import kryptos/crypto
+////
+//// let assert Ok(cipher) = block.aes_256(crypto.random_bytes(32))
+//// let ctx = aead.gcm(cipher)
+//// let nonce = crypto.random_bytes(aead.nonce_size(ctx))
+//// let assert Ok(#(ciphertext, tag)) = aead.seal(ctx, nonce:, plaintext: <<"secret":utf8>>)
+//// ```
+
+import gleam/bit_array
+import gleam/int
+import gleam/list
+import gleam/result
+import kryptos/block.{type BlockCipher}
+import kryptos/internal/hchacha20
+
+/// AEAD context with its configuration.
+///
+/// Use the provided constructor functions to create contexts:
+///
+/// - `gcm()` / `gcm_with_nonce_size()` for AES-GCM
+/// - `ccm()` / `ccm_with_sizes()` for AES-CCM
+/// - `chacha20_poly1305()` for ChaCha20-Poly1305
+/// - `xchacha20_poly1305()` for XChaCha20-Poly1305
+pub opaque type AeadContext {
+  /// AES-GCM with the specified cipher and nonce size.
+  Gcm(cipher: BlockCipher, nonce_size: Int)
+  /// AES-CCM with configurable nonce and tag sizes (RFC 3610).
+  Ccm(cipher: BlockCipher, nonce_size: Int, tag_size: Int)
+  /// ChaCha20-Poly1305 with a 256-bit key (RFC 8439).
+  ChaCha20Poly1305(key: BitArray)
+  /// XChaCha20-Poly1305 with a 256-bit key and 24-byte nonce.
+  XChaCha20Poly1305(key: BitArray)
+}
+
+/// Creates an AES-GCM context with the given block cipher.
+///
+/// Uses standard parameters: 16-byte (128-bit) authentication tag and
+/// 12-byte (96-bit) nonce.
+///
+/// **Note:** This library only supports the full 16-byte authentication tag.
+/// Truncated tags (as permitted by NIST SP 800-38D) are not supported due to
+/// their reduced security guarantees.
+pub fn gcm(cipher: BlockCipher) -> AeadContext {
+  Gcm(cipher:, nonce_size: 12)
+}
+
+/// Creates an AES-GCM context with a custom nonce size.
+///
+/// GCM supports variable nonce sizes, though 12 bytes is strongly recommended.
+/// This function is primarily useful for compatibility testing with test vectors.
+pub fn gcm_with_nonce_size(
+  cipher: BlockCipher,
+  nonce_size: Int,
+) -> Result(AeadContext, Nil) {
+  case nonce_size >= 1 && nonce_size <= 64 {
+    True -> Ok(Gcm(cipher:, nonce_size:))
+    False -> Error(Nil)
+  }
+}
+
+/// Creates an AES-CCM context with the given block cipher.
+///
+/// Uses standard parameters: 16-byte (128-bit) authentication tag and
+/// 13-byte (104-bit) nonce, which allows messages up to 64KB.
+pub fn ccm(cipher: BlockCipher) -> AeadContext {
+  Ccm(cipher:, nonce_size: 13, tag_size: 16)
+}
+
+/// Creates an AES-CCM context with custom nonce and tag sizes.
+///
+/// CCM allows flexible nonce and tag sizes per RFC 3610:
+/// - Nonce size affects maximum message length (larger nonce = smaller max message)
+/// - Tag size affects authentication strength (larger tag = stronger)
+///
+/// Nonce must be 7-13 bytes. Tag must be 4, 6, 8, 10, 12, 14, or 16 bytes.
+pub fn ccm_with_sizes(
+  cipher: BlockCipher,
+  nonce_size nonce_size: Int,
+  tag_size tag_size: Int,
+) -> Result(AeadContext, Nil) {
+  let valid_nonce = nonce_size >= 7 && nonce_size <= 13
+  let valid_tag = list.contains([4, 6, 8, 10, 12, 14, 16], tag_size)
+  case valid_nonce && valid_tag {
+    True -> Ok(Ccm(cipher:, nonce_size:, tag_size:))
+    False -> Error(Nil)
+  }
+}
+
+/// Creates a ChaCha20-Poly1305 AEAD context with the given key.
+///
+/// Uses standard parameters per RFC 8439: 12-byte (96-bit) nonce and
+/// 16-byte (128-bit) authentication tag. The key must be exactly 32 bytes.
+pub fn chacha20_poly1305(key: BitArray) -> Result(AeadContext, Nil) {
+  case bit_array.byte_size(key) == 32 {
+    True -> Ok(ChaCha20Poly1305(key))
+    False -> Error(Nil)
+  }
+}
+
+/// Creates an XChaCha20-Poly1305 AEAD context with the given key.
+///
+/// Uses extended parameters: 24-byte (192-bit) nonce and 16-byte (128-bit)
+/// authentication tag. The extended nonce provides better collision resistance
+/// when generating random nonces. The key must be exactly 32 bytes.
+pub fn xchacha20_poly1305(key: BitArray) -> Result(AeadContext, Nil) {
+  case bit_array.byte_size(key) == 32 {
+    True -> Ok(XChaCha20Poly1305(key))
+    False -> Error(Nil)
+  }
+}
+
+/// Returns the required nonce size in bytes for an AEAD context.
+pub fn nonce_size(ctx: AeadContext) -> Int {
+  case ctx {
+    Gcm(nonce_size:, ..) -> nonce_size
+    Ccm(nonce_size:, ..) -> nonce_size
+    ChaCha20Poly1305(..) -> 12
+    XChaCha20Poly1305(..) -> 24
+  }
+}
+
+/// Returns the authentication tag size in bytes for an AEAD context.
+pub fn tag_size(ctx: AeadContext) -> Int {
+  case ctx {
+    Gcm(..) -> 16
+    Ccm(tag_size:, ..) -> tag_size
+    ChaCha20Poly1305(..) -> 16
+    XChaCha20Poly1305(..) -> 16
+  }
+}
+
+/// Encrypts and authenticates plaintext using AEAD.
+///
+/// The nonce must be exactly `nonce_size` bytes. Never reuse a nonce with
+/// the same key.
+pub fn seal(
+  ctx: AeadContext,
+  nonce nonce: BitArray,
+  plaintext plaintext: BitArray,
+) -> Result(#(BitArray, BitArray), Nil) {
+  seal_with_aad(ctx, nonce, plaintext, <<>>)
+}
+
+/// Encrypts and authenticates plaintext with additional authenticated data.
+///
+/// The AAD is authenticated but not encrypted. It can be used for headers,
+/// metadata, or context that should be tamper-proof but remain readable.
+pub fn seal_with_aad(
+  ctx: AeadContext,
+  nonce nonce: BitArray,
+  plaintext plaintext: BitArray,
+  additional_data aad: BitArray,
+) -> Result(#(BitArray, BitArray), Nil) {
+  let nonce_len = bit_array.byte_size(nonce)
+  case nonce_len > 0 && nonce_len == nonce_size(ctx) {
+    True ->
+      case ctx {
+        XChaCha20Poly1305(key) -> {
+          use #(subkey, chacha_nonce) <- result.try(xchacha20_derive(key, nonce))
+          do_seal(ChaCha20Poly1305(subkey), chacha_nonce, plaintext, aad)
+        }
+        Gcm(..) | Ccm(..) | ChaCha20Poly1305(..) ->
+          do_seal(ctx, nonce, plaintext, aad)
+      }
+    False -> Error(Nil)
+  }
+}
+
+@external(erlang, "kryptos_ffi", "aead_seal")
+@external(javascript, "../kryptos_ffi.mjs", "aeadSeal")
+fn do_seal(
+  ctx: AeadContext,
+  nonce: BitArray,
+  plaintext: BitArray,
+  aad: BitArray,
+) -> Result(#(BitArray, BitArray), Nil)
+
+/// Decrypts and verifies AEAD-encrypted data.
+///
+/// ## Example
+///
+/// ```gleam
+/// import kryptos/aead
+/// import kryptos/block
+/// import kryptos/crypto
+///
+/// let assert Ok(cipher) = block.aes_256(crypto.random_bytes(32))
+/// let ctx = aead.gcm(cipher)
+/// let nonce = crypto.random_bytes(aead.nonce_size(ctx))
+/// let assert Ok(#(ciphertext, tag)) = aead.seal(ctx, nonce:, plaintext: <<"secret":utf8>>)
+/// let assert Ok(plaintext) = aead.open(ctx, nonce:, tag:, ciphertext:)
+/// ```
+pub fn open(
+  ctx: AeadContext,
+  nonce nonce: BitArray,
+  tag tag: BitArray,
+  ciphertext ciphertext: BitArray,
+) -> Result(BitArray, Nil) {
+  open_with_aad(ctx, nonce, tag, ciphertext, <<>>)
+}
+
+/// Decrypts and verifies AEAD-encrypted data with additional authenticated data.
+///
+/// The AAD must match exactly what was provided during encryption.
+///
+/// ## Example
+///
+/// ```gleam
+/// import kryptos/aead
+/// import kryptos/block
+/// import kryptos/crypto
+///
+/// let assert Ok(cipher) = block.aes_256(crypto.random_bytes(32))
+/// let ctx = aead.gcm(cipher)
+/// let nonce = crypto.random_bytes(aead.nonce_size(ctx))
+/// let aad = <<"header":utf8>>
+/// let assert Ok(#(ciphertext, tag)) =
+///   aead.seal_with_aad(ctx, nonce:, plaintext: <<"secret":utf8>>, additional_data: aad)
+/// let assert Ok(plaintext) =
+///   aead.open_with_aad(ctx, nonce:, tag:, ciphertext:, additional_data: aad)
+/// ```
+pub fn open_with_aad(
+  ctx: AeadContext,
+  nonce nonce: BitArray,
+  tag tag: BitArray,
+  ciphertext ciphertext: BitArray,
+  additional_data aad: BitArray,
+) -> Result(BitArray, Nil) {
+  let nonce_len = bit_array.byte_size(nonce)
+  let tag_len = bit_array.byte_size(tag)
+  case
+    nonce_len > 0 && nonce_len == nonce_size(ctx) && tag_len == tag_size(ctx)
+  {
+    True ->
+      case ctx {
+        XChaCha20Poly1305(key) -> {
+          use #(subkey, chacha_nonce) <- result.try(xchacha20_derive(key, nonce))
+          do_open(ChaCha20Poly1305(subkey), chacha_nonce, tag, ciphertext, aad)
+        }
+        Gcm(..) | Ccm(..) | ChaCha20Poly1305(..) ->
+          do_open(ctx, nonce, tag, ciphertext, aad)
+      }
+    False -> Error(Nil)
+  }
+}
+
+@external(erlang, "kryptos_ffi", "aead_open")
+@external(javascript, "../kryptos_ffi.mjs", "aeadOpen")
+fn do_open(
+  ctx: AeadContext,
+  nonce: BitArray,
+  tag: BitArray,
+  ciphertext: BitArray,
+  aad: BitArray,
+) -> Result(BitArray, Nil)
+
+/// Derives the subkey and ChaCha20 nonce for XChaCha20-Poly1305.
+fn xchacha20_derive(
+  key: BitArray,
+  nonce: BitArray,
+) -> Result(#(BitArray, BitArray), Nil) {
+  // Split 24-byte nonce: first 16 bytes for HChaCha20, last 8 bytes for ChaCha20
+  case nonce {
+    <<hchacha_input:bytes-size(16), nonce_suffix:bytes-size(8)>> -> {
+      // Derive 32-byte subkey using HChaCha20
+      let subkey = hchacha20.subkey(key, hchacha_input)
+      // Construct 12-byte ChaCha20 nonce: 4 zero bytes + last 8 bytes of original nonce
+      let chacha_nonce = <<0:32, nonce_suffix:bits>>
+      Ok(#(subkey, chacha_nonce))
+    }
+    _ -> Error(Nil)
+  }
+}
+
+@internal
+pub fn cipher_name(ctx: AeadContext) -> String {
+  case ctx {
+    Gcm(cipher:, ..) ->
+      "aes-" <> int.to_string(block.key_size(cipher)) <> "-gcm"
+    Ccm(cipher:, ..) ->
+      "aes-" <> int.to_string(block.key_size(cipher)) <> "-ccm"
+    ChaCha20Poly1305(..) -> "chacha20-poly1305"
+    XChaCha20Poly1305(..) -> "chacha20-poly1305"
+  }
+}
+
+@internal
+pub fn cipher_key(ctx: AeadContext) -> BitArray {
+  case ctx {
+    Gcm(cipher:, ..) | Ccm(cipher:, ..) -> block.aes_key(cipher)
+    ChaCha20Poly1305(key:) | XChaCha20Poly1305(key:) -> key
+  }
+}
+
+@internal
+pub fn is_ccm(ctx: AeadContext) -> Bool {
+  case ctx {
+    Ccm(..) -> True
+    _ -> False
+  }
+}
+
+@internal
+pub fn is_gcm(ctx: AeadContext) -> Bool {
+  case ctx {
+    Gcm(..) -> True
+    _ -> False
+  }
+}
+
+@internal
+pub fn is_chacha20_poly1305(ctx: AeadContext) -> Bool {
+  case ctx {
+    ChaCha20Poly1305(..) -> True
+    _ -> False
+  }
+}

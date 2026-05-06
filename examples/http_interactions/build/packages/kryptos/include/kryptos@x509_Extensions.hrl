@@ -1,0 +1,1 @@
+-record(extensions, {subject_alt_names :: list(kryptos@x509:subject_alt_name())}).

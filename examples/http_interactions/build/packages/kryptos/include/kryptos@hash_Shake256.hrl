@@ -1,0 +1,1 @@
+-record(shake256, {output_length :: integer()}).

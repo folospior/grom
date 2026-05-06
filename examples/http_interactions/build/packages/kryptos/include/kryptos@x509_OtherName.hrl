@@ -1,0 +1,1 @@
+-record(other_name, {oid :: kryptos@x509:oid(), value :: bitstring()}).

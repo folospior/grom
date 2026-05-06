@@ -1,0 +1,1 @@
+-record(ecb, {cipher :: kryptos@block:block_cipher()}).

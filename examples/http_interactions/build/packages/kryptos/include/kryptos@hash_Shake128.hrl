@@ -1,0 +1,1 @@
+-record(shake128, {output_length :: integer()}).

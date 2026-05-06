@@ -1,0 +1,1 @@
+-record(gcm, {cipher :: kryptos@block:block_cipher(), nonce_size :: integer()}).

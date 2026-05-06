@@ -1,0 +1,20 @@
+{application, stratus, [
+    {vsn, "3.0.0"},
+    {applications, [exception,
+                    gleam_crypto,
+                    gleam_erlang,
+                    gleam_http,
+                    gleam_otp,
+                    gleam_stdlib,
+                    gramps,
+                    logging]},
+    {description, "A Gleam WebSocket client"},
+    {modules, [stratus,
+               stratus@@main,
+               stratus@internal@socket,
+               stratus@internal@ssl,
+               stratus@internal@tcp,
+               stratus@internal@transport,
+               stratus_ffi]},
+    {registered, []}
+]}.

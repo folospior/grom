@@ -1,0 +1,1 @@
+-record(oaep, {hash :: kryptos@hash:hash_algorithm(), label :: bitstring()}).

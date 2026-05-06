@@ -1,0 +1,1 @@
+-record(oid, {components :: list(integer())}).

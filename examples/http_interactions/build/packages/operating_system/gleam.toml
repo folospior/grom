@@ -1,0 +1,5 @@
+name = "operating_system"
+version = "1.0.1"
+description = "Gleam operating system name library"
+licenses = ["MIT"]
+repository = { type = "github", user = "folospior", repo = "operating_system"}
