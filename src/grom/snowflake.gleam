@@ -7,6 +7,8 @@ pub type UserId
 
 pub type GuildId
 
+pub type SkuId
+
 pub type ChannelId
 
 pub type MessageId
