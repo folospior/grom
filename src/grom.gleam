@@ -17,7 +17,7 @@ import gleam/time/calendar
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import gleam_community/colour.{type Colour}
-import json_value
+
 import status_code
 
 const version: String = "v6.0.0"
@@ -645,11 +645,39 @@ pub type ErrorResponse {
     code: Int,
     /// User-friendly message briefly explaining what error happened.
     message: String,
-    /// This contains a JSON string that is best not parsed. I recommend just printing/logging it if needed.
-    /// It contains detailed information regarding what error happened.
-    /// It would be nearly impossible to properly parse it. It is also sometimes absent from the response.
-    errors: Option(String),
+    /// Contains a tree of errors
+    errors: Option(ErrorNode),
   )
+}
+
+pub type ErrorNode {
+  ErrorNode(List(ErrorItem))
+  ErrorBranch(Dict(String, ErrorNode))
+}
+
+fn error_node_decoder() -> Decoder(ErrorNode) {
+  use <- decode.recursive
+
+  let leaf = {
+    use errors <- decode.field("_errors", decode.list(field_error_decoder()))
+    decode.success(ErrorNode(errors))
+  }
+
+  let branch =
+    decode.dict(decode.string, error_node_decoder())
+    |> decode.map(ErrorBranch)
+
+  decode.one_of(leaf, or: [branch])
+}
+
+pub type ErrorItem {
+  ErrorItem(code: Int, message: String)
+}
+
+fn field_error_decoder() -> Decoder(ErrorItem) {
+  use code <- decode.field("code", decode.int)
+  use message <- decode.field("message", decode.string)
+  decode.success(ErrorItem(code:, message:))
 }
 
 fn error_response_decoder() -> Decoder(ErrorResponse) {
@@ -658,8 +686,9 @@ fn error_response_decoder() -> Decoder(ErrorResponse) {
   use errors <- decode.optional_field(
     "errors",
     None,
-    decode.optional(decode.map(json_value.decoder(), json_value.to_string)),
+    decode.optional(error_node_decoder()),
   )
+
   decode.success(ErrorResponse(code:, message:, errors:))
 }
 
