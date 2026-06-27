@@ -7,7 +7,6 @@ import gleam/function
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
-import gleam/httpc
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -44,12 +43,10 @@ pub fn bot(token: String) -> Token {
 
 /// An error that is returned if something goes wrong using REST (HTTP) API calls.
 /// Examples include:
-/// * No internet connection -> CouldNotReceiveResponse
 /// * A Discord internal server error -> ReceivedUnsuccessfulStatusCode
 /// * A bad request (e.g. message content too long) -> ReceivedErrorResponse
 /// * A response decoding failure due to a breaking change with the Discord API -> CouldNotDecodeResponse
 pub type RestError {
-  CouldNotReceiveResponse(httpc.HttpError)
   ReceivedUnsuccessfulStatusCode(Response(String))
   ReceivedErrorResponse(ErrorResponse)
   CouldNotDecodeResponse(json.DecodeError)
@@ -598,17 +595,12 @@ fn new_request(
   |> request.prepend_header("content-type", "application/json")
 }
 
-fn send_request(
-  request: Request(String),
+fn handle_response(
+  response: Response(String),
   decode_with decoder: Decoder(a),
 ) -> Result(a, RestError) {
-  request
-  |> httpc.send
-  // If httpc.send failed, put the error into this
-  |> result.map_error(CouldNotReceiveResponse)
-  // If httpc.send succeeded, check if the response is an error response.
-  // If it is - return an Error with the ErrorResponse inside.
-  |> result.try(parse_error_response)
+  response
+  |> parse_error_response
   // If the response isn't errorneous - check if the response has a successful status code.
   // If it doesn't - return an Error with the Response object inside
   |> result.try(ensure_status_code_success)
@@ -621,14 +613,13 @@ fn send_request(
   })
 }
 
-fn send_no_content_request(request: Request(String)) -> Result(Nil, RestError) {
-  request
-  |> httpc.send
-  // If httpc.send failed, put the error into this
-  |> result.map_error(CouldNotReceiveResponse)
+fn handle_no_content_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  response
   // If httpc.send succeeded, check if the response is an error response.
   // If it is - return an Error with the ErrorResponse inside.
-  |> result.try(parse_error_response)
+  |> parse_error_response
   // If the response isn't errorneous - check if the response has a successful status code.
   // If it doesn't - return an Error with the Response object inside
   |> result.try(ensure_status_code_success)
@@ -694,21 +685,31 @@ fn parse_error_response(
   }
 }
 
-pub fn get_current_user(token token: Token) -> Result(User, RestError) {
+pub fn get_current_user_request(token token: Token) -> Request(String) {
   new_request(token:, to: "/users/@me", method: http.Get)
-  |> send_request(decode_with: user_decoder())
 }
 
-pub fn get_user(
+pub fn get_current_user_response(
+  response: Response(String),
+) -> Result(User, RestError) {
+  handle_response(response, decode_with: user_decoder())
+}
+
+pub fn get_user_request(
   token token: Token,
   id id: Snowflake(User),
-) -> Result(User, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/users/" <> snowflake_to_string(id),
     method: http.Get,
   )
-  |> send_request(decode_with: user_decoder())
+}
+
+pub fn get_user_response(
+  response: Response(String),
+) -> Result(User, RestError) {
+  handle_response(response, decode_with: user_decoder())
 }
 
 /// This type is used to diffrentiate between the ways of modifying an object.
@@ -766,15 +767,20 @@ pub opaque type ModifyCurrentUser {
   )
 }
 
-pub fn modify_current_user(
+pub fn modify_current_user_request(
   token token: Token,
   using modify: ModifyCurrentUser,
-) -> Result(User, RestError) {
+) -> Request(String) {
   let body = modify |> modify_current_user_to_json |> json.to_string
 
   new_request(token:, to: "/users/@me", method: http.Patch)
   |> request.set_body(body)
-  |> send_request(decode_with: user_decoder())
+}
+
+pub fn modify_current_user_response(
+  response: Response(String),
+) -> Result(User, RestError) {
+  handle_response(response, decode_with: user_decoder())
 }
 
 pub fn new_modify_current_user() -> ModifyCurrentUser {
@@ -861,7 +867,7 @@ pub type Role {
     bot_id: Option(Snowflake(User)),
     /// The ID of the integration associated with this role.
     /// Is `None` if the role isn't an integration's role.
-    integration_id: Option(Snowflake(Integration)),
+    integration_id: Option(Snowflake(GuildIntegration)),
     /// Whether this role is the role automatically given to the guild's boosters.
     is_booster_role: Bool,
     /// The ID of the subscription SKU for this role.
@@ -957,9 +963,6 @@ pub type RoleFlag {
 fn bits_role_flags() -> List(#(Int, RoleFlag)) {
   [#(int.bitwise_shift_left(1, 0), RoleCanBeSeletedInOnboardingPrompt)]
 }
-
-// TODO: GET RID OF ME! USE ACTUAL INTEGRATIONS!
-pub type Integration
 
 pub type Permission {
   AllowCreatingInstantInvites
@@ -1238,28 +1241,38 @@ fn bits_guild_member_flags() -> List(#(Int, GuildMemberFlag)) {
   ]
 }
 
-pub fn get_current_user_as_guild_member(
+pub fn get_current_user_as_guild_member_request(
   token token: Token,
   for guild_id: Snowflake(Guild),
-) -> Result(GuildMember, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/users/@me/guilds/" <> snowflake_to_string(guild_id) <> "/member",
     method: http.Get,
   )
-  |> send_request(decode_with: guild_member_decoder())
 }
 
-pub fn leave_guild(
+pub fn get_current_user_as_guild_member_response(
+  response: Response(String),
+) -> Result(GuildMember, RestError) {
+  handle_response(response, decode_with: guild_member_decoder())
+}
+
+pub fn leave_guild_request(
   token token: Token,
   with_id guild_id: Snowflake(Guild),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/users/@me/guilds/" <> snowflake_to_string(guild_id),
     method: http.Delete,
   )
-  |> send_no_content_request
+}
+
+pub fn leave_guild_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
 }
 
 pub type Channel {
@@ -3543,47 +3556,59 @@ fn guild_explicit_content_filter_setting_decoder() -> Decoder(
   }
 }
 
-pub fn get_guild(
+pub fn get_guild_request(
   token token: Token,
   id id: Snowflake(Guild),
-) -> Result(Guild, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(id),
     method: http.Get,
   )
-  |> send_request(decode_with: guild_decoder())
+}
+
+pub fn get_guild_response(
+  response: Response(String),
+) -> Result(Guild, RestError) {
+  handle_response(response, decode_with: guild_decoder())
+}
+
+fn guild_approximate_counts_decoder() -> Decoder(GuildApproximateCounts) {
+  use approximate_member_count <- decode.field(
+    "approximate_member_count",
+    decode.int,
+  )
+  use approximate_presence_count <- decode.field(
+    "approximate_presence_count",
+    decode.int,
+  )
+
+  decode.success(GuildApproximateCounts(
+    approximate_member_count:,
+    approximate_presence_count:,
+  ))
 }
 
 /// Returns a guild object along with its approximate member and presence counts.
 pub fn get_guild_with_counts(
   token token: Token,
   id id: Snowflake(Guild),
-) -> Result(#(Guild, GuildApproximateCounts), RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(id),
     method: http.Get,
   )
   |> request.set_query([#("with_counts", "true")])
-  |> send_request(decode_with: {
-    use guild <- decode.then(guild_decoder())
-    use approximate_member_count <- decode.field(
-      "approximate_member_count",
-      decode.int,
-    )
-    use approximate_presence_count <- decode.field(
-      "approximate_presence_count",
-      decode.int,
-    )
+}
 
-    decode.success(#(
-      guild,
-      GuildApproximateCounts(
-        approximate_member_count:,
-        approximate_presence_count:,
-      ),
-    ))
+pub fn get_guild_with_counts_response(
+  response: Response(String),
+) -> Result(#(Guild, GuildApproximateCounts), RestError) {
+  handle_response(response, decode_with: {
+    use guild <- decode.then(guild_decoder())
+    use counts <- decode.then(guild_approximate_counts_decoder())
+    decode.success(#(guild, counts))
   })
 }
 
@@ -3650,16 +3675,21 @@ fn guild_preview_decoder() -> Decoder(GuildPreview) {
 
 /// Returns a guild preview object. Is useful for receiving information about discoverable
 /// guilds, when the current user isn't a member of one of those guilds.
-pub fn get_guild_preview(
+pub fn get_guild_preview_request(
   token token: Token,
   id id: Snowflake(Guild),
-) -> Result(GuildPreview, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(id) <> "/preview",
     method: http.Get,
   )
-  |> send_request(decode_with: guild_preview_decoder())
+}
+
+pub fn get_guild_preview_response(
+  response: Response(String),
+) -> Result(GuildPreview, RestError) {
+  handle_response(response, decode_with: guild_preview_decoder())
 }
 
 /// Look into the `(new_)modify_guild_*` functions to use this type using a builder pattern.
@@ -4257,12 +4287,12 @@ fn guild_member_verification_level_to_json(
 }
 
 /// Requires the `AllowManagingGuild` permission.
-pub fn modify_guild(
+pub fn modify_guild_request(
   token token: Token,
   id id: Snowflake(Guild),
   using modify: ModifyGuild,
   reason reason: Option(String),
-) -> Result(Guild, RestError) {
+) -> Request(String) {
   let body =
     modify
     |> modify_guild_to_json
@@ -4275,7 +4305,12 @@ pub fn modify_guild(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_decoder())
+}
+
+pub fn modify_guild_response(
+  response: Response(String),
+) -> Result(Guild, RestError) {
+  handle_response(response, decode_with: guild_decoder())
 }
 
 fn channel_decoder() -> Decoder(Channel) {
@@ -4326,16 +4361,24 @@ fn dm_channel_decoder() -> Decoder(DmChannel) {
 }
 
 /// Returns all the channels of a guild, excluding threads.
-pub fn get_guild_channels(
+pub fn get_guild_channels_request(
   token token: Token,
   guild_id guild_id: Snowflake(Guild),
-) -> Result(List(GuildChannel), RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
     method: http.Get,
   )
-  |> send_request(decode_with: decode.list(of: guild_channel_decoder()))
+}
+
+pub fn get_guild_channels_response(
+  response: Response(String),
+) -> Result(List(GuildChannel), RestError) {
+  handle_response(
+    response,
+    decode_with: decode.list(of: guild_channel_decoder()),
+  )
 }
 
 pub opaque type CreateTextChannel {
@@ -4393,12 +4436,12 @@ fn duration_to_json_seconds(duration: Duration) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_text_channel(
+pub fn create_text_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateTextChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = create |> create_text_channel_to_json |> json.to_string
 
   new_request(
@@ -4408,7 +4451,12 @@ pub fn create_text_channel(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn create_text_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 /// Requires the `AllowManagingChannels` permission.
@@ -4533,12 +4581,12 @@ fn create_voice_channel_to_json(create: CreateVoiceChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_voice_channel(
+pub fn create_voice_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateVoiceChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = create |> create_voice_channel_to_json |> json.to_string
 
   new_request(
@@ -4548,7 +4596,12 @@ pub fn create_voice_channel(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn create_voice_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 pub fn new_create_voice_channel(named name: String) -> CreateVoiceChannel {
@@ -4659,12 +4712,12 @@ fn create_category_channel_to_json(create: CreateCategoryChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_category_channel(
+pub fn create_category_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateCategoryChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = create |> create_category_channel_to_json |> json.to_string
 
   new_request(
@@ -4674,7 +4727,12 @@ pub fn create_category_channel(
   )
   |> request.set_body(body)
   |> request_with_reason(reason)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn create_category_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 pub fn new_create_category_channel(
@@ -4748,12 +4806,12 @@ fn create_stage_channel_to_json(create: CreateStageChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_stage_channel(
+pub fn create_stage_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateStageChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = create |> create_stage_channel_to_json |> json.to_string
 
   new_request(
@@ -4763,7 +4821,12 @@ pub fn create_stage_channel(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn create_stage_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 pub fn new_create_stage_channel(named name: String) -> CreateStageChannel {
@@ -4921,12 +4984,12 @@ fn create_forum_channel_to_json(create: CreateForumChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_forum_channel(
+pub fn create_forum_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateForumChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = create |> create_forum_channel_to_json |> json.to_string
 
   new_request(
@@ -4936,7 +4999,12 @@ pub fn create_forum_channel(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn create_forum_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 pub fn new_create_forum_channel(named name: String) -> CreateForumChannel {
@@ -5114,12 +5182,12 @@ fn create_media_channel_to_json(create: CreateMediaChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_media_channel(
+pub fn create_media_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateMediaChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = create |> create_media_channel_to_json |> json.to_string
 
   new_request(
@@ -5129,7 +5197,12 @@ pub fn create_media_channel(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn create_media_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 pub fn new_create_media_channel(named name: String) -> CreateMediaChannel {
@@ -5297,11 +5370,11 @@ fn modify_guild_channel_position_to_json(
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn modify_guild_channel_positions(
+pub fn modify_guild_channel_positions_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: List(ModifyGuildChannelPosition),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   let body =
     modify
     |> json.array(modify_guild_channel_position_to_json)
@@ -5313,7 +5386,12 @@ pub fn modify_guild_channel_positions(
     method: http.Patch,
   )
   |> request.set_body(body)
-  |> send_no_content_request
+}
+
+pub fn modify_guild_channel_positions_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
 }
 
 pub type ThreadMember {
@@ -5349,23 +5427,31 @@ fn get_all_active_guild_threads_response_decoder() -> Decoder(
   decode.success(GetAllActiveGuildThreadsResponse(threads:, members:))
 }
 
-pub fn get_all_active_threads(
+pub fn get_all_active_threads_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(GetAllActiveGuildThreadsResponse, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/threads/active",
     method: http.Get,
   )
-  |> send_request(decode_with: get_all_active_guild_threads_response_decoder())
 }
 
-pub fn get_guild_member(
+pub fn get_all_active_threads_response(
+  response: Response(String),
+) -> Result(GetAllActiveGuildThreadsResponse, RestError) {
+  handle_response(
+    response,
+    decode_with: get_all_active_guild_threads_response_decoder(),
+  )
+}
+
+pub fn get_guild_member_request(
   token token: Token,
   with_id user_id: Snowflake(User),
   in_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(GuildMember, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -5374,7 +5460,12 @@ pub fn get_guild_member(
       <> snowflake_to_string(user_id),
     method: http.Get,
   )
-  |> send_request(decode_with: guild_member_decoder())
+}
+
+pub fn get_guild_member_response(
+  response: Response(String),
+) -> Result(GuildMember, RestError) {
+  handle_response(response, decode_with: guild_member_decoder())
 }
 
 pub opaque type GetGuildMembersOptions {
@@ -5416,11 +5507,11 @@ fn optional_to_string(
 /// Requires the `GuildMembersIntent` privileged intent.
 ///
 /// By default, will return one member. The maximum limit is 1000.
-pub fn get_guild_members(
+pub fn get_guild_members_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
   options options: Option(GetGuildMembersOptions),
-) -> Result(List(GuildMember), RestError) {
+) -> Request(String) {
   let query = case options {
     None -> []
     Some(options) ->
@@ -5437,16 +5528,24 @@ pub fn get_guild_members(
     method: http.Get,
   )
   |> request.set_query(query)
-  |> send_request(decode_with: decode.list(of: guild_member_decoder()))
+}
+
+pub fn get_guild_members_response(
+  response: Response(String),
+) -> Result(List(GuildMember), RestError) {
+  handle_response(
+    response,
+    decode_with: decode.list(of: guild_member_decoder()),
+  )
 }
 
 /// The API will respond with one member for limits smaller than 1, and with 1000 members for limits larger than 1000.
-pub fn search_guild_members(
+pub fn search_guild_members_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   search_query query: String,
   limit limit: Int,
-) -> Result(List(GuildMember), RestError) {
+) -> Request(String) {
   let query = [
     #("query", query),
     #("limit", int.to_string(int.clamp(limit, 1, 1000))),
@@ -5458,7 +5557,15 @@ pub fn search_guild_members(
     method: http.Get,
   )
   |> request.set_query(query)
-  |> send_request(decode_with: decode.list(of: guild_member_decoder()))
+}
+
+pub fn search_guild_members_response(
+  response: Response(String),
+) -> Result(List(GuildMember), RestError) {
+  handle_response(
+    response,
+    decode_with: decode.list(of: guild_member_decoder()),
+  )
 }
 
 pub opaque type ModifyGuildMember {
@@ -5640,13 +5747,13 @@ fn timestamp_to_json(timestamp: Timestamp) -> Json {
   |> json.string
 }
 
-pub fn modify_guild_member(
+pub fn modify_guild_member_request(
   token token: Token,
   with_id user_id: Snowflake(User),
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyGuildMember,
   reason reason: Option(String),
-) -> Result(GuildMember, RestError) {
+) -> Request(String) {
   let body = modify |> modify_guild_member_to_json |> json.to_string
 
   new_request(
@@ -5659,7 +5766,12 @@ pub fn modify_guild_member(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_member_decoder())
+}
+
+pub fn modify_guild_member_response(
+  response: Response(String),
+) -> Result(GuildMember, RestError) {
+  handle_response(response, decode_with: guild_member_decoder())
 }
 
 pub opaque type ModifyCurrentMember {
@@ -5746,12 +5858,12 @@ fn modify_current_member_to_json(modify: ModifyCurrentMember) -> Json {
   |> json.object
 }
 
-pub fn modify_current_member(
+pub fn modify_current_member_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyCurrentMember,
   reason reason: Option(String),
-) -> Result(GuildMember, RestError) {
+) -> Request(String) {
   let body = modify |> modify_current_member_to_json |> json.to_string
 
   new_request(
@@ -5761,17 +5873,22 @@ pub fn modify_current_member(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_member_decoder())
+}
+
+pub fn modify_current_member_response(
+  response: Response(String),
+) -> Result(GuildMember, RestError) {
+  handle_response(response, decode_with: guild_member_decoder())
 }
 
 /// Requires the `AllowManagingRoles` permission.
-pub fn add_guild_member_role(
+pub fn add_role_to_guild_member_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   to_member_with_id user_id: Snowflake(User),
-  with_id role_id: Snowflake(Role),
+  role_with_id role_id: Snowflake(Role),
   reason reason: Option(String),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -5783,19 +5900,22 @@ pub fn add_guild_member_role(
     method: http.Put,
   )
   |> request_with_reason(reason)
-  |> send_no_content_request
+}
+
+pub fn add_role_to_guild_member_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
 }
 
 /// Requires the `AllowManagingRoles` permission.
-///
-/// Doesn't actually delete the role, only removes it from the user's profile.
-pub fn remove_guild_member_role(
+pub fn remove_role_from_guild_member_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   from_member_with_id user_id: Snowflake(User),
   with_id role_id: Snowflake(Role),
   reason reason: Option(String),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -5807,16 +5927,21 @@ pub fn remove_guild_member_role(
     method: http.Delete,
   )
   |> request_with_reason(reason)
-  |> send_no_content_request
+}
+
+pub fn remove_role_from_guild_member_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
 }
 
 /// Requires the `AllowKickingMembers` permission
-pub fn kick_guild_member(
+pub fn kick_guild_member_request(
   token token: Token,
   with_id user_id: Snowflake(User),
   from_guild_with_id guild_id: Snowflake(Guild),
   reason reason: Option(String),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -5826,7 +5951,12 @@ pub fn kick_guild_member(
     method: http.Delete,
   )
   |> request_with_reason(reason)
-  |> send_no_content_request
+}
+
+pub fn kick_guild_member_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
 }
 
 pub type GuildBan {
@@ -5887,11 +6017,11 @@ fn get_guild_bans_options_to_query(
 }
 
 /// Requires the `AllowBanningMembers` permission.
-pub fn get_guild_bans(
+pub fn get_guild_bans_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
   options options: Option(GetGuildBansOptions),
-) -> Result(List(GuildBan), RestError) {
+) -> Request(String) {
   let query = case options {
     Some(options) -> options |> get_guild_bans_options_to_query
     None -> []
@@ -5903,15 +6033,20 @@ pub fn get_guild_bans(
     method: http.Get,
   )
   |> request.set_query(query)
-  |> send_request(decode_with: decode.list(of: guild_ban_decoder()))
+}
+
+pub fn get_guild_bans_response(
+  response: Response(String),
+) -> Result(List(GuildBan), RestError) {
+  handle_response(response, decode_with: decode.list(of: guild_ban_decoder()))
 }
 
 /// Requires the `AllowBanningMembers` permission.
-pub fn get_guild_ban(
+pub fn get_guild_ban_request(
   token token: Token,
   of_user_with_id user_id: Snowflake(Guild),
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(GuildBan, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -5920,19 +6055,24 @@ pub fn get_guild_ban(
       <> snowflake_to_string(user_id),
     method: http.Get,
   )
-  |> send_request(decode_with: guild_ban_decoder())
+}
+
+pub fn get_guild_ban_response(
+  response: Response(String),
+) -> Result(GuildBan, RestError) {
+  handle_response(response, decode_with: guild_ban_decoder())
 }
 
 /// Requires the `AllowBanningMembers` permission.
 ///
 /// `delete_messages_since` will delete the messages the user has sent in the guild that are at most 7 days old.
-pub fn ban_guild_member(
+pub fn ban_guild_member_request(
   token token: Token,
   with_id user_id: Snowflake(User),
   from_guild_with_id guild_id: Snowflake(Guild),
   delete_messages_since delete_messages_since: Option(Duration),
   reason reason: Option(String),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   let json = case delete_messages_since {
     Some(duration) -> [
       #("delete_message_seconds", duration_to_json_seconds(duration)),
@@ -5952,20 +6092,21 @@ pub fn ban_guild_member(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_no_content_request
 }
 
-// not really a guild member if you're banned, are you?
-//
-// might rename this, if you read through this code and have a better idea then make an issue
-// i'll happily deprecate this function (i don't wanna use remove_guild_ban because i don't think it fits ban_guild_member)
+pub fn ban_guild_member_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
+}
+
 /// Requires the `AllowBanningMembers` permission.
-pub fn unban_guild_member(
+pub fn unban_user_from_guild_request(
   token token: Token,
   with_id user_id: Snowflake(User),
   from_guild_with_id guild_id: Snowflake(Guild),
   reason reason: Option(String),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -5975,7 +6116,10 @@ pub fn unban_guild_member(
     method: http.Delete,
   )
   |> request_with_reason(reason)
-  |> send_no_content_request
+}
+
+pub fn unban_user_from_guild_response(response: Response(String)) {
+  handle_no_content_response(response)
 }
 
 pub type BulkGuildBanResponse {
@@ -5998,13 +6142,13 @@ fn bulk_guild_ban_response_decoder() -> Decoder(BulkGuildBanResponse) {
 }
 
 /// Requires the `AllowBanningMembers` and `AllowManagingGuild` permissions.
-pub fn bulk_guild_ban(
+pub fn bulk_guild_ban_request(
   token token: Token,
   users_with_ids user_ids: List(Snowflake(User)),
   from_guild_with_id guild_id: Snowflake(Guild),
   delete_messages_since delete_messages_since: Option(Duration),
   reason reason: Option(String),
-) -> Result(BulkGuildBanResponse, RestError) {
+) -> Request(String) {
   let body =
     [
       Ok(#("user_ids", json.array(user_ids, snowflake_to_json))),
@@ -6025,26 +6169,36 @@ pub fn bulk_guild_ban(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: bulk_guild_ban_response_decoder())
 }
 
-pub fn get_guild_roles(
+pub fn bulk_guild_ban_response(
+  response: Response(String),
+) -> Result(BulkGuildBanResponse, RestError) {
+  handle_response(response, decode_with: bulk_guild_ban_response_decoder())
+}
+
+pub fn get_guild_roles_request(
   token token: Token,
   of_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(List(Role), RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/roles",
     method: http.Get,
   )
-  |> send_request(decode_with: decode.list(of: role_decoder()))
 }
 
-pub fn get_role(
+pub fn get_guild_roles_response(
+  response: Response(String),
+) -> Result(List(Role), RestError) {
+  handle_response(response, decode_with: decode.list(of: role_decoder()))
+}
+
+pub fn get_role_request(
   token token: Token,
   with_id role_id: Snowflake(Role),
   from_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(Role, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -6053,20 +6207,33 @@ pub fn get_role(
       <> snowflake_to_string(role_id),
     method: http.Get,
   )
-  |> send_request(decode_with: role_decoder())
+}
+
+pub fn get_role_response(
+  response: Response(String),
+) -> Result(Role, RestError) {
+  handle_response(response, decode_with: role_decoder())
 }
 
 /// Returns a Dict of (role_id, member_count)
-pub fn get_role_member_counts(
+pub fn get_role_member_counts_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(Dict(Snowflake(Role), Int), RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/roles/member-counts",
     method: http.Get,
   )
-  |> send_request(decode_with: decode.dict(snowflake_decoder(), decode.int))
+}
+
+pub fn get_role_member_counts_response(
+  response: Response(String),
+) -> Result(Dict(Snowflake(Role), Int), RestError) {
+  handle_response(
+    response,
+    decode_with: decode.dict(snowflake_decoder(), decode.int),
+  )
 }
 
 pub opaque type CreateRole {
@@ -6180,12 +6347,12 @@ pub fn create_mentionable_role(create: CreateRole) -> CreateRole {
 }
 
 /// Requires the `AllowManagingRoles` permission.
-pub fn create_role(
+pub fn create_role_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateRole,
   reason reason: Option(String),
-) -> Result(Role, RestError) {
+) -> Request(String) {
   let body = create |> create_role_to_json |> json.to_string
 
   new_request(
@@ -6195,7 +6362,12 @@ pub fn create_role(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: role_decoder())
+}
+
+pub fn create_role_response(
+  response: Response(String),
+) -> Result(Role, RestError) {
+  handle_response(response, decode_with: role_decoder())
 }
 
 /// See the [`move_role`](#move_role) and [`delete_role_position`](#delete_role_position) functions.
@@ -6232,12 +6404,12 @@ pub fn delete_role_position(
 /// Requires the `AllowManagingRoles` permission.
 /// 
 /// Returns all of the guild's roles.
-pub fn modify_role_positions(
+pub fn modify_role_positions_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: List(ModifyRolePosition),
   reason reason: Option(String),
-) -> Result(List(Role), RestError) {
+) -> Request(String) {
   let body =
     modify
     |> json.array(modify_role_position_to_json)
@@ -6250,7 +6422,12 @@ pub fn modify_role_positions(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: decode.list(of: role_decoder()))
+}
+
+pub fn modify_role_position_response(
+  response: Response(String),
+) -> Result(List(Role), RestError) {
+  handle_response(response, decode_with: decode.list(of: role_decoder()))
 }
 
 pub opaque type ModifyRole {
@@ -6354,13 +6531,13 @@ pub fn modify_role_as_unmentionable(modify: ModifyRole) -> ModifyRole {
 }
 
 /// Requires the `AllowManagingRoles` permission.
-pub fn modify_role(
+pub fn modify_role_request(
   token token: Token,
   with_id role_id: Snowflake(Role),
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyRole,
   reason reason: Option(String),
-) -> Result(Role, RestError) {
+) -> Request(String) {
   let body = modify |> modify_role_to_json |> json.to_string
 
   new_request(
@@ -6373,16 +6550,21 @@ pub fn modify_role(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: role_decoder())
+}
+
+pub fn modify_role_response(
+  response: Response(String),
+) -> Result(Role, RestError) {
+  handle_response(response, decode_with: role_decoder())
 }
 
 /// Requires the `AllowManagingRoles` permission.
-pub fn delete_role(
+pub fn delete_role_request(
   token token: Token,
   with_id role_id: Snowflake(Role),
   from_guild_with_id guild_id: Snowflake(Guild),
   reason reason: Option(String),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -6392,7 +6574,12 @@ pub fn delete_role(
     method: http.Delete,
   )
   |> request_with_reason(reason)
-  |> send_no_content_request
+}
+
+pub fn delete_role_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
 }
 
 /// Requires the `AllowManagingGuild` and `AllowKickingMembers` permissions.
@@ -6402,12 +6589,12 @@ pub fn delete_role(
 /// Pruning will, by default, only kick members with no roles. Include any roles which you count as prunable.
 ///
 /// The minimum number of days is 1 and the maximum number of days is 30. Numbers not within these bounds will return the closest result (1 or 30 days)
-pub fn get_guild_prunable_count(
+pub fn get_guild_prunable_count_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
   required_inactive_days days: Int,
   include_roles_with_ids include_roles: List(Snowflake(Role)),
-) -> Result(Int, RestError) {
+) -> Request(String) {
   let query = [
     #("days", int.to_string(int.clamp(days, 1, 30))),
     #(
@@ -6426,11 +6613,15 @@ pub fn get_guild_prunable_count(
     method: http.Get,
   )
   |> request.set_query(query)
-  |> send_request(decode_with: decode.field(
-    "pruned",
-    decode.int,
-    decode.success,
-  ))
+}
+
+pub fn get_guild_prunable_count_response(
+  response: Response(String),
+) -> Result(Int, RestError) {
+  handle_response(
+    response,
+    decode_with: decode.field("pruned", decode.int, decode.success),
+  )
 }
 
 pub opaque type PruneGuild {
@@ -6484,12 +6675,12 @@ pub fn prune_guild_with_included_roles(
 /// Kicks inactive members based on the provided options.
 ///
 /// Returns the amount of members who have been kicked.
-pub fn prune_guild_with_count(
+pub fn prune_guild_with_count_request(
   token token: Token,
   with_id guild_id: Snowflake(Guild),
   using prune: PruneGuild,
   reason reason: Option(String),
-) -> Result(Int, RestError) {
+) -> Request(String) {
   let prune = PruneGuild(..prune, compute_prune_count: True)
 
   let body = prune |> prune_guild_to_json |> json.to_string
@@ -6501,22 +6692,26 @@ pub fn prune_guild_with_count(
   )
   |> request.set_body(body)
   |> request_with_reason(reason)
-  |> send_request(decode_with: decode.field(
-    "pruned",
-    decode.int,
-    decode.success,
-  ))
+}
+
+pub fn prune_guild_with_count_response(
+  response: Response(String),
+) -> Result(Int, RestError) {
+  handle_response(
+    response,
+    decode_with: decode.field("pruned", decode.int, decode.success),
+  )
 }
 
 /// Requires the `AllowManagingGuild` and `AllowKickingMembers` permissions.
 ///
 /// Kicks inactive members based on the provided options.
-pub fn prune_guild(
+pub fn prune_guild_request(
   token token: Token,
   with_id guild_id: Snowflake(Guild),
   using prune: PruneGuild,
   reason reason: Option(String),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   let prune = PruneGuild(..prune, compute_prune_count: False)
 
   let body = prune |> prune_guild_to_json |> json.to_string
@@ -6528,7 +6723,12 @@ pub fn prune_guild(
   )
   |> request.set_body(body)
   |> request_with_reason(reason)
-  |> send_no_content_request
+}
+
+pub fn prune_guild_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
 }
 
 pub type VoiceRegion {
@@ -6560,16 +6760,24 @@ fn voice_region_decoder() -> Decoder(VoiceRegion) {
 }
 
 /// Unlike the similar [`get_voice_regions`](#get_voice_regions), this returns VIP regions if the guild is VIP-enabled.
-pub fn get_guild_voice_regions(
+pub fn get_guild_voice_regions_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(List(VoiceRegion), RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/regions",
     method: http.Get,
   )
-  |> send_request(decode_with: decode.list(of: voice_region_decoder()))
+}
+
+pub fn get_guild_voice_regions_response(
+  response: Response(String),
+) -> Result(List(VoiceRegion), RestError) {
+  handle_response(
+    response,
+    decode_with: decode.list(of: voice_region_decoder()),
+  )
 }
 
 pub type Invite {
@@ -7118,16 +7326,21 @@ fn scheduled_event_recurrence_rule_nth_weekday_decoder() -> Decoder(
 /// Requires the `AllowManagingGuild` or `AllowViewingAuditLog` permission.
 ///
 /// Will include metadata with the `AllowManagingGuild` permission.
-pub fn get_guild_invites(
+pub fn get_guild_invites_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(List(Invite), RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/invites",
     method: http.Get,
   )
-  |> send_request(decode_with: decode.list(invite_decoder()))
+}
+
+pub fn get_guild_invites_response(
+  response: Response(String),
+) -> Result(List(Invite), RestError) {
+  handle_response(response, decode_with: decode.list(of: invite_decoder()))
 }
 
 /// Discord has some integrations with YouTube/Twitch for member/subscriber-only guilds.
@@ -7357,27 +7570,35 @@ fn guild_social_integration_subscription_expiration_behavior_decoder() -> Decode
 /// Requires the `AllowManagingGuild` permission.
 ///
 /// Returns a maximum of 50 integrations. If a guild has more, they cannot be accessed.
-pub fn get_guild_integrations(
+pub fn get_guild_integrations_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(List(GuildIntegration), RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/integrations",
     method: http.Get,
   )
-  |> send_request(decode_with: decode.list(of: guild_integration_decoder()))
+}
+
+pub fn get_guild_integrations_response(
+  response: Response(String),
+) -> Result(List(GuildIntegration), RestError) {
+  handle_response(
+    response,
+    decode_with: decode.list(of: guild_integration_decoder()),
+  )
 }
 
 /// Requires the `AllowManagingGuild` permission.
 ///
 /// Deletes any associated webhooks and kicks the associated bot (if there is one).
-pub fn delete_guild_integration(
+pub fn delete_guild_integration_request(
   token token: Token,
   with_id integration_id: Snowflake(GuildIntegration),
   from_guild_with_id guild_id: Snowflake(Guild),
   reason reason: Option(String),
-) -> Result(Nil, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/"
@@ -7387,7 +7608,12 @@ pub fn delete_guild_integration(
     method: http.Delete,
   )
   |> request_with_reason(reason)
-  |> send_no_content_request
+}
+
+pub fn delete_guild_integration_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
 }
 
 /// A guild's settings pertaining to the website widget.
@@ -7405,16 +7631,21 @@ fn guild_widget_settings_decoder() -> Decoder(GuildWidgetSettings) {
 }
 
 /// Requires the `AllowManagingGuild` permission.
-pub fn get_guild_widget_settings(
+pub fn get_guild_widget_settings_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(GuildWidgetSettings, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/widget",
     method: http.Get,
   )
-  |> send_request(decode_with: guild_widget_settings_decoder())
+}
+
+pub fn get_guild_widget_settings_response(
+  response: Response(String),
+) -> Result(GuildWidgetSettings, RestError) {
+  handle_response(response, decode_with: guild_widget_settings_decoder())
 }
 
 pub opaque type ModifyGuildWidgetSettings {
@@ -7465,12 +7696,12 @@ fn modify_guild_widget_settings_to_json(
 }
 
 /// Requires the `AllowManagingGuild` permission.
-pub fn modify_guild_widget_settings(
+pub fn modify_guild_widget_settings_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyGuildWidgetSettings,
   reason reason: Option(String),
-) -> Result(GuildWidgetSettings, RestError) {
+) -> Request(String) {
   let body = modify |> modify_guild_widget_settings_to_json |> json.to_string
 
   new_request(
@@ -7480,7 +7711,12 @@ pub fn modify_guild_widget_settings(
   )
   |> request.set_body(body)
   |> request_with_reason(reason)
-  |> send_request(decode_with: guild_widget_settings_decoder())
+}
+
+pub fn modify_guild_widget_settings_response(
+  response: Response(String),
+) -> Result(GuildWidgetSettings, RestError) {
+  handle_response(response, decode_with: guild_widget_settings_decoder())
 }
 
 pub type GuildWidget {
@@ -7611,20 +7847,22 @@ fn user_status_decoder() -> Decoder(UserStatus) {
   }
 }
 
-// I don't know how useful this actually is - this library is erlang-only and this seems like a lustre job
-//
-// (unless you use HTMX)
 /// Useful for creating custom website widgets.
-pub fn get_guild_widget(
+pub fn get_guild_widget_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(GuildWidget, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/widget.json",
     method: http.Get,
   )
-  |> send_request(decode_with: guild_widget_decoder())
+}
+
+pub fn get_guild_widget_response(
+  response: Response(String),
+) -> Result(GuildWidget, RestError) {
+  handle_response(response, decode_with: guild_widget_decoder())
 }
 
 pub type GuildVanityInvite {
@@ -7653,29 +7891,39 @@ fn guild_vanity_invite_decoder() -> Decoder(Option(GuildVanityInvite)) {
 /// Use [`Guild.vanity_url_code`](#Guild) to get the vanity URL code without this permission.
 ///
 /// This endpoint is only necessary to get the use count. Returns `Ok(None)` if the guild can have a vanity URL but doesn't.
-pub fn get_guild_vanity_invite(
+pub fn get_guild_vanity_invite_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(Option(GuildVanityInvite), RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/vanity-url",
     method: http.Get,
   )
-  |> send_request(decode_with: guild_vanity_invite_decoder())
+}
+
+pub fn get_guild_vanity_invite_response(
+  response: Response(String),
+) -> Result(Option(GuildVanityInvite), RestError) {
+  handle_response(response, decode_with: guild_vanity_invite_decoder())
 }
 
 /// Requires the `AllowManagingGuild` permission if the welcome screen is disabled.
-pub fn get_guild_welcome_screen(
+pub fn get_guild_welcome_screen_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(GuildWelcomeScreen, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/welcome-screen",
     method: http.Get,
   )
-  |> send_request(decode_with: guild_welcome_screen_decoder())
+}
+
+pub fn get_guild_welcome_screen_response(
+  response: Response(String),
+) -> Result(GuildWelcomeScreen, RestError) {
+  handle_response(response, decode_with: guild_welcome_screen_decoder())
 }
 
 pub opaque type ModifyGuildWelcomeScreen {
@@ -7739,12 +7987,12 @@ pub fn delete_guild_welcome_screen_description(
 }
 
 /// Requires the `AllowManagingGuild` permission.
-pub fn modify_guild_welcome_screen(
+pub fn modify_guild_welcome_screen_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyGuildWelcomeScreen,
   reason reason: Option(String),
-) -> Result(GuildWelcomeScreen, RestError) {
+) -> Request(String) {
   let body = modify |> modify_guild_welcome_screen_to_json |> json.to_string
 
   new_request(
@@ -7754,7 +8002,12 @@ pub fn modify_guild_welcome_screen(
   )
   |> request.set_body(body)
   |> request_with_reason(reason)
-  |> send_request(decode_with: guild_welcome_screen_decoder())
+}
+
+pub fn modify_guild_welcome_screen_response(
+  response: Response(String),
+) -> Result(GuildWelcomeScreen, RestError) {
+  handle_response(response, decode_with: guild_welcome_screen_decoder())
 }
 
 pub type GuildOnboarding {
@@ -7900,20 +8153,27 @@ fn guild_onboarding_prompt_option_decoder() -> Decoder(
   ))
 }
 
-pub fn get_guild_onboarding(
+pub fn get_guild_onboarding_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
-) -> Result(GuildOnboarding, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/guilds/" <> snowflake_to_string(guild_id) <> "/onboarding",
     method: http.Get,
   )
-  |> send_request(decode_with: guild_onboarding_decoder())
+}
+
+pub fn get_guild_onboarding_response(
+  response: Response(String),
+) -> Result(GuildOnboarding, RestError) {
+  handle_response(response, decode_with: guild_onboarding_decoder())
 }
 
 // Modify Guild Onboarding was left unimplemented here due to doubts as to whether one has to reuse prompts or if they can be created
 // (i'm lazy and this probably won't be used)
+// update: 2 months later, i'm still lazy and won't research this at all
+// (prs welcome)
 
 pub opaque type ModifyGuildIncidentsData {
   ModifyGuildIncidentsData(
@@ -7980,11 +8240,11 @@ pub fn enable_guild_dms(
 }
 
 /// Requires the `AllowManagingGuild` permission.
-pub fn modify_guild_incidents_data(
+pub fn modify_guild_incidents_data_request(
   token token: Token,
   for_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyGuildIncidentsData,
-) -> Result(GuildIncidentsData, RestError) {
+) -> Request(String) {
   let body = modify |> modify_guild_incidents_data_to_json |> json.to_string
 
   new_request(
@@ -7993,7 +8253,12 @@ pub fn modify_guild_incidents_data(
     method: http.Put,
   )
   |> request.set_body(body)
-  |> send_request(decode_with: guild_incidents_data_decoder())
+}
+
+pub fn modify_guild_incidents_data_response(
+  response: Response(String),
+) -> Result(GuildIncidentsData, RestError) {
+  handle_response(response, decode_with: guild_incidents_data_decoder())
 }
 
 /// Do not use this endpoint as means of notifying everyone in a server about something.
@@ -8001,10 +8266,10 @@ pub fn modify_guild_incidents_data(
 /// DMs should be initiated by user action - for example, interactions.
 ///
 /// Even then, if you create a significant amount of DMs too quickly, your bot may be quarantined.
-pub fn create_dm_channel(
+pub fn create_dm_channel_request(
   token token: Token,
   to_user_with_id user_id: Snowflake(User),
-) -> Result(DmChannel, RestError) {
+) -> Request(String) {
   let body =
     [#("recipient_id", snowflake_to_json(user_id))]
     |> json.object
@@ -8012,19 +8277,29 @@ pub fn create_dm_channel(
 
   new_request(token:, to: "/users/@me/channels", method: http.Post)
   |> request.set_body(body)
-  |> send_request(decode_with: dm_channel_decoder())
 }
 
-pub fn get_channel(
+pub fn create_dm_channel_response(
+  response: Response(String),
+) -> Result(DmChannel, RestError) {
+  handle_response(response, decode_with: dm_channel_decoder())
+}
+
+pub fn get_channel_request(
   token token: Token,
   with_id channel_id: Snowflake(Channel),
-) -> Result(Channel, RestError) {
+) -> Request(String) {
   new_request(
     token:,
     to: "/channels/" <> snowflake_to_string(channel_id),
     method: http.Get,
   )
-  |> send_request(decode_with: channel_decoder())
+}
+
+pub fn get_channel_response(
+  response: Response(String),
+) -> Result(Channel, RestError) {
+  handle_response(response, decode_with: channel_decoder())
 }
 
 pub opaque type ModifyTextChannel {
@@ -8207,12 +8482,12 @@ pub fn unset_text_channel_default_thread_auto_archive_duration(
 }
 
 /// Requires the `AllowManagingChannels` permission. 
-pub fn modify_text_channel(
+pub fn modify_text_channel_request(
   token token: Token,
   with_id channel_id: Snowflake(TextChannel),
   using modify: ModifyTextChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = modify |> modify_text_channel_to_json |> json.to_string
 
   new_request(
@@ -8222,7 +8497,12 @@ pub fn modify_text_channel(
   )
   |> request_with_reason(reason)
   |> request.set_body(body)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn modify_text_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 pub opaque type ModifyVoiceChannel {
@@ -8389,12 +8669,12 @@ fn modify_voice_channel_to_json(modify: ModifyVoiceChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission. 
-pub fn modify_voice_channel(
+pub fn modify_voice_channel_request(
   token token: Token,
   with_id channel_id: Snowflake(VoiceChannel),
   using modify: ModifyVoiceChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = modify |> modify_voice_channel_to_json |> json.to_string
 
   new_request(
@@ -8404,7 +8684,12 @@ pub fn modify_voice_channel(
   )
   |> request.set_body(body)
   |> request_with_reason(reason)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn modify_voice_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 pub opaque type ModifyCategoryChannel {
@@ -8465,12 +8750,12 @@ fn modify_category_channel_to_json(modify: ModifyCategoryChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission. 
-pub fn modify_category_channel(
+pub fn modify_category_channel_request(
   token token: Token,
   with_id channel_id: Snowflake(CategoryChannel),
   using modify: ModifyCategoryChannel,
   reason reason: Option(String),
-) -> Result(GuildChannel, RestError) {
+) -> Request(String) {
   let body = modify |> modify_category_channel_to_json |> json.to_string
 
   new_request(
@@ -8480,7 +8765,12 @@ pub fn modify_category_channel(
   )
   |> request.set_body(body)
   |> request_with_reason(reason)
-  |> send_request(decode_with: guild_channel_decoder())
+}
+
+pub fn modify_category_channel_response(
+  response: Response(String),
+) -> Result(GuildChannel, RestError) {
+  handle_response(response, decode_with: guild_channel_decoder())
 }
 
 pub opaque type ModifyAnnouncementChannel {
