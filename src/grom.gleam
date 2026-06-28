@@ -8613,7 +8613,7 @@ pub fn modify_text_channel_topic(
   ModifyTextChannel(..modify, topic: Modify(topic))
 }
 
-pub fn remove_text_channel_topic(
+pub fn delete_text_channel_topic(
   modify: ModifyTextChannel,
 ) -> ModifyTextChannel {
   ModifyTextChannel(..modify, topic: Delete)
@@ -9456,7 +9456,499 @@ fn modify_forum_channel_to_json(modify: ModifyForumChannel) -> Json {
     modification_to_json(modify.position, "position", json.int),
     modification_to_json(modify.topic, "topic", json.string),
     optional_to_json(modify.is_nsfw, "nsfw", json.bool),
+    modification_to_json(
+      modify.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(
+      modify.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    modification_to_json(modify.parent_id, "parent_id", snowflake_to_json),
+    modification_to_json(
+      modify.default_thread_auto_archive_duration,
+      "default_auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(modify.flags, "flags", flags_to_json(
+      _,
+      bits_forum_channel_flags(),
+    )),
+    optional_to_json(modify.available_tags, "available_tags", json.array(
+      _,
+      forum_tag_to_json,
+    )),
+    modification_to_json(
+      modify.default_reaction,
+      "default_reaction_emoji",
+      default_forum_reaction_to_json,
+    ),
+    optional_to_json(
+      modify.default_thread_rate_limit_per_user,
+      "default_thread_rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    modification_to_json(
+      modify.default_sort_order,
+      "default_sort_order",
+      forum_sort_order_to_json,
+    ),
+    optional_to_json(
+      modify.default_layout,
+      "default_forum_layout",
+      forum_layout_to_json,
+    ),
   ]
   |> list.filter_map(function.identity)
   |> json.object
+}
+
+pub fn new_modify_forum_channel() -> ModifyForumChannel {
+  ModifyForumChannel(
+    None,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    None,
+    Skip,
+    Skip,
+    None,
+    None,
+    Skip,
+    None,
+    Skip,
+    None,
+  )
+}
+
+pub fn modify_forum_channel_name(
+  modify: ModifyForumChannel,
+  new name: String,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, name: Some(name))
+}
+
+pub fn modify_forum_channel_position(
+  modify: ModifyForumChannel,
+  new position: Int,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, position: Modify(position))
+}
+
+pub fn unset_forum_channel_position(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, position: Delete)
+}
+
+pub fn modify_forum_channel_topic(
+  modify: ModifyForumChannel,
+  new topic: String,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, topic: Modify(topic))
+}
+
+pub fn delete_forum_channel_topic(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, topic: Delete)
+}
+
+pub fn set_forum_channel_as_nsfw(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, is_nsfw: Some(True))
+}
+
+pub fn set_forum_channel_as_sfw(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, is_nsfw: Some(False))
+}
+
+pub fn modify_forum_channel_rate_limit_per_user(
+  modify: ModifyForumChannel,
+  new limit: Duration,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, rate_limit_per_user: Modify(limit))
+}
+
+pub fn delete_forum_channel_rate_limit_per_user(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, rate_limit_per_user: Delete)
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn modify_forum_channel_permission_overwrites(
+  modify: ModifyForumChannel,
+  new overwrites: List(PermissionOverwrite),
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, permission_overwrites: Some(overwrites))
+}
+
+pub fn modify_forum_channel_parent_id(
+  modify: ModifyForumChannel,
+  new id: Snowflake(CategoryChannel),
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, parent_id: Modify(id))
+}
+
+pub fn unset_forum_channel_parent_id(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, parent_id: Delete)
+}
+
+pub fn modify_forum_channel_default_thread_auto_archive_duration(
+  modify: ModifyForumChannel,
+  new duration: ThreadAutoArchiveDuration,
+) -> ModifyForumChannel {
+  ModifyForumChannel(
+    ..modify,
+    default_thread_auto_archive_duration: Modify(duration),
+  )
+}
+
+pub fn unset_forum_channel_default_thread_auto_archive_duration(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, default_thread_auto_archive_duration: Delete)
+}
+
+pub fn modify_forum_channel_flags(
+  modify: ModifyForumChannel,
+  new flags: List(ForumChannelFlag),
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, flags: Some(flags))
+}
+
+pub fn modify_forum_channel_available_tags(
+  modify: ModifyForumChannel,
+  new tags: List(ForumTag),
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, available_tags: Some(tags))
+}
+
+pub fn modify_forum_channel_default_reaction(
+  modify: ModifyForumChannel,
+  new reaction: DefaultForumReaction,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, default_reaction: Modify(reaction))
+}
+
+pub fn unset_forum_channel_default_reaction(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, default_reaction: Delete)
+}
+
+pub fn modify_forum_channel_default_thread_rate_limit_per_user(
+  modify: ModifyForumChannel,
+  new limit: Duration,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, default_thread_rate_limit_per_user: Some(limit))
+}
+
+pub fn modify_forum_channel_default_sort_order(
+  modify: ModifyForumChannel,
+  new order: ForumSortOrder,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, default_sort_order: Modify(order))
+}
+
+pub fn unset_forum_channel_default_sort_order(
+  modify: ModifyForumChannel,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, default_sort_order: Delete)
+}
+
+pub fn modify_forum_channel_default_layout(
+  modify: ModifyForumChannel,
+  new layout: ForumLayout,
+) -> ModifyForumChannel {
+  ModifyForumChannel(..modify, default_layout: Some(layout))
+}
+
+/// Requires the `AllowManagingChannels` permission. 
+pub fn modify_forum_channel_request(
+  token token: Token,
+  channel_with_id channel_id: Snowflake(ForumChannel),
+  using modify: ModifyForumChannel,
+  reason reason: Option(String),
+) -> Request(String) {
+  let body = modify |> modify_forum_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(channel_id),
+    method: http.Patch,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+}
+
+pub fn modify_forum_channel_response(
+  response: Response(String),
+) -> Result(ForumChannel, RestError) {
+  handle_response(response, decode_with: forum_channel_decoder())
+}
+
+pub opaque type ModifyMediaChannel {
+  ModifyMediaChannel(
+    name: Option(String),
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Modification(Snowflake(CategoryChannel)),
+    default_thread_auto_archive_duration: Modification(
+      ThreadAutoArchiveDuration,
+    ),
+    flags: Option(List(MediaChannelFlag)),
+    available_tags: Option(List(ForumTag)),
+    default_reaction: Modification(DefaultForumReaction),
+    default_thread_rate_limit_per_user: Option(Duration),
+    default_sort_order: Modification(ForumSortOrder),
+  )
+}
+
+fn modify_media_channel_to_json(modify: ModifyMediaChannel) -> Json {
+  [
+    optional_to_json(modify.name, "name", json.string),
+    modification_to_json(modify.position, "position", json.int),
+    modification_to_json(modify.topic, "topic", json.string),
+    optional_to_json(modify.is_nsfw, "nsfw", json.bool),
+    modification_to_json(
+      modify.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(
+      modify.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    modification_to_json(modify.parent_id, "parent_id", snowflake_to_json),
+    modification_to_json(
+      modify.default_thread_auto_archive_duration,
+      "default_auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(modify.flags, "flags", flags_to_json(
+      _,
+      bits_media_channel_flags(),
+    )),
+    optional_to_json(modify.available_tags, "available_tags", json.array(
+      _,
+      forum_tag_to_json,
+    )),
+    modification_to_json(
+      modify.default_reaction,
+      "default_reaction_emoji",
+      default_forum_reaction_to_json,
+    ),
+    optional_to_json(
+      modify.default_thread_rate_limit_per_user,
+      "default_thread_rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    modification_to_json(
+      modify.default_sort_order,
+      "default_sort_order",
+      forum_sort_order_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_modify_media_channel() -> ModifyMediaChannel {
+  ModifyMediaChannel(
+    None,
+    Skip,
+    Skip,
+    None,
+    Skip,
+    None,
+    Skip,
+    Skip,
+    None,
+    None,
+    Skip,
+    None,
+    Skip,
+  )
+}
+
+pub fn modify_media_channel_name(
+  modify: ModifyMediaChannel,
+  new name: String,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, name: Some(name))
+}
+
+pub fn modify_media_channel_position(
+  modify: ModifyMediaChannel,
+  new position: Int,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, position: Modify(position))
+}
+
+pub fn unset_media_channel_position(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, position: Delete)
+}
+
+pub fn modify_media_channel_topic(
+  modify: ModifyMediaChannel,
+  new topic: String,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, topic: Modify(topic))
+}
+
+pub fn delete_media_channel_topic(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, topic: Delete)
+}
+
+pub fn set_media_channel_as_nsfw(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, is_nsfw: Some(True))
+}
+
+pub fn set_media_channel_as_sfw(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, is_nsfw: Some(False))
+}
+
+pub fn modify_media_channel_rate_limit_per_user(
+  modify: ModifyMediaChannel,
+  new limit: Duration,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, rate_limit_per_user: Modify(limit))
+}
+
+pub fn delete_media_channel_rate_limit_per_user(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, rate_limit_per_user: Delete)
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn modify_media_channel_permission_overwrites(
+  modify: ModifyMediaChannel,
+  new overwrites: List(PermissionOverwrite),
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, permission_overwrites: Some(overwrites))
+}
+
+pub fn modify_media_channel_parent_id(
+  modify: ModifyMediaChannel,
+  new id: Snowflake(CategoryChannel),
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, parent_id: Modify(id))
+}
+
+pub fn unset_media_channel_parent_id(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, parent_id: Delete)
+}
+
+pub fn modify_media_channel_default_thread_auto_archive_duration(
+  modify: ModifyMediaChannel,
+  new duration: ThreadAutoArchiveDuration,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(
+    ..modify,
+    default_thread_auto_archive_duration: Modify(duration),
+  )
+}
+
+pub fn unset_media_channel_default_thread_auto_archive_duration(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, default_thread_auto_archive_duration: Delete)
+}
+
+pub fn modify_media_channel_flags(
+  modify: ModifyMediaChannel,
+  new flags: List(MediaChannelFlag),
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, flags: Some(flags))
+}
+
+pub fn modify_media_channel_available_tags(
+  modify: ModifyMediaChannel,
+  new tags: List(ForumTag),
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, available_tags: Some(tags))
+}
+
+pub fn modify_media_channel_default_reaction(
+  modify: ModifyMediaChannel,
+  new reaction: DefaultForumReaction,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, default_reaction: Modify(reaction))
+}
+
+pub fn unset_media_channel_default_reaction(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, default_reaction: Delete)
+}
+
+pub fn modify_media_channel_default_thread_rate_limit_per_user(
+  modify: ModifyMediaChannel,
+  new limit: Duration,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, default_thread_rate_limit_per_user: Some(limit))
+}
+
+pub fn modify_media_channel_default_sort_order(
+  modify: ModifyMediaChannel,
+  new order: ForumSortOrder,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, default_sort_order: Modify(order))
+}
+
+pub fn unset_media_channel_default_sort_order(
+  modify: ModifyMediaChannel,
+) -> ModifyMediaChannel {
+  ModifyMediaChannel(..modify, default_sort_order: Delete)
+}
+
+/// Requires the `AllowManagingChannels` permission. 
+pub fn modify_media_channel_request(
+  token token: Token,
+  channel_with_id channel_id: Snowflake(MediaChannel),
+  using modify: ModifyMediaChannel,
+  reason reason: Option(String),
+) -> Request(String) {
+  let body = modify |> modify_media_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(channel_id),
+    method: http.Patch,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+}
+
+pub fn modify_media_channel_response(
+  response: Response(String),
+) -> Result(MediaChannel, RestError) {
+  handle_response(response, decode_with: media_channel_decoder())
 }
