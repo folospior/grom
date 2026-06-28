@@ -1305,11 +1305,13 @@ pub fn leave_guild_response(
 }
 
 pub type Channel {
-  Channel(id: Snowflake(Channel), data: ChannelData)
-}
-
-pub type ChannelData {
-  ChannelGuild(GuildChannel)
+  ChannelText(TextChannel)
+  ChannelVoice(VoiceChannel)
+  ChannelCategory(CategoryChannel)
+  ChannelAnnouncement(AnnouncementChannel)
+  ChannelStage(StageChannel)
+  ChannelForum(ForumChannel)
+  ChannelMedia(MediaChannel)
   ChannelDm(DmChannel)
   ChannelThread(Thread)
 }
@@ -1317,6 +1319,8 @@ pub type ChannelData {
 pub type Thread {
   Thread(
     id: Snowflake(Thread),
+    channel_id: Snowflake(Channel),
+    guild_channel_id: Snowflake(GuildChannel),
     type_: ThreadType,
     /// Is `None` in some gateway events.
     guild_id: Option(Snowflake(Guild)),
@@ -1361,6 +1365,8 @@ pub type Thread {
 
 fn thread_decoder() -> Decoder(Thread) {
   use id <- decode.field("id", snowflake_decoder())
+  use channel_id <- decode.field("id", snowflake_decoder())
+  use guild_channel_id <- decode.field("id", snowflake_decoder())
   use type_ <- decode.field("type", thread_type_decoder())
   use guild_id <- decode.optional_field(
     "guild_id",
@@ -1416,6 +1422,8 @@ fn thread_decoder() -> Decoder(Thread) {
   )
   decode.success(Thread(
     id:,
+    channel_id:,
+    guild_channel_id:,
     type_:,
     guild_id:,
     name:,
@@ -1502,18 +1510,6 @@ fn bits_thread_flags() -> List(#(Int, ThreadFlag)) {
   [#(int.bitwise_shift_left(1, 1), ThreadIsPinned)]
 }
 
-pub fn guild_channel_id_to_channel_id(
-  id: Snowflake(GuildChannel),
-) -> Snowflake(Channel) {
-  Snowflake(id.id)
-}
-
-pub fn category_channel_id_to_channel_id(
-  id: Snowflake(CategoryChannel),
-) -> Snowflake(Channel) {
-  Snowflake(id.id)
-}
-
 pub type ThreadType {
   AnnouncementThread
   PublicThread
@@ -1521,68 +1517,38 @@ pub type ThreadType {
 }
 
 pub type GuildChannel {
-  GuildChannel(
-    id: Snowflake(GuildChannel),
-    data: GuildChannelData,
-    permission_overwrites: List(PermissionOverwrite),
-    /// Is `None` in some gateway events.
-    guild_id: Option(Snowflake(Guild)),
-    /// Channels with the same position are sorted by ID.
-    position: Int,
-    name: String,
-  )
+  GuildChannelText(TextChannel)
+  GuildChannelVoice(VoiceChannel)
+  GuildChannelCategory(CategoryChannel)
+  GuildChannelAnnouncement(AnnouncementChannel)
+  GuildChannelStage(StageChannel)
+  GuildChannelForum(ForumChannel)
+  GuildChannelMedia(MediaChannel)
 }
 
 fn guild_channel_decoder() -> Decoder(GuildChannel) {
-  use id <- decode.field("id", snowflake_decoder())
-  use data <- decode.then(guild_channel_data_decoder())
-  use permission_overwrites <- decode.optional_field(
-    "permission_overwrites",
-    [],
-    decode.list(permission_overwrite_decoder()),
-  )
-  use guild_id <- decode.optional_field(
-    "guild_id",
-    None,
-    decode.optional(snowflake_decoder()),
-  )
-  use position <- decode.field("position", decode.int)
-  use name <- decode.field("name", decode.string)
-  decode.success(GuildChannel(
-    id:,
-    data:,
-    permission_overwrites:,
-    guild_id:,
-    position:,
-    name:,
-  ))
-}
-
-pub type GuildChannelData {
-  ChannelText(TextChannel)
-  ChannelVoice(VoiceChannel)
-  ChannelCategory(CategoryChannel)
-  ChannelAnnouncement(AnnouncementChannel)
-  ChannelStage(StageChannel)
-  ChannelForum(ForumChannel)
-  ChannelMedia(MediaChannel)
-}
-
-fn guild_channel_data_decoder() -> Decoder(GuildChannelData) {
   use type_ <- decode.field("type", decode.int)
 
   case type_ {
-    0 -> decode.map(text_channel_decoder(), ChannelText)
-    2 -> decode.map(voice_channel_decoder(), ChannelVoice)
-    4 -> decode.map(category_channel_decoder(), ChannelCategory)
-    5 -> decode.map(announcement_channel_decoder(), ChannelAnnouncement)
-    13 -> decode.map(stage_channel_decoder(), ChannelStage)
-    15 -> decode.map(forum_channel_decoder(), ChannelForum)
-    16 -> decode.map(media_channel_decoder(), ChannelMedia)
+    0 -> decode.map(text_channel_decoder(), GuildChannelText)
+    2 -> decode.map(voice_channel_decoder(), GuildChannelVoice)
+    4 -> decode.map(category_channel_decoder(), GuildChannelCategory)
+    5 -> decode.map(announcement_channel_decoder(), GuildChannelAnnouncement)
+    13 -> decode.map(stage_channel_decoder(), GuildChannelStage)
+    15 -> decode.map(forum_channel_decoder(), GuildChannelForum)
+    16 -> decode.map(media_channel_decoder(), GuildChannelMedia)
     _ ->
       decode.failure(
-        ChannelCategory(CategoryChannel(Snowflake(0))),
-        "GuildChannelData",
+        GuildChannelCategory(CategoryChannel(
+          Snowflake(0),
+          Snowflake(0),
+          Snowflake(0),
+          [],
+          None,
+          0,
+          "",
+        )),
+        "GuildChannel",
       )
   }
 }
@@ -1590,6 +1556,12 @@ fn guild_channel_data_decoder() -> Decoder(GuildChannelData) {
 pub type TextChannel {
   TextChannel(
     id: Snowflake(TextChannel),
+    channel_id: Snowflake(Channel),
+    guild_channel_id: Snowflake(GuildChannel),
+    permission_overwrites: List(PermissionOverwrite),
+    guild_id: Option(Snowflake(Guild)),
+    position: Int,
+    name: String,
     topic: Option(String),
     is_nsfw: Bool,
     /// Is `None` if there are no messages in the channel.
@@ -1611,6 +1583,20 @@ pub type TextChannel {
 
 fn text_channel_decoder() -> Decoder(TextChannel) {
   use id <- decode.field("id", snowflake_decoder())
+  use channel_id <- decode.field("id", snowflake_decoder())
+  use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use permission_overwrites <- decode.optional_field(
+    "permission_overwrites",
+    [],
+    decode.list(of: permission_overwrite_decoder()),
+  )
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use position <- decode.field("position", decode.int)
+  use name <- decode.field("name", decode.string)
   use topic <- decode.optional_field(
     "topic",
     None,
@@ -1646,6 +1632,12 @@ fn text_channel_decoder() -> Decoder(TextChannel) {
   )
   decode.success(TextChannel(
     id:,
+    channel_id:,
+    guild_channel_id:,
+    permission_overwrites:,
+    guild_id:,
+    position:,
+    name:,
     topic:,
     is_nsfw:,
     last_message_id:,
@@ -1660,6 +1652,7 @@ fn text_channel_decoder() -> Decoder(TextChannel) {
 pub type DmChannel {
   DmChannel(
     id: Snowflake(DmChannel),
+    channel_id: Snowflake(Channel),
     /// Is `None` if there are no messages in the channel.
     last_message_id: Option(Snowflake(Message)),
     recipient: User,
@@ -1671,6 +1664,13 @@ pub type DmChannel {
 pub type VoiceChannel {
   VoiceChannel(
     id: Snowflake(VoiceChannel),
+    channel_id: Snowflake(Channel),
+    guild_channel_id: Snowflake(GuildChannel),
+    movable_channel_id: Snowflake(MovableChannel),
+    permission_overwrites: List(PermissionOverwrite),
+    guild_id: Option(Snowflake(Guild)),
+    position: Int,
+    name: String,
     is_nsfw: Bool,
     /// Is `None` if no messages have been sent in the voice channel adjacent text channel.
     last_message_id: Option(Snowflake(Message)),
@@ -1694,6 +1694,21 @@ pub type VoiceChannel {
 
 fn voice_channel_decoder() -> Decoder(VoiceChannel) {
   use id <- decode.field("id", snowflake_decoder())
+  use channel_id <- decode.field("id", snowflake_decoder())
+  use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use movable_channel_id <- decode.field("id", snowflake_decoder())
+  use permission_overwrites <- decode.optional_field(
+    "permission_overwrites",
+    [],
+    decode.list(of: permission_overwrite_decoder()),
+  )
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use position <- decode.field("position", decode.int)
+  use name <- decode.field("name", decode.string)
   use is_nsfw <- decode.field("nsfw", decode.bool)
   use last_message_id <- decode.optional_field(
     "last_message_id",
@@ -1727,6 +1742,13 @@ fn voice_channel_decoder() -> Decoder(VoiceChannel) {
   )
   decode.success(VoiceChannel(
     id:,
+    channel_id:,
+    guild_channel_id:,
+    movable_channel_id:,
+    permission_overwrites:,
+    guild_id:,
+    position:,
+    name:,
     is_nsfw:,
     last_message_id:,
     bitrate:,
@@ -1790,17 +1812,53 @@ fn thread_auto_archive_duration_decoder() -> Decoder(ThreadAutoArchiveDuration) 
 }
 
 pub type CategoryChannel {
-  CategoryChannel(id: Snowflake(CategoryChannel))
+  CategoryChannel(
+    id: Snowflake(CategoryChannel),
+    channel_id: Snowflake(Channel),
+    guild_channel_id: Snowflake(GuildChannel),
+    permission_overwrites: List(PermissionOverwrite),
+    guild_id: Option(Snowflake(Guild)),
+    position: Int,
+    name: String,
+  )
 }
 
 fn category_channel_decoder() -> Decoder(CategoryChannel) {
   use id <- decode.field("id", snowflake_decoder())
-  decode.success(CategoryChannel(id:))
+  use channel_id <- decode.field("id", snowflake_decoder())
+  use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use permission_overwrites <- decode.optional_field(
+    "permission_overwrites",
+    [],
+    decode.list(of: permission_overwrite_decoder()),
+  )
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use position <- decode.field("position", decode.int)
+  use name <- decode.field("name", decode.string)
+  decode.success(CategoryChannel(
+    id:,
+    channel_id:,
+    guild_channel_id:,
+    permission_overwrites:,
+    guild_id:,
+    position:,
+    name:,
+  ))
 }
 
 pub type AnnouncementChannel {
   AnnouncementChannel(
     id: Snowflake(AnnouncementChannel),
+    channel_id: Snowflake(Channel),
+    guild_channel_id: Snowflake(GuildChannel),
+    permission_overwrites: List(PermissionOverwrite),
+    guild_id: Option(Snowflake(Guild)),
+    position: Int,
+    name: String,
     topic: Option(String),
     is_nsfw: Bool,
     /// Is `None` if there are no messages in the channel.
@@ -1815,6 +1873,20 @@ pub type AnnouncementChannel {
 
 fn announcement_channel_decoder() -> Decoder(AnnouncementChannel) {
   use id <- decode.field("id", snowflake_decoder())
+  use channel_id <- decode.field("id", snowflake_decoder())
+  use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use permission_overwrites <- decode.optional_field(
+    "permission_overwrites",
+    [],
+    decode.list(of: permission_overwrite_decoder()),
+  )
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use position <- decode.field("position", decode.int)
+  use name <- decode.field("name", decode.string)
   use topic <- decode.optional_field(
     "topic",
     None,
@@ -1842,6 +1914,12 @@ fn announcement_channel_decoder() -> Decoder(AnnouncementChannel) {
   )
   decode.success(AnnouncementChannel(
     id:,
+    channel_id:,
+    guild_channel_id:,
+    permission_overwrites:,
+    guild_id:,
+    position:,
+    name:,
     topic:,
     is_nsfw:,
     last_message_id:,
@@ -1854,6 +1932,13 @@ fn announcement_channel_decoder() -> Decoder(AnnouncementChannel) {
 pub type StageChannel {
   StageChannel(
     id: Snowflake(StageChannel),
+    channel_id: Snowflake(Channel),
+    guild_channel_id: Snowflake(GuildChannel),
+    movable_channel_id: Snowflake(MovableChannel),
+    permission_overwrites: List(PermissionOverwrite),
+    guild_id: Option(Snowflake(Guild)),
+    position: Int,
+    name: String,
     is_nsfw: Bool,
     /// Is `None` if no messages have been sent in the stage channel adjacent text channel.
     last_message_id: Option(Snowflake(Message)),
@@ -1877,6 +1962,21 @@ pub type StageChannel {
 
 fn stage_channel_decoder() -> Decoder(StageChannel) {
   use id <- decode.field("id", snowflake_decoder())
+  use channel_id <- decode.field("id", snowflake_decoder())
+  use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use movable_channel_id <- decode.field("id", snowflake_decoder())
+  use permission_overwrites <- decode.optional_field(
+    "permission_overwrites",
+    [],
+    decode.list(of: permission_overwrite_decoder()),
+  )
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use position <- decode.field("position", decode.int)
+  use name <- decode.field("name", decode.string)
   use is_nsfw <- decode.field("nsfw", decode.bool)
   use last_message_id <- decode.optional_field(
     "last_message_id",
@@ -1909,6 +2009,13 @@ fn stage_channel_decoder() -> Decoder(StageChannel) {
   )
   decode.success(StageChannel(
     id:,
+    channel_id:,
+    guild_channel_id:,
+    movable_channel_id:,
+    permission_overwrites:,
+    guild_id:,
+    position:,
+    name:,
     is_nsfw:,
     last_message_id:,
     bitrate:,
@@ -1920,13 +2027,15 @@ fn stage_channel_decoder() -> Decoder(StageChannel) {
   ))
 }
 
-pub fn thread_id_to_channel_id(id: Snowflake(Thread)) -> Snowflake(Channel) {
-  Snowflake(id.id)
-}
-
 pub type ForumChannel {
   ForumChannel(
     id: Snowflake(ForumChannel),
+    channel_id: Snowflake(Channel),
+    guild_channel_id: Snowflake(GuildChannel),
+    permission_overwrites: List(PermissionOverwrite),
+    guild_id: Option(Snowflake(Guild)),
+    position: Int,
+    name: String,
     topic: Option(String),
     /// The amount of time between a user has to wait between creating threads.
     ///
@@ -1948,6 +2057,20 @@ pub type ForumChannel {
 
 fn forum_channel_decoder() -> Decoder(ForumChannel) {
   use id <- decode.field("id", snowflake_decoder())
+  use channel_id <- decode.field("id", snowflake_decoder())
+  use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use permission_overwrites <- decode.optional_field(
+    "permission_overwrites",
+    [],
+    decode.list(of: permission_overwrite_decoder()),
+  )
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use position <- decode.field("position", decode.int)
+  use name <- decode.field("name", decode.string)
   use topic <- decode.optional_field(
     "topic",
     None,
@@ -1995,6 +2118,12 @@ fn forum_channel_decoder() -> Decoder(ForumChannel) {
   )
   decode.success(ForumChannel(
     id:,
+    channel_id:,
+    guild_channel_id:,
+    permission_overwrites:,
+    guild_id:,
+    position:,
+    name:,
     topic:,
     rate_limit_per_user:,
     last_thread_id:,
@@ -2012,6 +2141,12 @@ fn forum_channel_decoder() -> Decoder(ForumChannel) {
 pub type MediaChannel {
   MediaChannel(
     id: Snowflake(MediaChannel),
+    channel_id: Snowflake(Channel),
+    guild_channel_id: Snowflake(GuildChannel),
+    permission_overwrites: List(PermissionOverwrite),
+    guild_id: Option(Snowflake(Guild)),
+    position: Int,
+    name: String,
     topic: Option(String),
     /// The amount of time between a user has to wait between creating threads.
     ///
@@ -2032,6 +2167,20 @@ pub type MediaChannel {
 
 fn media_channel_decoder() -> Decoder(MediaChannel) {
   use id <- decode.field("id", snowflake_decoder())
+  use channel_id <- decode.field("id", snowflake_decoder())
+  use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use permission_overwrites <- decode.optional_field(
+    "permission_overwrites",
+    [],
+    decode.list(of: permission_overwrite_decoder()),
+  )
+  use guild_id <- decode.optional_field(
+    "guild_id",
+    None,
+    decode.optional(snowflake_decoder()),
+  )
+  use position <- decode.field("position", decode.int)
+  use name <- decode.field("name", decode.string)
   use topic <- decode.optional_field(
     "topic",
     None,
@@ -2074,6 +2223,12 @@ fn media_channel_decoder() -> Decoder(MediaChannel) {
   )
   decode.success(MediaChannel(
     id:,
+    channel_id:,
+    guild_channel_id:,
+    permission_overwrites:,
+    guild_id:,
+    position:,
+    name:,
     topic:,
     rate_limit_per_user:,
     last_thread_id:,
@@ -2595,6 +2750,7 @@ pub type Sticker {
 pub type StandardSticker {
   StandardSticker(
     id: Snowflake(StandardSticker),
+    sticker_id: Snowflake(Sticker),
     /// ID of the pack from which this sticker comes from.
     pack_id: Snowflake(StickerPack),
     name: String,
@@ -2612,6 +2768,7 @@ pub type StandardSticker {
 pub type GuildSticker {
   GuildSticker(
     id: Snowflake(GuildSticker),
+    sticker_id: Snowflake(Sticker),
     name: String,
     /// Is `None` if the sticker doesn't have a description.
     description: Option(String),
@@ -2627,6 +2784,7 @@ pub type GuildSticker {
 
 fn guild_sticker_decoder() -> Decoder(GuildSticker) {
   use id <- decode.field("id", snowflake_decoder())
+  use sticker_id <- decode.field("id", snowflake_decoder())
   use name <- decode.field("name", decode.string)
   use description <- decode.field("description", decode.optional(decode.string))
   use tags <- decode.field("tags", decode.string)
@@ -2636,6 +2794,7 @@ fn guild_sticker_decoder() -> Decoder(GuildSticker) {
   use uploader <- decode.field("user", user_decoder())
   decode.success(GuildSticker(
     id:,
+    sticker_id:,
     name:,
     description:,
     tags:,
@@ -2644,24 +2803,6 @@ fn guild_sticker_decoder() -> Decoder(GuildSticker) {
     guild_id:,
     uploader:,
   ))
-}
-
-/// Used for the `get_sticker` function.
-pub fn guild_sticker_id_to_sticker_id(
-  id: Snowflake(GuildSticker),
-) -> Snowflake(Sticker) {
-  id
-  |> snowflake_to_int
-  |> new_snowflake
-}
-
-/// Used for the `get_sticker` function.
-pub fn standard_sticker_id_to_sticker_id(
-  id: Snowflake(StandardSticker),
-) -> Snowflake(Sticker) {
-  id
-  |> snowflake_to_int
-  |> new_snowflake
 }
 
 pub type StickerFormatType {
@@ -4342,33 +4483,9 @@ pub fn modify_guild_response(
   handle_response(response, decode_with: guild_decoder())
 }
 
-fn channel_decoder() -> Decoder(Channel) {
-  use id <- decode.field("id", snowflake_decoder())
-  use type_ <- decode.field("type", decode.int)
-  use data <- decode.then(case type_ {
-    1 -> decode.map(dm_channel_decoder(), ChannelDm)
-    10 | 11 | 12 -> decode.map(thread_decoder(), ChannelThread)
-    0 | 2 | 4 | 5 | 13 | 15 | 16 ->
-      decode.map(guild_channel_decoder(), ChannelGuild)
-    _ ->
-      decode.failure(
-        ChannelGuild(GuildChannel(
-          Snowflake(0),
-          ChannelCategory(CategoryChannel(Snowflake(0))),
-          [],
-          None,
-          0,
-          "",
-        )),
-        "ChannelData",
-      )
-  })
-
-  decode.success(Channel(id:, data:))
-}
-
 fn dm_channel_decoder() -> Decoder(DmChannel) {
   use id <- decode.field("id", snowflake_decoder())
+  use channel_id <- decode.field("id", snowflake_decoder())
   use last_message_id <- decode.optional_field(
     "last_message_id",
     None,
@@ -4383,6 +4500,7 @@ fn dm_channel_decoder() -> Decoder(DmChannel) {
 
   decode.success(DmChannel(
     id:,
+    channel_id:,
     last_message_id:,
     recipient:,
     last_pin_timestamp:,
@@ -4457,6 +4575,143 @@ fn create_text_channel_to_json(create: CreateTextChannel) -> Json {
   |> json.object
 }
 
+pub opaque type CreateAnnouncementChannel {
+  CreateAnnouncementChannel(
+    name: String,
+    topic: Option(String),
+    position: Option(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Option(Snowflake(CategoryChannel)),
+    is_nsfw: Option(Bool),
+    default_thread_auto_archive_duration: Option(ThreadAutoArchiveDuration),
+    default_thread_rate_limit_per_user: Option(Duration),
+  )
+}
+
+fn create_announcement_channel_to_json(
+  create: CreateAnnouncementChannel,
+) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    Ok(#("type", json.int(5))),
+    optional_to_json(create.topic, "topic", json.string),
+    optional_to_json(create.position, "position", json.int),
+    optional_to_json(
+      create.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    optional_to_json(create.parent_id, "parent_id", snowflake_to_json),
+    optional_to_json(create.is_nsfw, "nsfw", json.bool),
+    optional_to_json(
+      create.default_thread_auto_archive_duration,
+      "default_auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(
+      create.default_thread_rate_limit_per_user,
+      "default_thread_rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn create_announcement_channel_request(
+  token token: Token,
+  in_guild_with_id guild_id: Snowflake(Guild),
+  using create: CreateAnnouncementChannel,
+  reason reason: Option(String),
+) -> Request(String) {
+  let body = create |> create_announcement_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/guilds/" <> snowflake_to_string(guild_id) <> "/channels",
+    method: http.Post,
+  )
+  |> request_with_reason(reason)
+  |> request.set_body(body)
+}
+
+pub fn create_announcement_channel_response(
+  response: Response(String),
+) -> Result(AnnouncementChannel, RestError) {
+  handle_response(response, decode_with: announcement_channel_decoder())
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn new_create_announcement_channel(
+  named name: String,
+) -> CreateAnnouncementChannel {
+  CreateAnnouncementChannel(name, None, None, None, None, None, None, None)
+}
+
+pub fn create_announcement_channel_with_topic(
+  create: CreateAnnouncementChannel,
+  topic: String,
+) -> CreateAnnouncementChannel {
+  CreateAnnouncementChannel(..create, topic: Some(topic))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+/// Channels with the same position are sorted by ID (new channel will be lower)
+pub fn create_announcement_channel_at_position(
+  create: CreateAnnouncementChannel,
+  position: Int,
+) -> CreateAnnouncementChannel {
+  CreateAnnouncementChannel(..create, position: Some(position))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn create_announcement_channel_with_permission_overwrites(
+  create: CreateAnnouncementChannel,
+  overwrites: List(PermissionOverwrite),
+) -> CreateAnnouncementChannel {
+  CreateAnnouncementChannel(..create, permission_overwrites: Some(overwrites))
+}
+
+/// Puts the channel in a category.
+/// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
+pub fn create_announcement_channel_with_parent_id(
+  create: CreateAnnouncementChannel,
+  parent_id: Snowflake(CategoryChannel),
+) -> CreateAnnouncementChannel {
+  CreateAnnouncementChannel(..create, parent_id: Some(parent_id))
+}
+
+/// Creates an age-restricted announcement channel.
+pub fn create_nsfw_announcement_channel(
+  create: CreateAnnouncementChannel,
+) -> CreateAnnouncementChannel {
+  CreateAnnouncementChannel(..create, is_nsfw: Some(True))
+}
+
+/// Controls the default amount of time after which inactive threads are archived in the channel.
+pub fn create_announcement_channel_with_thread_auto_archive_duration(
+  create: CreateAnnouncementChannel,
+  duration: ThreadAutoArchiveDuration,
+) -> CreateAnnouncementChannel {
+  CreateAnnouncementChannel(
+    ..create,
+    default_thread_auto_archive_duration: Some(duration),
+  )
+}
+
+/// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
+pub fn create_announcement_channel_with_thread_rate_limit_per_user(
+  create: CreateAnnouncementChannel,
+  rate_limit_per_user: Duration,
+) -> CreateAnnouncementChannel {
+  CreateAnnouncementChannel(
+    ..create,
+    default_thread_rate_limit_per_user: Some(rate_limit_per_user),
+  )
+}
+
 fn duration_to_json_seconds(duration: Duration) -> Json {
   duration
   |> duration.to_seconds
@@ -4484,8 +4739,8 @@ pub fn create_text_channel_request(
 
 pub fn create_text_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(TextChannel, RestError) {
+  handle_response(response, decode_with: text_channel_decoder())
 }
 
 /// Requires the `AllowManagingChannels` permission.
@@ -4629,8 +4884,8 @@ pub fn create_voice_channel_request(
 
 pub fn create_voice_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(VoiceChannel, RestError) {
+  handle_response(response, decode_with: voice_channel_decoder())
 }
 
 pub fn new_create_voice_channel(named name: String) -> CreateVoiceChannel {
@@ -4760,8 +5015,8 @@ pub fn create_category_channel_request(
 
 pub fn create_category_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(CategoryChannel, RestError) {
+  handle_response(response, decode_with: category_channel_decoder())
 }
 
 pub fn new_create_category_channel(
@@ -4854,8 +5109,8 @@ pub fn create_stage_channel_request(
 
 pub fn create_stage_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(StageChannel, RestError) {
+  handle_response(response, decode_with: stage_channel_decoder())
 }
 
 pub fn new_create_stage_channel(named name: String) -> CreateStageChannel {
@@ -5032,8 +5287,8 @@ pub fn create_forum_channel_request(
 
 pub fn create_forum_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(ForumChannel, RestError) {
+  handle_response(response, decode_with: forum_channel_decoder())
 }
 
 pub fn new_create_forum_channel(named name: String) -> CreateForumChannel {
@@ -5230,8 +5485,8 @@ pub fn create_media_channel_request(
 
 pub fn create_media_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(MediaChannel, RestError) {
+  handle_response(response, decode_with: media_channel_decoder())
 }
 
 pub fn new_create_media_channel(named name: String) -> CreateMediaChannel {
@@ -5611,18 +5866,6 @@ pub opaque type ModifyGuildMember {
 
 /// A movable channel is either a voice channel or a stage channel. (because you can move members to and from it)
 pub type MovableChannel
-
-pub fn voice_channel_id_to_movable_channel_id(
-  id: Snowflake(VoiceChannel),
-) -> Snowflake(MovableChannel) {
-  Snowflake(id.id)
-}
-
-pub fn stage_channel_id_to_movable_channel_id(
-  id: Snowflake(StageChannel),
-) -> Snowflake(MovableChannel) {
-  Snowflake(id.id)
-}
 
 pub fn new_modify_guild_member() -> ModifyGuildMember {
   ModifyGuildMember(Skip, Skip, Skip, Skip, Skip, Skip, Skip)
@@ -7033,30 +7276,6 @@ fn scheduled_event_decoder() -> Decoder(ScheduledEvent) {
   ))
 }
 
-pub fn stage_channel_id_to_guild_channel_id(
-  id: Snowflake(StageChannel),
-) -> Snowflake(GuildChannel) {
-  Snowflake(id.id)
-}
-
-pub fn stage_channel_id_to_channel_id(
-  id: Snowflake(StageChannel),
-) -> Snowflake(Channel) {
-  Snowflake(id.id)
-}
-
-pub fn voice_channel_id_to_guild_channel_id(
-  id: Snowflake(VoiceChannel),
-) -> Snowflake(GuildChannel) {
-  Snowflake(id.id)
-}
-
-pub fn voice_channel_id_to_channel_id(
-  id: Snowflake(VoiceChannel),
-) -> Snowflake(Channel) {
-  Snowflake(id.id)
-}
-
 pub type ScheduledEventLocation {
   ScheduledEventInStageChannel(
     channel_id: Snowflake(StageChannel),
@@ -8331,6 +8550,34 @@ pub fn get_channel_response(
   handle_response(response, decode_with: channel_decoder())
 }
 
+fn channel_decoder() -> Decoder(Channel) {
+  use type_ <- decode.field("type", decode.int)
+  case type_ {
+    0 -> decode.map(text_channel_decoder(), ChannelText)
+    1 -> decode.map(dm_channel_decoder(), ChannelDm)
+    2 -> decode.map(voice_channel_decoder(), ChannelVoice)
+    4 -> decode.map(category_channel_decoder(), ChannelCategory)
+    5 -> decode.map(announcement_channel_decoder(), ChannelAnnouncement)
+    10 | 11 | 12 -> decode.map(thread_decoder(), ChannelThread)
+    13 -> decode.map(stage_channel_decoder(), ChannelStage)
+    15 -> decode.map(forum_channel_decoder(), ChannelForum)
+    16 -> decode.map(media_channel_decoder(), ChannelMedia)
+    _ ->
+      decode.failure(
+        ChannelCategory(CategoryChannel(
+          Snowflake(0),
+          Snowflake(0),
+          Snowflake(0),
+          [],
+          None,
+          0,
+          "",
+        )),
+        "Channel",
+      )
+  }
+}
+
 pub opaque type ModifyTextChannel {
   ModifyTextChannel(
     name: Option(String),
@@ -8528,10 +8775,19 @@ pub fn modify_text_channel_request(
   |> request.set_body(body)
 }
 
+/// Use [`modify_text_channel_with_conversion_response`](#modify_text_channel_with_conversion_response)
+/// if you converted the text channel into announcement channel.
 pub fn modify_text_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(TextChannel, RestError) {
+  handle_response(response, decode_with: text_channel_decoder())
+}
+
+/// Use this if you converted the text channel to an announcement channel.
+pub fn modify_text_channel_with_conversion_response(
+  response: Response(String),
+) -> Result(AnnouncementChannel, RestError) {
+  handle_response(response, decode_with: announcement_channel_decoder())
 }
 
 pub opaque type ModifyVoiceChannel {
@@ -8717,8 +8973,8 @@ pub fn modify_voice_channel_request(
 
 pub fn modify_voice_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(VoiceChannel, RestError) {
+  handle_response(response, decode_with: voice_channel_decoder())
 }
 
 pub opaque type ModifyCategoryChannel {
@@ -8798,8 +9054,8 @@ pub fn modify_category_channel_request(
 
 pub fn modify_category_channel_response(
   response: Response(String),
-) -> Result(GuildChannel, RestError) {
-  handle_response(response, decode_with: guild_channel_decoder())
+) -> Result(CategoryChannel, RestError) {
+  handle_response(response, decode_with: category_channel_decoder())
 }
 
 pub opaque type ModifyAnnouncementChannel {
@@ -8815,6 +9071,66 @@ pub opaque type ModifyAnnouncementChannel {
       ThreadAutoArchiveDuration,
     ),
   )
+}
+
+fn modify_announcement_channel_to_json(
+  modify: ModifyAnnouncementChannel,
+) -> Json {
+  [
+    optional_to_json(modify.name, "name", json.string),
+    case modify.switch_to_text {
+      Some(True) -> Ok(#("type", json.int(0)))
+      _ -> Error(Nil)
+    },
+    modification_to_json(modify.position, "position", json.int),
+    modification_to_json(modify.topic, "topic", json.string),
+    optional_to_json(modify.is_nsfw, "nsfw", json.bool),
+    optional_to_json(
+      modify.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    modification_to_json(modify.parent_id, "parent_id", snowflake_to_json),
+    modification_to_json(
+      modify.default_thread_auto_archive_duration,
+      "default_auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn modify_announcement_channel_request(
+  token token: Token,
+  channel_with_id id: Snowflake(AnnouncementChannel),
+  using modify: ModifyAnnouncementChannel,
+  reason reason: Option(String),
+) -> Request(String) {
+  let body = modify |> modify_announcement_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(id),
+    method: http.Patch,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+}
+
+/// Use [`modify_announcement_channel_with_conversion_response`](#modify_announcement_channel_with_conversion_response)
+/// if you converted the announcement channel into a text channel.
+pub fn modify_announcement_channel_response(
+  response: Response(String),
+) -> Result(AnnouncementChannel, RestError) {
+  handle_response(response, decode_with: announcement_channel_decoder())
+}
+
+/// Use this if you converted the announcement channel to a text channel.
+pub fn modify_announcement_channel_with_conversion_response(
+  response: Response(String),
+) -> Result(TextChannel, RestError) {
+  handle_response(response, decode_with: text_channel_decoder())
 }
 
 pub fn new_modify_announcement_channel() -> ModifyAnnouncementChannel {
@@ -8847,4 +9163,70 @@ pub fn unset_announcement_channel_position(
   modify: ModifyAnnouncementChannel,
 ) -> ModifyAnnouncementChannel {
   ModifyAnnouncementChannel(..modify, position: Delete)
+}
+
+pub fn modify_announcement_channel_topic(
+  modify: ModifyAnnouncementChannel,
+  new topic: String,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, topic: Modify(topic))
+}
+
+pub fn delete_announcement_channel_topic(
+  modify: ModifyAnnouncementChannel,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, topic: Delete)
+}
+
+pub fn set_announcement_channel_as_nsfw(
+  modify: ModifyAnnouncementChannel,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, is_nsfw: Some(True))
+}
+
+pub fn set_announcement_channel_as_sfw(
+  modify: ModifyAnnouncementChannel,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, is_nsfw: Some(False))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn modify_announcement_channel_permission_overwrites(
+  modify: ModifyAnnouncementChannel,
+  new overwrites: List(PermissionOverwrite),
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, permission_overwrites: Some(overwrites))
+}
+
+pub fn modify_announcement_channel_parent_id(
+  modify: ModifyAnnouncementChannel,
+  new parent_id: Snowflake(CategoryChannel),
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, parent_id: Modify(parent_id))
+}
+
+pub fn unset_announcement_channel_parent_id(
+  modify: ModifyAnnouncementChannel,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(..modify, parent_id: Delete)
+}
+
+pub fn modify_announcement_channel_default_thread_auto_archive_duration(
+  modify: ModifyAnnouncementChannel,
+  new duration: ThreadAutoArchiveDuration,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(
+    ..modify,
+    default_thread_auto_archive_duration: Modify(duration),
+  )
+}
+
+pub fn unset_announcement_channel_default_thread_auto_archive_duration(
+  modify: ModifyAnnouncementChannel,
+) -> ModifyAnnouncementChannel {
+  ModifyAnnouncementChannel(
+    ..modify,
+    default_thread_auto_archive_duration: Delete,
+  )
 }
