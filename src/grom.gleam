@@ -17,7 +17,6 @@ import gleam/time/calendar
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import gleam_community/colour.{type Colour}
-
 import status_code
 
 const version: String = "v6.0.0"
@@ -659,25 +658,37 @@ fn error_node_decoder() -> Decoder(ErrorNode) {
   use <- decode.recursive
 
   let leaf = {
-    use errors <- decode.field("_errors", decode.list(field_error_decoder()))
+    use errors <- decode.field("_errors", decode.list(error_item_decoder()))
     decode.success(ErrorNode(errors))
   }
 
-  let branch =
+  let branch = {
     decode.dict(decode.string, error_node_decoder())
     |> decode.map(ErrorBranch)
+  }
 
   decode.one_of(leaf, or: [branch])
 }
 
 pub type ErrorItem {
-  ErrorItem(code: Int, message: String)
+  ErrorItem(code: ErrorCode, message: String)
 }
 
-fn field_error_decoder() -> Decoder(ErrorItem) {
-  use code <- decode.field("code", decode.int)
+pub type ErrorCode {
+  IntErrorCode(Int)
+  StringErrorCode(String)
+}
+
+fn error_item_decoder() -> Decoder(ErrorItem) {
+  use code <- decode.field("code", error_code_decoder())
   use message <- decode.field("message", decode.string)
   decode.success(ErrorItem(code:, message:))
+}
+
+fn error_code_decoder() -> Decoder(ErrorCode) {
+  let int = decode.map(decode.int, IntErrorCode)
+  let string = decode.map(decode.string, StringErrorCode)
+  decode.one_of(int, or: [string])
 }
 
 fn error_response_decoder() -> Decoder(ErrorResponse) {
@@ -4459,7 +4470,7 @@ fn guild_member_verification_level_to_json(
 /// Requires the `AllowManagingGuild` permission.
 pub fn modify_guild_request(
   token token: Token,
-  id id: Snowflake(Guild),
+  guild_with_id id: Snowflake(Guild),
   using modify: ModifyGuild,
   reason reason: Option(String),
 ) -> Request(String) {
@@ -6021,7 +6032,7 @@ fn timestamp_to_json(timestamp: Timestamp) -> Json {
 
 pub fn modify_guild_member_request(
   token token: Token,
-  with_id user_id: Snowflake(User),
+  member_with_id user_id: Snowflake(User),
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyGuildMember,
   reason reason: Option(String),
@@ -6805,7 +6816,7 @@ pub fn modify_role_as_unmentionable(modify: ModifyRole) -> ModifyRole {
 /// Requires the `AllowManagingRoles` permission.
 pub fn modify_role_request(
   token token: Token,
-  with_id role_id: Snowflake(Role),
+  role_with_id role_id: Snowflake(Role),
   in_guild_with_id guild_id: Snowflake(Guild),
   using modify: ModifyRole,
   reason reason: Option(String),
@@ -8760,7 +8771,7 @@ pub fn unset_text_channel_default_thread_auto_archive_duration(
 /// Requires the `AllowManagingChannels` permission. 
 pub fn modify_text_channel_request(
   token token: Token,
-  with_id channel_id: Snowflake(TextChannel),
+  channel_with_id channel_id: Snowflake(TextChannel),
   using modify: ModifyTextChannel,
   reason reason: Option(String),
 ) -> Request(String) {
@@ -8956,7 +8967,7 @@ fn modify_voice_channel_to_json(modify: ModifyVoiceChannel) -> Json {
 /// Requires the `AllowManagingChannels` permission. 
 pub fn modify_voice_channel_request(
   token token: Token,
-  with_id channel_id: Snowflake(VoiceChannel),
+  channel_with_id channel_id: Snowflake(VoiceChannel),
   using modify: ModifyVoiceChannel,
   reason reason: Option(String),
 ) -> Request(String) {
@@ -9037,7 +9048,7 @@ fn modify_category_channel_to_json(modify: ModifyCategoryChannel) -> Json {
 /// Requires the `AllowManagingChannels` permission. 
 pub fn modify_category_channel_request(
   token token: Token,
-  with_id channel_id: Snowflake(CategoryChannel),
+  channel_with_id channel_id: Snowflake(CategoryChannel),
   using modify: ModifyCategoryChannel,
   reason reason: Option(String),
 ) -> Request(String) {
@@ -9229,4 +9240,223 @@ pub fn unset_announcement_channel_default_thread_auto_archive_duration(
     ..modify,
     default_thread_auto_archive_duration: Delete,
   )
+}
+
+pub opaque type ModifyStageChannel {
+  ModifyStageChannel(
+    name: Option(String),
+    position: Modification(Int),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    bitrate: Modification(Int),
+    user_limit: Modification(Int),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Modification(Snowflake(CategoryChannel)),
+    rtc_region_id: Modification(String),
+    video_quality_mode: Modification(VideoQualityMode),
+  )
+}
+
+pub fn new_modify_stage_channel() -> ModifyStageChannel {
+  ModifyStageChannel(None, Skip, None, Skip, Skip, Skip, None, Skip, Skip, Skip)
+}
+
+pub fn modify_stage_channel_name(
+  modify: ModifyStageChannel,
+  new name: String,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, name: Some(name))
+}
+
+/// Channels with the same position are sorted by ID (newer channel will be lower)
+pub fn modify_stage_channel_position(
+  modify: ModifyStageChannel,
+  new position: Int,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, position: Modify(position))
+}
+
+/// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
+pub fn unset_stage_channel_position(
+  modify: ModifyStageChannel,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, position: Delete)
+}
+
+pub fn set_stage_channel_as_nsfw(
+  modify: ModifyStageChannel,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, is_nsfw: Some(True))
+}
+
+pub fn set_stage_channel_as_sfw(
+  modify: ModifyStageChannel,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, is_nsfw: Some(False))
+}
+
+/// Modifies the slowmode for the stage-channel-attached text channel.
+///
+/// Must be between 0 and 21600 seconds.
+///
+/// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+pub fn modify_stage_channel_rate_limit_per_user(
+  modify: ModifyStageChannel,
+  new limit: Duration,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, rate_limit_per_user: Modify(limit))
+}
+
+pub fn delete_stage_channel_rate_limit_per_user(
+  modify: ModifyStageChannel,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, rate_limit_per_user: Delete)
+}
+
+pub fn modify_stage_channel_bitrate(
+  modify: ModifyStageChannel,
+  new bitrate: Int,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, bitrate: Modify(bitrate))
+}
+
+pub fn reset_stage_channel_bitrate(
+  modify: ModifyStageChannel,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, bitrate: Delete)
+}
+
+pub fn modify_stage_channel_user_limit(
+  modify: ModifyStageChannel,
+  new limit: Int,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, user_limit: Modify(limit))
+}
+
+/// You can only allow/deny permissions if your bot has those permissions.
+/// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
+pub fn modify_stage_channel_permission_overwrites(
+  modify: ModifyStageChannel,
+  new overwrites: List(PermissionOverwrite),
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, permission_overwrites: Some(overwrites))
+}
+
+pub fn modify_stage_channel_parent_id(
+  modify: ModifyStageChannel,
+  new parent_id: Snowflake(CategoryChannel),
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, parent_id: Modify(parent_id))
+}
+
+pub fn unset_stage_channel_parent_id(
+  modify: ModifyStageChannel,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, parent_id: Delete)
+}
+
+pub fn modify_stage_channel_rtc_region_id(
+  modify: ModifyStageChannel,
+  new rtc_region_id: String,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, rtc_region_id: Modify(rtc_region_id))
+}
+
+/// Makes the RTC region automatically selected by Discord.
+pub fn unset_stage_channel_rtc_region_id(
+  modify: ModifyStageChannel,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, rtc_region_id: Delete)
+}
+
+pub fn modify_stage_channel_video_quality_mode(
+  modify: ModifyStageChannel,
+  new video_quality_mode: VideoQualityMode,
+) -> ModifyStageChannel {
+  ModifyStageChannel(..modify, video_quality_mode: Modify(video_quality_mode))
+}
+
+fn modify_stage_channel_to_json(modify: ModifyStageChannel) -> Json {
+  [
+    optional_to_json(modify.name, "name", json.string),
+    modification_to_json(modify.position, "position", json.int),
+    optional_to_json(modify.is_nsfw, "nsfw", json.bool),
+    modification_to_json(
+      modify.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    modification_to_json(modify.bitrate, "bitrate", json.int),
+    modification_to_json(modify.user_limit, "user_limit", json.int),
+    optional_to_json(
+      modify.permission_overwrites,
+      "permission_overwrites",
+      json.array(_, permission_overwrite_to_json),
+    ),
+    modification_to_json(modify.parent_id, "parent_id", snowflake_to_json),
+    modification_to_json(modify.rtc_region_id, "rtc_region", json.string),
+    modification_to_json(
+      modify.video_quality_mode,
+      "video_quality_mode",
+      video_quality_mode_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Requires the `AllowManagingChannels` permission. 
+pub fn modify_stage_channel_request(
+  token token: Token,
+  channel_with_id channel_id: Snowflake(StageChannel),
+  using modify: ModifyStageChannel,
+  reason reason: Option(String),
+) -> Request(String) {
+  let body = modify |> modify_stage_channel_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(channel_id),
+    method: http.Patch,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+}
+
+pub fn modify_stage_channel_response(
+  response: Response(String),
+) -> Result(StageChannel, RestError) {
+  handle_response(response, decode_with: stage_channel_decoder())
+}
+
+pub opaque type ModifyForumChannel {
+  ModifyForumChannel(
+    name: Option(String),
+    position: Modification(Int),
+    topic: Modification(String),
+    is_nsfw: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    permission_overwrites: Option(List(PermissionOverwrite)),
+    parent_id: Modification(Snowflake(CategoryChannel)),
+    default_thread_auto_archive_duration: Modification(
+      ThreadAutoArchiveDuration,
+    ),
+    flags: Option(List(ForumChannelFlag)),
+    available_tags: Option(List(ForumTag)),
+    default_reaction: Modification(DefaultForumReaction),
+    default_thread_rate_limit_per_user: Option(Duration),
+    default_sort_order: Modification(ForumSortOrder),
+    default_layout: Option(ForumLayout),
+  )
+}
+
+fn modify_forum_channel_to_json(modify: ModifyForumChannel) -> Json {
+  [
+    optional_to_json(modify.name, "name", json.string),
+    modification_to_json(modify.position, "position", json.int),
+    modification_to_json(modify.topic, "topic", json.string),
+    optional_to_json(modify.is_nsfw, "nsfw", json.bool),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
 }
