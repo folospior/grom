@@ -1338,12 +1338,12 @@ pub type Thread {
     name: String,
     /// Is `None` if there are no messages in the channel.
     last_message_id: Option(Snowflake(Message)),
-    /// The amount of time between a user has to wait between sending a message or creating a thread.
-    ///
-    /// Between 0 and 21600 seconds.
+    /// Represents he amount of time between a user has to wait between sending a message or creating a thread.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
-    rate_limit_per_user: Duration,
+    /// 
+    /// Rate limits per user must be between 0 and 21600 seconds (7.22 hours).
+    rate_limit_per_user: RateLimitPerUser,
     parent_id: Snowflake(GuildChannel),
     /// Number of messages in the thread, not including the initial message or deleted messages.
     ///
@@ -1392,7 +1392,7 @@ fn thread_decoder() -> Decoder(Thread) {
   )
   use rate_limit_per_user <- decode.field(
     "rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use parent_id <- decode.field("parent_id", snowflake_decoder())
   use message_count <- decode.field("message_count", decode.int)
@@ -1582,11 +1582,11 @@ pub type TextChannel {
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
-    rate_limit_per_user: Duration,
+    rate_limit_per_user: RateLimitPerUser,
     /// Is `None` in some gateway events and if there are no pinned messages.
     last_pin_timestamp: Option(Timestamp),
     default_thread_auto_archive_duration: ThreadAutoArchiveDuration,
-    default_thread_rate_limit_per_user: Duration,
+    default_thread_rate_limit_per_user: RateLimitPerUser,
     /// Is `None` if the channel isn't in a category.
     parent_id: Option(Snowflake(CategoryChannel)),
   )
@@ -1621,7 +1621,7 @@ fn text_channel_decoder() -> Decoder(TextChannel) {
   )
   use rate_limit_per_user <- decode.field(
     "rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use last_pin_timestamp <- decode.optional_field(
     "last_pin_timestamp",
@@ -1634,7 +1634,7 @@ fn text_channel_decoder() -> Decoder(TextChannel) {
   )
   use default_thread_rate_limit_per_user <- decode.field(
     "default_thread_rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use parent_id <- decode.optional_field(
     "parent_id",
@@ -1693,7 +1693,7 @@ pub type VoiceChannel {
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
-    rate_limit_per_user: Duration,
+    rate_limit_per_user: RateLimitPerUser,
     /// Voice Region ID for the voice channel.
     /// Automatically assigned if `None`.
     rtc_region_id: Option(String),
@@ -1735,7 +1735,7 @@ fn voice_channel_decoder() -> Decoder(VoiceChannel) {
   )
   use rate_limit_per_user <- decode.field(
     "rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use rtc_region_id <- decode.optional_field(
     "rtc_region",
@@ -1961,7 +1961,7 @@ pub type StageChannel {
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
-    rate_limit_per_user: Duration,
+    rate_limit_per_user: RateLimitPerUser,
     /// Voice Region ID for the voice channel.
     /// Automatically assigned if `None`.
     rtc_region_id: Option(String),
@@ -2002,7 +2002,7 @@ fn stage_channel_decoder() -> Decoder(StageChannel) {
   )
   use rate_limit_per_user <- decode.field(
     "rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use rtc_region_id <- decode.optional_field(
     "rtc_region",
@@ -2053,14 +2053,14 @@ pub type ForumChannel {
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
-    rate_limit_per_user: Duration,
+    rate_limit_per_user: RateLimitPerUser,
     last_thread_id: Option(Snowflake(Thread)),
     parent_id: Option(Snowflake(CategoryChannel)),
     default_thread_auto_archive_duration: ThreadAutoArchiveDuration,
     flags: List(ForumChannelFlag),
     available_tags: List(ForumTag),
     default_reaction: Option(DefaultForumReaction),
-    default_thread_rate_limit_per_user: Duration,
+    default_thread_rate_limit_per_user: RateLimitPerUser,
     default_sort_order: ForumSortOrder,
     default_layout: ForumLayout,
   )
@@ -2089,7 +2089,7 @@ fn forum_channel_decoder() -> Decoder(ForumChannel) {
   )
   use rate_limit_per_user <- decode.field(
     "rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use last_thread_id <- decode.optional_field(
     "last_message_id",
@@ -2117,7 +2117,7 @@ fn forum_channel_decoder() -> Decoder(ForumChannel) {
   )
   use default_thread_rate_limit_per_user <- decode.field(
     "default_thread_rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use default_sort_order <- decode.field(
     "default_sort_order",
@@ -2164,14 +2164,14 @@ pub type MediaChannel {
     /// Between 0 and 21600 seconds.
     ///
     /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
-    rate_limit_per_user: Duration,
+    rate_limit_per_user: RateLimitPerUser,
     last_thread_id: Option(Snowflake(Thread)),
     parent_id: Option(Snowflake(CategoryChannel)),
     default_thread_auto_archive_duration: ThreadAutoArchiveDuration,
     flags: List(MediaChannelFlag),
     available_tags: List(ForumTag),
     default_reaction: Option(DefaultForumReaction),
-    default_thread_rate_limit_per_user: Duration,
+    default_thread_rate_limit_per_user: RateLimitPerUser,
     default_sort_order: ForumSortOrder,
   )
 }
@@ -2199,7 +2199,7 @@ fn media_channel_decoder() -> Decoder(MediaChannel) {
   )
   use rate_limit_per_user <- decode.field(
     "rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use last_thread_id <- decode.optional_field(
     "last_message_id",
@@ -2226,7 +2226,7 @@ fn media_channel_decoder() -> Decoder(MediaChannel) {
   )
   use default_thread_rate_limit_per_user <- decode.field(
     "default_thread_rate_limit_per_user",
-    decode.map(decode.int, duration.seconds),
+    rate_limit_per_user_decoder(),
   )
   use default_sort_order <- decode.field(
     "default_sort_order",
@@ -4543,13 +4543,13 @@ pub opaque type CreateTextChannel {
   CreateTextChannel(
     name: String,
     topic: Option(String),
-    rate_limit_per_user: Option(Duration),
+    rate_limit_per_user: Option(RateLimitPerUser),
     position: Option(Int),
     permission_overwrites: Option(List(PermissionOverwrite)),
     parent_id: Option(Snowflake(CategoryChannel)),
     is_nsfw: Option(Bool),
     default_thread_auto_archive_duration: Option(ThreadAutoArchiveDuration),
-    default_thread_rate_limit_per_user: Option(Duration),
+    default_thread_rate_limit_per_user: Option(RateLimitPerUser),
   )
 }
 
@@ -4561,7 +4561,7 @@ fn create_text_channel_to_json(create: CreateTextChannel) -> Json {
     optional_to_json(
       create.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(create.position, "position", json.int),
     optional_to_json(
@@ -4579,7 +4579,7 @@ fn create_text_channel_to_json(create: CreateTextChannel) -> Json {
     optional_to_json(
       create.default_thread_rate_limit_per_user,
       "default_thread_rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
   ]
   |> list.filter_map(function.identity)
@@ -4595,7 +4595,7 @@ pub opaque type CreateAnnouncementChannel {
     parent_id: Option(Snowflake(CategoryChannel)),
     is_nsfw: Option(Bool),
     default_thread_auto_archive_duration: Option(ThreadAutoArchiveDuration),
-    default_thread_rate_limit_per_user: Option(Duration),
+    default_thread_rate_limit_per_user: Option(RateLimitPerUser),
   )
 }
 
@@ -4622,7 +4622,7 @@ fn create_announcement_channel_to_json(
     optional_to_json(
       create.default_thread_rate_limit_per_user,
       "default_thread_rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
   ]
   |> list.filter_map(function.identity)
@@ -4715,7 +4715,7 @@ pub fn create_announcement_channel_with_thread_auto_archive_duration(
 /// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
 pub fn create_announcement_channel_with_thread_rate_limit_per_user(
   create: CreateAnnouncementChannel,
-  rate_limit_per_user: Duration,
+  rate_limit_per_user: RateLimitPerUser,
 ) -> CreateAnnouncementChannel {
   CreateAnnouncementChannel(
     ..create,
@@ -4769,7 +4769,7 @@ pub fn create_text_channel_with_topic(
 /// The rate limit per user is the amount of time a user has to wait between sending messages.
 pub fn create_text_channel_with_rate_limit_per_user(
   create: CreateTextChannel,
-  rate_limit_per_user: Duration,
+  rate_limit_per_user: RateLimitPerUser,
 ) -> CreateTextChannel {
   CreateTextChannel(..create, rate_limit_per_user: Some(rate_limit_per_user))
 }
@@ -4822,7 +4822,7 @@ pub fn create_text_channel_with_thread_auto_archive_duration(
 /// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
 pub fn create_text_channel_with_thread_rate_limit_per_user(
   create: CreateTextChannel,
-  rate_limit_per_user: Duration,
+  rate_limit_per_user: RateLimitPerUser,
 ) -> CreateTextChannel {
   CreateTextChannel(
     ..create,
@@ -4833,7 +4833,7 @@ pub fn create_text_channel_with_thread_rate_limit_per_user(
 pub opaque type CreateVoiceChannel {
   CreateVoiceChannel(
     name: String,
-    rate_limit_per_user: Option(Duration),
+    rate_limit_per_user: Option(RateLimitPerUser),
     bitrate: Option(Int),
     user_limit: Option(Int),
     position: Option(Int),
@@ -4852,7 +4852,7 @@ fn create_voice_channel_to_json(create: CreateVoiceChannel) -> Json {
     optional_to_json(
       create.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(create.bitrate, "bitrate", json.int),
     optional_to_json(create.user_limit, "user_limit", json.int),
@@ -4906,7 +4906,7 @@ pub fn new_create_voice_channel(named name: String) -> CreateVoiceChannel {
 /// The rate limit per user amount of time that a user has to wait between sending messages in the voice-channel attached text channel.
 pub fn create_voice_channel_with_rate_limit_per_user(
   create: CreateVoiceChannel,
-  limit: Duration,
+  limit: RateLimitPerUser,
 ) -> CreateVoiceChannel {
   CreateVoiceChannel(..create, rate_limit_per_user: Some(limit))
 }
@@ -5058,7 +5058,7 @@ pub fn create_category_channel_with_permission_overwrites(
 pub opaque type CreateStageChannel {
   CreateStageChannel(
     name: String,
-    rate_limit_per_user: Option(Duration),
+    rate_limit_per_user: Option(RateLimitPerUser),
     bitrate: Option(Int),
     user_limit: Option(Int),
     position: Option(Int),
@@ -5077,7 +5077,7 @@ fn create_stage_channel_to_json(create: CreateStageChannel) -> Json {
     optional_to_json(
       create.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(create.bitrate, "bitrate", json.int),
     optional_to_json(create.user_limit, "user_limit", json.int),
@@ -5131,7 +5131,7 @@ pub fn new_create_stage_channel(named name: String) -> CreateStageChannel {
 /// The rate limit per user amount of time that a user has to wait between sending messages in the stage-channel attached text channel.
 pub fn create_stage_channel_with_rate_limit_per_user(
   create: CreateStageChannel,
-  limit: Duration,
+  limit: RateLimitPerUser,
 ) -> CreateStageChannel {
   CreateStageChannel(..create, rate_limit_per_user: Some(limit))
 }
@@ -5212,7 +5212,7 @@ pub opaque type CreateForumChannel {
   CreateForumChannel(
     name: String,
     topic: Option(String),
-    rate_limit_per_user: Option(Duration),
+    rate_limit_per_user: Option(RateLimitPerUser),
     position: Option(Int),
     permission_overwrites: Option(List(PermissionOverwrite)),
     parent_id: Option(Snowflake(CategoryChannel)),
@@ -5222,7 +5222,7 @@ pub opaque type CreateForumChannel {
     available_tags: Option(List(ForumTag)),
     default_sort_order: Option(ForumSortOrder),
     default_layout: Option(ForumLayout),
-    default_thread_rate_limit_per_user: Option(Duration),
+    default_thread_rate_limit_per_user: Option(RateLimitPerUser),
   )
 }
 
@@ -5234,7 +5234,7 @@ fn create_forum_channel_to_json(create: CreateForumChannel) -> Json {
     optional_to_json(
       create.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(create.position, "position", json.int),
     optional_to_json(
@@ -5271,7 +5271,7 @@ fn create_forum_channel_to_json(create: CreateForumChannel) -> Json {
     optional_to_json(
       create.default_thread_rate_limit_per_user,
       "default_thread_rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
   ]
   |> list.filter_map(function.identity)
@@ -5330,7 +5330,7 @@ pub fn create_forum_channel_with_topic(
 /// The rate limit per user is the amount of time a user has to wait between sending messages.
 pub fn create_forum_channel_with_rate_limit_per_user(
   create: CreateForumChannel,
-  limit: Duration,
+  limit: RateLimitPerUser,
 ) -> CreateForumChannel {
   CreateForumChannel(..create, rate_limit_per_user: Some(limit))
 }
@@ -5407,7 +5407,7 @@ pub fn create_forum_channel_with_default_sort_order(
 /// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
 pub fn create_forum_channel_with_thread_rate_limit_per_user(
   create: CreateForumChannel,
-  limit: Duration,
+  limit: RateLimitPerUser,
 ) -> CreateForumChannel {
   CreateForumChannel(..create, default_thread_rate_limit_per_user: Some(limit))
 }
@@ -5416,7 +5416,7 @@ pub opaque type CreateMediaChannel {
   CreateMediaChannel(
     name: String,
     topic: Option(String),
-    rate_limit_per_user: Option(Duration),
+    rate_limit_per_user: Option(RateLimitPerUser),
     position: Option(Int),
     permission_overwrites: Option(List(PermissionOverwrite)),
     parent_id: Option(Snowflake(CategoryChannel)),
@@ -5425,7 +5425,7 @@ pub opaque type CreateMediaChannel {
     default_reaction: Option(DefaultForumReaction),
     available_tags: Option(List(ForumTag)),
     default_sort_order: Option(ForumSortOrder),
-    default_thread_rate_limit_per_user: Option(Duration),
+    default_thread_rate_limit_per_user: Option(RateLimitPerUser),
   )
 }
 
@@ -5437,7 +5437,7 @@ fn create_media_channel_to_json(create: CreateMediaChannel) -> Json {
     optional_to_json(
       create.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(create.position, "position", json.int),
     optional_to_json(
@@ -5469,7 +5469,7 @@ fn create_media_channel_to_json(create: CreateMediaChannel) -> Json {
     optional_to_json(
       create.default_thread_rate_limit_per_user,
       "default_thread_rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
   ]
   |> list.filter_map(function.identity)
@@ -5527,7 +5527,7 @@ pub fn create_media_channel_with_topic(
 /// The rate limit per user is the amount of time a user has to wait between sending messages.
 pub fn create_media_channel_with_rate_limit_per_user(
   create: CreateMediaChannel,
-  limit: Duration,
+  limit: RateLimitPerUser,
 ) -> CreateMediaChannel {
   CreateMediaChannel(..create, rate_limit_per_user: Some(limit))
 }
@@ -5596,7 +5596,7 @@ pub fn create_media_channel_with_default_sort_order(
 /// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
 pub fn create_media_channel_with_thread_rate_limit_per_user(
   create: CreateMediaChannel,
-  limit: Duration,
+  limit: RateLimitPerUser,
 ) -> CreateMediaChannel {
   CreateMediaChannel(..create, default_thread_rate_limit_per_user: Some(limit))
 }
@@ -8596,13 +8596,13 @@ pub opaque type ModifyTextChannel {
     position: Modification(Int),
     topic: Modification(String),
     is_nsfw: Option(Bool),
-    rate_limit_per_user: Modification(Duration),
+    rate_limit_per_user: Modification(RateLimitPerUser),
     permission_overwrites: Option(List(PermissionOverwrite)),
     parent_id: Modification(Snowflake(CategoryChannel)),
     default_thread_auto_archive_duration: Modification(
       ThreadAutoArchiveDuration,
     ),
-    default_thread_rate_limit_per_user: Option(Duration),
+    default_thread_rate_limit_per_user: Option(RateLimitPerUser),
   )
 }
 
@@ -8634,7 +8634,7 @@ fn modify_text_channel_to_json(modify: ModifyTextChannel) -> Json {
     modification_to_json(
       modify.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(
       modify.permission_overwrites,
@@ -8650,7 +8650,7 @@ fn modify_text_channel_to_json(modify: ModifyTextChannel) -> Json {
     optional_to_json(
       modify.default_thread_rate_limit_per_user,
       "default_thread_rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
   ]
   |> list.filter_map(function.identity)
@@ -8664,7 +8664,7 @@ pub fn new_modify_text_channel() -> ModifyTextChannel {
 /// The modified value will only apply to new threads - existing threads won't auto-update. 
 pub fn modify_text_channel_default_thread_rate_limit_per_user(
   modify: ModifyTextChannel,
-  new duration: Duration,
+  new duration: RateLimitPerUser,
 ) -> ModifyTextChannel {
   ModifyTextChannel(
     ..modify,
@@ -8718,7 +8718,7 @@ pub fn set_text_channel_as_sfw(modify: ModifyTextChannel) -> ModifyTextChannel {
 /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
 pub fn modify_text_channel_rate_limit_per_user(
   modify: ModifyTextChannel,
-  new limit: Duration,
+  new limit: RateLimitPerUser,
 ) -> ModifyTextChannel {
   ModifyTextChannel(..modify, rate_limit_per_user: Modify(limit))
 }
@@ -8806,7 +8806,7 @@ pub opaque type ModifyVoiceChannel {
     name: Option(String),
     position: Modification(Int),
     is_nsfw: Option(Bool),
-    rate_limit_per_user: Modification(Duration),
+    rate_limit_per_user: Modification(RateLimitPerUser),
     bitrate: Modification(Int),
     user_limit: Modification(Int),
     permission_overwrites: Option(List(PermissionOverwrite)),
@@ -8861,7 +8861,7 @@ pub fn set_voice_channel_as_sfw(
 /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
 pub fn modify_voice_channel_rate_limit_per_user(
   modify: ModifyVoiceChannel,
-  new limit: Duration,
+  new limit: RateLimitPerUser,
 ) -> ModifyVoiceChannel {
   ModifyVoiceChannel(..modify, rate_limit_per_user: Modify(limit))
 }
@@ -8943,7 +8943,7 @@ fn modify_voice_channel_to_json(modify: ModifyVoiceChannel) -> Json {
     modification_to_json(
       modify.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     modification_to_json(modify.bitrate, "bitrate", json.int),
     modification_to_json(modify.user_limit, "user_limit", json.int),
@@ -9247,7 +9247,7 @@ pub opaque type ModifyStageChannel {
     name: Option(String),
     position: Modification(Int),
     is_nsfw: Option(Bool),
-    rate_limit_per_user: Modification(Duration),
+    rate_limit_per_user: Modification(RateLimitPerUser),
     bitrate: Modification(Int),
     user_limit: Modification(Int),
     permission_overwrites: Option(List(PermissionOverwrite)),
@@ -9302,7 +9302,7 @@ pub fn set_stage_channel_as_sfw(
 /// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
 pub fn modify_stage_channel_rate_limit_per_user(
   modify: ModifyStageChannel,
-  new limit: Duration,
+  new limit: RateLimitPerUser,
 ) -> ModifyStageChannel {
   ModifyStageChannel(..modify, rate_limit_per_user: Modify(limit))
 }
@@ -9384,7 +9384,7 @@ fn modify_stage_channel_to_json(modify: ModifyStageChannel) -> Json {
     modification_to_json(
       modify.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     modification_to_json(modify.bitrate, "bitrate", json.int),
     modification_to_json(modify.user_limit, "user_limit", json.int),
@@ -9435,7 +9435,7 @@ pub opaque type ModifyForumChannel {
     position: Modification(Int),
     topic: Modification(String),
     is_nsfw: Option(Bool),
-    rate_limit_per_user: Modification(Duration),
+    rate_limit_per_user: Modification(RateLimitPerUser),
     permission_overwrites: Option(List(PermissionOverwrite)),
     parent_id: Modification(Snowflake(CategoryChannel)),
     default_thread_auto_archive_duration: Modification(
@@ -9444,7 +9444,7 @@ pub opaque type ModifyForumChannel {
     flags: Option(List(ForumChannelFlag)),
     available_tags: Option(List(ForumTag)),
     default_reaction: Modification(DefaultForumReaction),
-    default_thread_rate_limit_per_user: Option(Duration),
+    default_thread_rate_limit_per_user: Option(RateLimitPerUser),
     default_sort_order: Modification(ForumSortOrder),
     default_layout: Option(ForumLayout),
   )
@@ -9459,7 +9459,7 @@ fn modify_forum_channel_to_json(modify: ModifyForumChannel) -> Json {
     modification_to_json(
       modify.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(
       modify.permission_overwrites,
@@ -9488,7 +9488,7 @@ fn modify_forum_channel_to_json(modify: ModifyForumChannel) -> Json {
     optional_to_json(
       modify.default_thread_rate_limit_per_user,
       "default_thread_rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     modification_to_json(
       modify.default_sort_order,
@@ -9571,7 +9571,7 @@ pub fn set_forum_channel_as_sfw(
 
 pub fn modify_forum_channel_rate_limit_per_user(
   modify: ModifyForumChannel,
-  new limit: Duration,
+  new limit: RateLimitPerUser,
 ) -> ModifyForumChannel {
   ModifyForumChannel(..modify, rate_limit_per_user: Modify(limit))
 }
@@ -9649,7 +9649,7 @@ pub fn unset_forum_channel_default_reaction(
 
 pub fn modify_forum_channel_default_thread_rate_limit_per_user(
   modify: ModifyForumChannel,
-  new limit: Duration,
+  new limit: RateLimitPerUser,
 ) -> ModifyForumChannel {
   ModifyForumChannel(..modify, default_thread_rate_limit_per_user: Some(limit))
 }
@@ -9704,7 +9704,7 @@ pub opaque type ModifyMediaChannel {
     position: Modification(Int),
     topic: Modification(String),
     is_nsfw: Option(Bool),
-    rate_limit_per_user: Modification(Duration),
+    rate_limit_per_user: Modification(RateLimitPerUser),
     permission_overwrites: Option(List(PermissionOverwrite)),
     parent_id: Modification(Snowflake(CategoryChannel)),
     default_thread_auto_archive_duration: Modification(
@@ -9713,7 +9713,7 @@ pub opaque type ModifyMediaChannel {
     flags: Option(List(MediaChannelFlag)),
     available_tags: Option(List(ForumTag)),
     default_reaction: Modification(DefaultForumReaction),
-    default_thread_rate_limit_per_user: Option(Duration),
+    default_thread_rate_limit_per_user: Option(RateLimitPerUser),
     default_sort_order: Modification(ForumSortOrder),
   )
 }
@@ -9727,7 +9727,7 @@ fn modify_media_channel_to_json(modify: ModifyMediaChannel) -> Json {
     modification_to_json(
       modify.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(
       modify.permission_overwrites,
@@ -9756,7 +9756,7 @@ fn modify_media_channel_to_json(modify: ModifyMediaChannel) -> Json {
     optional_to_json(
       modify.default_thread_rate_limit_per_user,
       "default_thread_rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     modification_to_json(
       modify.default_sort_order,
@@ -9833,7 +9833,7 @@ pub fn set_media_channel_as_sfw(
 
 pub fn modify_media_channel_rate_limit_per_user(
   modify: ModifyMediaChannel,
-  new limit: Duration,
+  new limit: RateLimitPerUser,
 ) -> ModifyMediaChannel {
   ModifyMediaChannel(..modify, rate_limit_per_user: Modify(limit))
 }
@@ -9911,7 +9911,7 @@ pub fn unset_media_channel_default_reaction(
 
 pub fn modify_media_channel_default_thread_rate_limit_per_user(
   modify: ModifyMediaChannel,
-  new limit: Duration,
+  new limit: RateLimitPerUser,
 ) -> ModifyMediaChannel {
   ModifyMediaChannel(..modify, default_thread_rate_limit_per_user: Some(limit))
 }
@@ -9960,7 +9960,7 @@ pub opaque type ModifyThread {
     auto_archive_duration: Option(ThreadAutoArchiveDuration),
     is_locked: Option(Bool),
     is_invitable: Option(Bool),
-    rate_limit_per_user: Modification(Duration),
+    rate_limit_per_user: Modification(RateLimitPerUser),
     flags: Option(List(ThreadFlag)),
     applied_tags_ids: Option(List(Snowflake(ForumTag))),
   )
@@ -9980,7 +9980,7 @@ fn modify_thread_to_json(modify: ModifyThread) -> Json {
     modification_to_json(
       modify.rate_limit_per_user,
       "rate_limit_per_user",
-      duration_to_json_seconds,
+      rate_limit_per_user_to_json,
     ),
     optional_to_json(modify.flags, "flags", flags_to_json(
       _,
@@ -10047,7 +10047,7 @@ pub fn set_thread_as_uninvitable(modify: ModifyThread) -> ModifyThread {
 
 pub fn modify_thread_rate_limit_per_user(
   modify: ModifyThread,
-  new limit: Duration,
+  new limit: RateLimitPerUser,
 ) -> ModifyThread {
   ModifyThread(..modify, rate_limit_per_user: Modify(limit))
 }
@@ -10092,4 +10092,38 @@ pub fn modify_thread_response(
   response: Response(String),
 ) -> Result(Thread, RestError) {
   handle_response(response, decode_with: thread_decoder())
+}
+
+fn rate_limit_per_user_decoder() -> Decoder(RateLimitPerUser) {
+  decode.int
+  |> decode.map(duration.seconds)
+  |> decode.map(RateLimitPerUser)
+}
+
+fn rate_limit_per_user_to_json(limit: RateLimitPerUser) -> Json {
+  duration_to_json_seconds(limit.duration)
+}
+
+pub opaque type RateLimitPerUser {
+  RateLimitPerUser(duration: Duration)
+}
+
+/// Represents he amount of time between a user has to wait between sending a message or creating a thread.
+///
+/// Bots and members with the `AllowBypassingSlowmode` permission are exempt from slowmode.
+/// 
+/// Rate limits per user must be between 0 and 21600 seconds (7.22 hours). Returns `Error(Nil)` if not within that range.
+pub fn rate_limit_per_user(
+  taking duration: Duration,
+) -> Result(RateLimitPerUser, Nil) {
+  let seconds = duration.to_seconds(duration)
+
+  case float.clamp(seconds, 0.0, 21_600.0) == seconds {
+    True -> Ok(RateLimitPerUser(duration:))
+    False -> Error(Nil)
+  }
+}
+
+pub fn rate_limit_per_user_to_duration(limit: RateLimitPerUser) -> Duration {
+  limit.duration
 }
