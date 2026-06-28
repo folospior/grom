@@ -9952,3 +9952,144 @@ pub fn modify_media_channel_response(
 ) -> Result(MediaChannel, RestError) {
   handle_response(response, decode_with: media_channel_decoder())
 }
+
+pub opaque type ModifyThread {
+  ModifyThread(
+    name: Option(String),
+    is_archived: Option(Bool),
+    auto_archive_duration: Option(ThreadAutoArchiveDuration),
+    is_locked: Option(Bool),
+    is_invitable: Option(Bool),
+    rate_limit_per_user: Modification(Duration),
+    flags: Option(List(ThreadFlag)),
+    applied_tags_ids: Option(List(Snowflake(ForumTag))),
+  )
+}
+
+fn modify_thread_to_json(modify: ModifyThread) -> Json {
+  [
+    optional_to_json(modify.name, "name", json.string),
+    optional_to_json(modify.is_archived, "archived", json.bool),
+    optional_to_json(
+      modify.auto_archive_duration,
+      "auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(modify.is_locked, "locked", json.bool),
+    optional_to_json(modify.is_invitable, "invitable", json.bool),
+    modification_to_json(
+      modify.rate_limit_per_user,
+      "rate_limit_per_user",
+      duration_to_json_seconds,
+    ),
+    optional_to_json(modify.flags, "flags", flags_to_json(
+      _,
+      bits_thread_flags(),
+    )),
+    optional_to_json(modify.applied_tags_ids, "applied_tags", json.array(
+      _,
+      snowflake_to_json,
+    )),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_modify_thread() -> ModifyThread {
+  ModifyThread(None, None, None, None, None, Skip, None, None)
+}
+
+pub fn modify_thread_name(
+  modify: ModifyThread,
+  new name: String,
+) -> ModifyThread {
+  ModifyThread(..modify, name: Some(name))
+}
+
+pub fn archive_thread(modify: ModifyThread) -> ModifyThread {
+  ModifyThread(..modify, is_archived: Some(True))
+}
+
+pub fn unarchive_thread(modify: ModifyThread) -> ModifyThread {
+  ModifyThread(..modify, is_archived: Some(False))
+}
+
+pub fn modify_thread_auto_archive_duration(
+  modify: ModifyThread,
+  new duration: ThreadAutoArchiveDuration,
+) -> ModifyThread {
+  ModifyThread(..modify, auto_archive_duration: Some(duration))
+}
+
+/// When a thread is locked, only users with the `AllowManagingThreads` permission can unarchive it.
+pub fn lock_thread(modify: ModifyThread) -> ModifyThread {
+  ModifyThread(..modify, is_locked: Some(True))
+}
+
+/// When a thread is locked, only users with the `AllowManagingThreads` permission can unarchive it.
+pub fn unlock_thread(modify: ModifyThread) -> ModifyThread {
+  ModifyThread(..modify, is_locked: Some(False))
+}
+
+/// Non-moderators can add other non-moderators to an invitable thread.
+///
+/// Only available on private threads.
+pub fn set_thread_as_invitable(modify: ModifyThread) -> ModifyThread {
+  ModifyThread(..modify, is_invitable: Some(True))
+}
+
+/// Non-moderators can add other non-moderators to an invitable thread.
+///
+/// Only available on private threads.
+pub fn set_thread_as_uninvitable(modify: ModifyThread) -> ModifyThread {
+  ModifyThread(..modify, is_invitable: Some(False))
+}
+
+pub fn modify_thread_rate_limit_per_user(
+  modify: ModifyThread,
+  new limit: Duration,
+) -> ModifyThread {
+  ModifyThread(..modify, rate_limit_per_user: Modify(limit))
+}
+
+pub fn unset_thread_rate_limit_per_user(modify: ModifyThread) -> ModifyThread {
+  ModifyThread(..modify, rate_limit_per_user: Delete)
+}
+
+pub fn modify_thread_flags(
+  modify: ModifyThread,
+  new flags: List(ThreadFlag),
+) -> ModifyThread {
+  ModifyThread(..modify, flags: Some(flags))
+}
+
+/// Limited to 5.
+pub fn modify_thread_applied_tags(
+  modify: ModifyThread,
+  new_ids ids: List(Snowflake(ForumTag)),
+) -> ModifyThread {
+  ModifyThread(..modify, applied_tags_ids: Some(ids))
+}
+
+pub fn modify_thread_request(
+  token token: Token,
+  thread_with_id id: Snowflake(Thread),
+  using modify: ModifyThread,
+  reason reason: Option(String),
+) -> Request(String) {
+  let body = modify |> modify_thread_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(id),
+    method: http.Patch,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+}
+
+pub fn modify_thread_response(
+  response: Response(String),
+) -> Result(Thread, RestError) {
+  handle_response(response, decode_with: thread_decoder())
+}
