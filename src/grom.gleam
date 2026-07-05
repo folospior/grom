@@ -17,6 +17,8 @@ import gleam/time/calendar
 import gleam/time/duration.{type Duration}
 import gleam/time/timestamp.{type Timestamp}
 import gleam_community/colour.{type Colour}
+import multipart_form
+import multipart_form/field
 import status_code
 
 const version: String = "v6.0.0"
@@ -42,10 +44,12 @@ pub fn bot(token: String) -> Token {
 
 /// An error that is returned if something goes wrong using REST (HTTP) API calls.
 /// Examples include:
+/// * Discord responds with invalid UTF-8 -> ResponseNotValidUtf8
 /// * A Discord internal server error -> ReceivedUnsuccessfulStatusCode
 /// * A bad request (e.g. message content too long) -> ReceivedErrorResponse
 /// * A response decoding failure due to a breaking change with the Discord API -> CouldNotDecodeResponse
 pub type RestError {
+  ResponseNotValidUtf8(Response(BitArray))
   ReceivedUnsuccessfulStatusCode(Response(String))
   ReceivedErrorResponse(ErrorResponse)
   CouldNotDecodeResponse(json.DecodeError)
@@ -184,6 +188,7 @@ fn bits_permissions() -> List(#(Int, Permission)) {
     #(int.bitwise_shift_left(1, 44), AllowCreatingEvents),
     #(int.bitwise_shift_left(1, 45), AllowUsingExternalSoundboardSounds),
     #(int.bitwise_shift_left(1, 46), AllowSendingVoiceMessages),
+    #(int.bitwise_shift_left(1, 48), AllowSettingVoiceChannelStatus),
     #(int.bitwise_shift_left(1, 49), AllowSendingPolls),
     #(int.bitwise_shift_left(1, 50), AllowUsingExternalApplications),
     #(int.bitwise_shift_left(1, 51), AllowPinningMessages),
@@ -703,6 +708,16 @@ fn error_response_decoder() -> Decoder(ErrorResponse) {
   decode.success(ErrorResponse(code:, message:, errors:))
 }
 
+fn handle_response_bits(
+  response: Response(BitArray),
+  decode_with decoder: Decoder(a),
+) -> Result(a, RestError) {
+  response
+  |> response.try_map(bit_array.to_string)
+  |> result.replace_error(ResponseNotValidUtf8(response))
+  |> result.try(handle_response(_, decoder))
+}
+
 fn ensure_status_code_success(
   response: Response(String),
 ) -> Result(Response(String), RestError) {
@@ -915,7 +930,7 @@ pub type Role {
     subscription_listing_id: Option(Snowflake(Sku)),
     is_available_for_purchase: Bool,
     /// Whether this role is linked to a Discord connection.
-    /// Learn more: [link](https://support.discord.com/hc/en-us/articles/10388356626711-Connections-Linked-Roles-Admins)
+    /// Learn more: <https://support.discord.com/hc/en-us/articles/10388356626711-Connections-Linked-Roles-Admins>
     is_linked_role: Bool,
     flags: List(RoleFlag),
   )
@@ -1079,6 +1094,7 @@ pub type Permission {
   /// Allows using soundboard sounds from other guilds.
   AllowUsingExternalSoundboardSounds
   AllowSendingVoiceMessages
+  AllowSettingVoiceChannelStatus
   AllowSendingPolls
   /// Allows user-installed applications to send public responses.
   ///
@@ -1360,10 +1376,6 @@ pub type Thread {
     last_archive_status_change_at: Timestamp,
     /// If a thread is locked, only users with the `AllowManagingThreads` permission will be able to unarchive it.
     is_locked: Bool,
-    /// Whether non-moderators can add other non-moderators to the thread.
-    ///
-    /// Always `True` on non-private threads. Varies depending on setting in private threads.
-    is_invitable: Bool,
     /// Is `None` if the thread was created before September 1st, 2022.
     created_at: Option(Timestamp),
     flags: List(ThreadFlag),
@@ -1378,7 +1390,7 @@ fn thread_decoder() -> Decoder(Thread) {
   use id <- decode.field("id", snowflake_decoder())
   use channel_id <- decode.field("id", snowflake_decoder())
   use guild_channel_id <- decode.field("id", snowflake_decoder())
-  use type_ <- decode.field("type", thread_type_decoder())
+  use type_ <- decode.then(thread_type_decoder())
   use guild_id <- decode.optional_field(
     "guild_id",
     None,
@@ -1411,11 +1423,6 @@ fn thread_decoder() -> Decoder(Thread) {
     rfc3339_decoder(),
   )
   use is_locked <- decode.subfield(["thread_metadata", "locked"], decode.bool)
-  use is_invitable <- decode.then(decode.optionally_at(
-    ["thread_metadata", "invitable"],
-    True,
-    decode.bool,
-  ))
   use created_at <- decode.then(decode.optionally_at(
     ["thread_metadata", "create_timestamp"],
     None,
@@ -1448,7 +1455,6 @@ fn thread_decoder() -> Decoder(Thread) {
     auto_archive_duration:,
     last_archive_status_change_at:,
     is_locked:,
-    is_invitable:,
     created_at:,
     flags:,
     total_message_count:,
@@ -1456,12 +1462,31 @@ fn thread_decoder() -> Decoder(Thread) {
   ))
 }
 
+fn thread_type_to_json(
+  type_: ThreadType,
+) -> List(Result(#(String, Json), Nil)) {
+  case type_ {
+    AnnouncementThread -> [Ok(#("type", json.int(10)))]
+    PublicThread -> [Ok(#("type", json.int(11)))]
+    PrivateThread(is_invitable:) -> [
+      Ok(#("type", json.int(12))),
+      Ok(#("invitable", json.bool(is_invitable))),
+    ]
+  }
+}
+
 fn thread_type_decoder() -> Decoder(ThreadType) {
-  use variant <- decode.then(decode.int)
-  case variant {
+  use type_ <- decode.field("type", decode.int)
+  case type_ {
     10 -> decode.success(AnnouncementThread)
     11 -> decode.success(PublicThread)
-    12 -> decode.success(PrivateThread)
+    12 -> {
+      use is_invitable <- decode.subfield(
+        ["thread_metadata", "invitable"],
+        decode.bool,
+      )
+      decode.success(PrivateThread(is_invitable:))
+    }
     _ -> decode.failure(AnnouncementThread, "ThreadType")
   }
 }
@@ -1524,7 +1549,7 @@ fn bits_thread_flags() -> List(#(Int, ThreadFlag)) {
 pub type ThreadType {
   AnnouncementThread
   PublicThread
-  PrivateThread
+  PrivateThread(is_invitable: Bool)
 }
 
 pub type GuildChannel {
@@ -1564,11 +1589,20 @@ fn guild_channel_decoder() -> Decoder(GuildChannel) {
   }
 }
 
+/// A channel where you can create threads - text and announcement channels.
+///
+/// Forum and media channels have their own type: `ForumLikeChannel`
+pub type ThreadCreatableChannel
+
+/// A forum-like channel - forum and media channels.
+pub type ForumLikeChannel
+
 pub type TextChannel {
   TextChannel(
     id: Snowflake(TextChannel),
     channel_id: Snowflake(Channel),
     guild_channel_id: Snowflake(GuildChannel),
+    thread_creatable_channel_id: Snowflake(ThreadCreatableChannel),
     permission_overwrites: List(PermissionOverwrite),
     guild_id: Option(Snowflake(Guild)),
     position: Int,
@@ -1596,6 +1630,7 @@ fn text_channel_decoder() -> Decoder(TextChannel) {
   use id <- decode.field("id", snowflake_decoder())
   use channel_id <- decode.field("id", snowflake_decoder())
   use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use thread_creatable_channel_id <- decode.field("id", snowflake_decoder())
   use permission_overwrites <- decode.optional_field(
     "permission_overwrites",
     [],
@@ -1645,6 +1680,7 @@ fn text_channel_decoder() -> Decoder(TextChannel) {
     id:,
     channel_id:,
     guild_channel_id:,
+    thread_creatable_channel_id:,
     permission_overwrites:,
     guild_id:,
     position:,
@@ -1866,6 +1902,7 @@ pub type AnnouncementChannel {
     id: Snowflake(AnnouncementChannel),
     channel_id: Snowflake(Channel),
     guild_channel_id: Snowflake(GuildChannel),
+    thread_creatable_channel_id: Snowflake(ThreadCreatableChannel),
     permission_overwrites: List(PermissionOverwrite),
     guild_id: Option(Snowflake(Guild)),
     position: Int,
@@ -1886,6 +1923,7 @@ fn announcement_channel_decoder() -> Decoder(AnnouncementChannel) {
   use id <- decode.field("id", snowflake_decoder())
   use channel_id <- decode.field("id", snowflake_decoder())
   use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use thread_creatable_channel_id <- decode.field("id", snowflake_decoder())
   use permission_overwrites <- decode.optional_field(
     "permission_overwrites",
     [],
@@ -1927,6 +1965,7 @@ fn announcement_channel_decoder() -> Decoder(AnnouncementChannel) {
     id:,
     channel_id:,
     guild_channel_id:,
+    thread_creatable_channel_id:,
     permission_overwrites:,
     guild_id:,
     position:,
@@ -2043,6 +2082,7 @@ pub type ForumChannel {
     id: Snowflake(ForumChannel),
     channel_id: Snowflake(Channel),
     guild_channel_id: Snowflake(GuildChannel),
+    forum_like_channel_id: Snowflake(ForumLikeChannel),
     permission_overwrites: List(PermissionOverwrite),
     guild_id: Option(Snowflake(Guild)),
     position: Int,
@@ -2070,6 +2110,7 @@ fn forum_channel_decoder() -> Decoder(ForumChannel) {
   use id <- decode.field("id", snowflake_decoder())
   use channel_id <- decode.field("id", snowflake_decoder())
   use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use forum_like_channel_id <- decode.field("id", snowflake_decoder())
   use permission_overwrites <- decode.optional_field(
     "permission_overwrites",
     [],
@@ -2131,6 +2172,7 @@ fn forum_channel_decoder() -> Decoder(ForumChannel) {
     id:,
     channel_id:,
     guild_channel_id:,
+    forum_like_channel_id:,
     permission_overwrites:,
     guild_id:,
     position:,
@@ -2154,6 +2196,7 @@ pub type MediaChannel {
     id: Snowflake(MediaChannel),
     channel_id: Snowflake(Channel),
     guild_channel_id: Snowflake(GuildChannel),
+    forum_like_channel_id: Snowflake(ForumLikeChannel),
     permission_overwrites: List(PermissionOverwrite),
     guild_id: Option(Snowflake(Guild)),
     position: Int,
@@ -2180,6 +2223,7 @@ fn media_channel_decoder() -> Decoder(MediaChannel) {
   use id <- decode.field("id", snowflake_decoder())
   use channel_id <- decode.field("id", snowflake_decoder())
   use guild_channel_id <- decode.field("id", snowflake_decoder())
+  use forum_like_channel_id <- decode.field("id", snowflake_decoder())
   use permission_overwrites <- decode.optional_field(
     "permission_overwrites",
     [],
@@ -2236,6 +2280,7 @@ fn media_channel_decoder() -> Decoder(MediaChannel) {
     id:,
     channel_id:,
     guild_channel_id:,
+    forum_like_channel_id:,
     permission_overwrites:,
     guild_id:,
     position:,
@@ -4142,6 +4187,7 @@ pub type Locale {
   HungarianLocale
   DutchLocale
   NorwegianLocale
+  /// 🇵🇱
   PolishLocale
   PortugueseBrazilLocale
   RomanianRomaniaLocale
@@ -4630,7 +4676,7 @@ fn create_announcement_channel_to_json(
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_announcement_channel_request(
+pub fn new_announcement_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateAnnouncementChannel,
@@ -4647,20 +4693,20 @@ pub fn create_announcement_channel_request(
   |> request.set_body(body)
 }
 
-pub fn create_announcement_channel_response(
+pub fn new_announcement_channel_response(
   response: Response(String),
 ) -> Result(AnnouncementChannel, RestError) {
   handle_response(response, decode_with: announcement_channel_decoder())
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn new_create_announcement_channel(
+pub fn new_announcement_channel(
   named name: String,
 ) -> CreateAnnouncementChannel {
   CreateAnnouncementChannel(name, None, None, None, None, None, None, None)
 }
 
-pub fn create_announcement_channel_with_topic(
+pub fn new_announcement_channel_with_topic(
   create: CreateAnnouncementChannel,
   topic: String,
 ) -> CreateAnnouncementChannel {
@@ -4669,7 +4715,7 @@ pub fn create_announcement_channel_with_topic(
 
 /// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
 /// Channels with the same position are sorted by ID (new channel will be lower)
-pub fn create_announcement_channel_at_position(
+pub fn new_announcement_channel_at_position(
   create: CreateAnnouncementChannel,
   position: Int,
 ) -> CreateAnnouncementChannel {
@@ -4678,7 +4724,7 @@ pub fn create_announcement_channel_at_position(
 
 /// You can only allow/deny permissions if your bot has those permissions.
 /// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
-pub fn create_announcement_channel_with_permission_overwrites(
+pub fn new_announcement_channel_with_permission_overwrites(
   create: CreateAnnouncementChannel,
   overwrites: List(PermissionOverwrite),
 ) -> CreateAnnouncementChannel {
@@ -4687,7 +4733,7 @@ pub fn create_announcement_channel_with_permission_overwrites(
 
 /// Puts the channel in a category.
 /// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
-pub fn create_announcement_channel_with_parent_id(
+pub fn new_announcement_channel_with_parent_id(
   create: CreateAnnouncementChannel,
   parent_id: Snowflake(CategoryChannel),
 ) -> CreateAnnouncementChannel {
@@ -4695,14 +4741,14 @@ pub fn create_announcement_channel_with_parent_id(
 }
 
 /// Creates an age-restricted announcement channel.
-pub fn create_nsfw_announcement_channel(
+pub fn new_nsfw_announcement_channel(
   create: CreateAnnouncementChannel,
 ) -> CreateAnnouncementChannel {
   CreateAnnouncementChannel(..create, is_nsfw: Some(True))
 }
 
 /// Controls the default amount of time after which inactive threads are archived in the channel.
-pub fn create_announcement_channel_with_thread_auto_archive_duration(
+pub fn new_announcement_channel_with_thread_auto_archive_duration(
   create: CreateAnnouncementChannel,
   duration: ThreadAutoArchiveDuration,
 ) -> CreateAnnouncementChannel {
@@ -4713,7 +4759,7 @@ pub fn create_announcement_channel_with_thread_auto_archive_duration(
 }
 
 /// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
-pub fn create_announcement_channel_with_thread_rate_limit_per_user(
+pub fn new_announcement_channel_with_thread_rate_limit_per_user(
   create: CreateAnnouncementChannel,
   rate_limit_per_user: RateLimitPerUser,
 ) -> CreateAnnouncementChannel {
@@ -4731,7 +4777,7 @@ fn duration_to_json_seconds(duration: Duration) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_text_channel_request(
+pub fn new_text_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateTextChannel,
@@ -4748,18 +4794,18 @@ pub fn create_text_channel_request(
   |> request.set_body(body)
 }
 
-pub fn create_text_channel_response(
+pub fn new_text_channel_response(
   response: Response(String),
 ) -> Result(TextChannel, RestError) {
   handle_response(response, decode_with: text_channel_decoder())
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn new_create_text_channel(named name: String) -> CreateTextChannel {
+pub fn new_text_channel(named name: String) -> CreateTextChannel {
   CreateTextChannel(name, None, None, None, None, None, None, None, None)
 }
 
-pub fn create_text_channel_with_topic(
+pub fn new_text_channel_with_topic(
   create: CreateTextChannel,
   topic: String,
 ) -> CreateTextChannel {
@@ -4767,7 +4813,7 @@ pub fn create_text_channel_with_topic(
 }
 
 /// The rate limit per user is the amount of time a user has to wait between sending messages.
-pub fn create_text_channel_with_rate_limit_per_user(
+pub fn new_text_channel_with_rate_limit_per_user(
   create: CreateTextChannel,
   rate_limit_per_user: RateLimitPerUser,
 ) -> CreateTextChannel {
@@ -4776,7 +4822,7 @@ pub fn create_text_channel_with_rate_limit_per_user(
 
 /// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
 /// Channels with the same position are sorted by ID (new channel will be lower)
-pub fn create_text_channel_at_position(
+pub fn new_text_channel_at_position(
   create: CreateTextChannel,
   position: Int,
 ) -> CreateTextChannel {
@@ -4785,7 +4831,7 @@ pub fn create_text_channel_at_position(
 
 /// You can only allow/deny permissions if your bot has those permissions.
 /// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
-pub fn create_text_channel_with_permission_overwrites(
+pub fn new_text_channel_with_permission_overwrites(
   create: CreateTextChannel,
   overwrites: List(PermissionOverwrite),
 ) -> CreateTextChannel {
@@ -4794,7 +4840,7 @@ pub fn create_text_channel_with_permission_overwrites(
 
 /// Puts the channel in a category.
 /// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
-pub fn create_text_channel_with_parent_id(
+pub fn new_text_channel_with_parent_id(
   create: CreateTextChannel,
   parent_id: Snowflake(CategoryChannel),
 ) -> CreateTextChannel {
@@ -4802,14 +4848,12 @@ pub fn create_text_channel_with_parent_id(
 }
 
 /// Creates an age-restricted text channel.
-pub fn create_nsfw_text_channel(
-  create: CreateTextChannel,
-) -> CreateTextChannel {
+pub fn new_nsfw_text_channel(create: CreateTextChannel) -> CreateTextChannel {
   CreateTextChannel(..create, is_nsfw: Some(True))
 }
 
 /// Controls the default amount of time after which inactive threads are archived in the channel.
-pub fn create_text_channel_with_thread_auto_archive_duration(
+pub fn new_text_channel_with_thread_auto_archive_duration(
   create: CreateTextChannel,
   duration: ThreadAutoArchiveDuration,
 ) -> CreateTextChannel {
@@ -4820,7 +4864,7 @@ pub fn create_text_channel_with_thread_auto_archive_duration(
 }
 
 /// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
-pub fn create_text_channel_with_thread_rate_limit_per_user(
+pub fn new_text_channel_with_thread_rate_limit_per_user(
   create: CreateTextChannel,
   rate_limit_per_user: RateLimitPerUser,
 ) -> CreateTextChannel {
@@ -4876,7 +4920,7 @@ fn create_voice_channel_to_json(create: CreateVoiceChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_voice_channel_request(
+pub fn new_voice_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateVoiceChannel,
@@ -4893,18 +4937,18 @@ pub fn create_voice_channel_request(
   |> request.set_body(body)
 }
 
-pub fn create_voice_channel_response(
+pub fn new_voice_channel_response(
   response: Response(String),
 ) -> Result(VoiceChannel, RestError) {
   handle_response(response, decode_with: voice_channel_decoder())
 }
 
-pub fn new_create_voice_channel(named name: String) -> CreateVoiceChannel {
+pub fn new_voice_channel(named name: String) -> CreateVoiceChannel {
   CreateVoiceChannel(name, None, None, None, None, None, None, None, None, None)
 }
 
 /// The rate limit per user amount of time that a user has to wait between sending messages in the voice-channel attached text channel.
-pub fn create_voice_channel_with_rate_limit_per_user(
+pub fn new_voice_channel_with_rate_limit_per_user(
   create: CreateVoiceChannel,
   limit: RateLimitPerUser,
 ) -> CreateVoiceChannel {
@@ -4920,14 +4964,14 @@ pub fn create_voice_channel_with_rate_limit_per_user(
 /// * Premium tier 3 - `384000`
 ///
 /// Additionally, servers with the `GuildCanUse384KbpsVoiceBitrate` can specify the bitrate up to `384000`.
-pub fn create_voice_channel_with_bitrate(
+pub fn new_voice_channel_with_bitrate(
   create: CreateVoiceChannel,
   bitrate: Int,
 ) -> CreateVoiceChannel {
   CreateVoiceChannel(..create, bitrate: Some(bitrate))
 }
 
-pub fn create_voice_channel_with_user_limit(
+pub fn new_voice_channel_with_user_limit(
   create: CreateVoiceChannel,
   user_limit: Int,
 ) -> CreateVoiceChannel {
@@ -4936,7 +4980,7 @@ pub fn create_voice_channel_with_user_limit(
 
 /// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
 /// Channels with the same position are sorted by ID (new channel will be lower)
-pub fn create_voice_channel_at_position(
+pub fn new_voice_channel_at_position(
   create: CreateVoiceChannel,
   position: Int,
 ) -> CreateVoiceChannel {
@@ -4945,7 +4989,7 @@ pub fn create_voice_channel_at_position(
 
 /// You can only allow/deny permissions if your bot has those permissions.
 /// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
-pub fn create_voice_channel_with_permission_overwrites(
+pub fn new_voice_channel_with_permission_overwrites(
   create: CreateVoiceChannel,
   overwrites: List(PermissionOverwrite),
 ) -> CreateVoiceChannel {
@@ -4954,7 +4998,7 @@ pub fn create_voice_channel_with_permission_overwrites(
 
 /// Puts the channel in a category.
 /// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
-pub fn create_voice_channel_with_parent_id(
+pub fn new_voice_channel_with_parent_id(
   create: CreateVoiceChannel,
   parent_id: Snowflake(CategoryChannel),
 ) -> CreateVoiceChannel {
@@ -4962,21 +5006,21 @@ pub fn create_voice_channel_with_parent_id(
 }
 
 /// Creates an age-restricted voice channel.
-pub fn create_nsfw_voice_channel(
+pub fn new_nsfw_voice_channel(
   create: CreateVoiceChannel,
 ) -> CreateVoiceChannel {
   CreateVoiceChannel(..create, is_nsfw: Some(True))
 }
 
 /// Manually sets the voice channel's region.
-pub fn create_voice_channel_with_rtc_region_id(
+pub fn new_voice_channel_with_rtc_region_id(
   create: CreateVoiceChannel,
   id: String,
 ) -> CreateVoiceChannel {
   CreateVoiceChannel(..create, rtc_region_id: Some(id))
 }
 
-pub fn create_voice_channel_with_video_quality_mode(
+pub fn new_voice_channel_with_video_quality_mode(
   create: CreateVoiceChannel,
   mode: VideoQualityMode,
 ) -> CreateVoiceChannel {
@@ -5007,7 +5051,7 @@ fn create_category_channel_to_json(create: CreateCategoryChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_category_channel_request(
+pub fn new_category_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateCategoryChannel,
@@ -5024,21 +5068,19 @@ pub fn create_category_channel_request(
   |> request_with_reason(reason)
 }
 
-pub fn create_category_channel_response(
+pub fn new_category_channel_response(
   response: Response(String),
 ) -> Result(CategoryChannel, RestError) {
   handle_response(response, decode_with: category_channel_decoder())
 }
 
-pub fn new_create_category_channel(
-  named name: String,
-) -> CreateCategoryChannel {
+pub fn new_category_channel(named name: String) -> CreateCategoryChannel {
   CreateCategoryChannel(name, None, None)
 }
 
 /// Channels without a specified position will automatically be assigned one at the bottom of their channel list.
 /// Channels with the same position are sorted by ID (new channel will be lower)
-pub fn create_category_channel_at_position(
+pub fn new_category_channel_at_position(
   create: CreateCategoryChannel,
   position: Int,
 ) -> CreateCategoryChannel {
@@ -5048,7 +5090,7 @@ pub fn create_category_channel_at_position(
 /// You can only allow/deny permissions if your bot has those permissions.
 /// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
 /// Channels can sync their permissions to their category channels.
-pub fn create_category_channel_with_permission_overwrites(
+pub fn new_category_channel_with_permission_overwrites(
   create: CreateCategoryChannel,
   overwrites: List(PermissionOverwrite),
 ) -> CreateCategoryChannel {
@@ -5101,7 +5143,7 @@ fn create_stage_channel_to_json(create: CreateStageChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_stage_channel_request(
+pub fn new_stage_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateStageChannel,
@@ -5118,18 +5160,18 @@ pub fn create_stage_channel_request(
   |> request.set_body(body)
 }
 
-pub fn create_stage_channel_response(
+pub fn new_stage_channel_response(
   response: Response(String),
 ) -> Result(StageChannel, RestError) {
   handle_response(response, decode_with: stage_channel_decoder())
 }
 
-pub fn new_create_stage_channel(named name: String) -> CreateStageChannel {
+pub fn new_stage_channel(named name: String) -> CreateStageChannel {
   CreateStageChannel(name, None, None, None, None, None, None, None, None, None)
 }
 
 /// The rate limit per user amount of time that a user has to wait between sending messages in the stage-channel attached text channel.
-pub fn create_stage_channel_with_rate_limit_per_user(
+pub fn new_stage_channel_with_rate_limit_per_user(
   create: CreateStageChannel,
   limit: RateLimitPerUser,
 ) -> CreateStageChannel {
@@ -5145,14 +5187,14 @@ pub fn create_stage_channel_with_rate_limit_per_user(
 /// * Premium tier 3 - `384000`
 ///
 /// Additionally, servers with the `GuildCanUse384KbpsstageBitrate` can specify the bitrate up to `384000`.
-pub fn create_stage_channel_with_bitrate(
+pub fn new_stage_channel_with_bitrate(
   create: CreateStageChannel,
   bitrate: Int,
 ) -> CreateStageChannel {
   CreateStageChannel(..create, bitrate: Some(bitrate))
 }
 
-pub fn create_stage_channel_with_user_limit(
+pub fn new_stage_channel_with_user_limit(
   create: CreateStageChannel,
   user_limit: Int,
 ) -> CreateStageChannel {
@@ -5161,7 +5203,7 @@ pub fn create_stage_channel_with_user_limit(
 
 /// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
 /// Channels with the same position are sorted by ID (new channel will be lower)
-pub fn create_stage_channel_at_position(
+pub fn new_stage_channel_at_position(
   create: CreateStageChannel,
   position: Int,
 ) -> CreateStageChannel {
@@ -5170,7 +5212,7 @@ pub fn create_stage_channel_at_position(
 
 /// You can only allow/deny permissions if your bot has those permissions.
 /// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
-pub fn create_stage_channel_with_permission_overwrites(
+pub fn new_stage_channel_with_permission_overwrites(
   create: CreateStageChannel,
   overwrites: List(PermissionOverwrite),
 ) -> CreateStageChannel {
@@ -5179,7 +5221,7 @@ pub fn create_stage_channel_with_permission_overwrites(
 
 /// Puts the channel in a category.
 /// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
-pub fn create_stage_channel_with_parent_id(
+pub fn new_stage_channel_with_parent_id(
   create: CreateStageChannel,
   parent_id: Snowflake(CategoryChannel),
 ) -> CreateStageChannel {
@@ -5187,21 +5229,21 @@ pub fn create_stage_channel_with_parent_id(
 }
 
 /// Creates an age-restricted stage channel.
-pub fn create_nsfw_stage_channel(
+pub fn new_nsfw_stage_channel(
   create: CreateStageChannel,
 ) -> CreateStageChannel {
   CreateStageChannel(..create, is_nsfw: Some(True))
 }
 
 /// Manually sets the stage channel's region.
-pub fn create_stage_channel_with_rtc_region_id(
+pub fn new_stage_channel_with_rtc_region_id(
   create: CreateStageChannel,
   id: String,
 ) -> CreateStageChannel {
   CreateStageChannel(..create, rtc_region_id: Some(id))
 }
 
-pub fn create_stage_channel_with_video_quality_mode(
+pub fn new_stage_channel_with_video_quality_mode(
   create: CreateStageChannel,
   mode: VideoQualityMode,
 ) -> CreateStageChannel {
@@ -5279,7 +5321,7 @@ fn create_forum_channel_to_json(create: CreateForumChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_forum_channel_request(
+pub fn new_forum_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateForumChannel,
@@ -5296,13 +5338,13 @@ pub fn create_forum_channel_request(
   |> request.set_body(body)
 }
 
-pub fn create_forum_channel_response(
+pub fn new_forum_channel_response(
   response: Response(String),
 ) -> Result(ForumChannel, RestError) {
   handle_response(response, decode_with: forum_channel_decoder())
 }
 
-pub fn new_create_forum_channel(named name: String) -> CreateForumChannel {
+pub fn new_forum_channel(named name: String) -> CreateForumChannel {
   CreateForumChannel(
     name,
     None,
@@ -5320,7 +5362,7 @@ pub fn new_create_forum_channel(named name: String) -> CreateForumChannel {
   )
 }
 
-pub fn create_forum_channel_with_topic(
+pub fn new_forum_channel_with_topic(
   create: CreateForumChannel,
   topic: String,
 ) -> CreateForumChannel {
@@ -5328,7 +5370,7 @@ pub fn create_forum_channel_with_topic(
 }
 
 /// The rate limit per user is the amount of time a user has to wait between sending messages.
-pub fn create_forum_channel_with_rate_limit_per_user(
+pub fn new_forum_channel_with_rate_limit_per_user(
   create: CreateForumChannel,
   limit: RateLimitPerUser,
 ) -> CreateForumChannel {
@@ -5337,7 +5379,7 @@ pub fn create_forum_channel_with_rate_limit_per_user(
 
 /// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
 /// Channels with the same position are sorted by ID (new channel will be lower)
-pub fn create_forum_channel_at_position(
+pub fn new_forum_channel_at_position(
   create: CreateForumChannel,
   position: Int,
 ) -> CreateForumChannel {
@@ -5346,7 +5388,7 @@ pub fn create_forum_channel_at_position(
 
 /// You can only allow/deny permissions if your bot has those permissions.
 /// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
-pub fn create_forum_channel_with_permission_overwrites(
+pub fn new_forum_channel_with_permission_overwrites(
   create: CreateForumChannel,
   overwrites: List(PermissionOverwrite),
 ) -> CreateForumChannel {
@@ -5355,7 +5397,7 @@ pub fn create_forum_channel_with_permission_overwrites(
 
 /// Puts the channel in a category.
 /// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
-pub fn create_forum_channel_with_parent_id(
+pub fn new_forum_channel_with_parent_id(
   create: CreateForumChannel,
   parent_id: Snowflake(CategoryChannel),
 ) -> CreateForumChannel {
@@ -5363,7 +5405,7 @@ pub fn create_forum_channel_with_parent_id(
 }
 
 /// Controls the default amount of time after which inactive threads are archived in the channel.
-pub fn create_forum_channel_with_thread_auto_archive_duration(
+pub fn new_forum_channel_with_thread_auto_archive_duration(
   create: CreateForumChannel,
   duration: ThreadAutoArchiveDuration,
 ) -> CreateForumChannel {
@@ -5374,14 +5416,14 @@ pub fn create_forum_channel_with_thread_auto_archive_duration(
 }
 
 /// Controls the default reaction shown in the thread preview.
-pub fn create_forum_channel_with_default_reaction(
+pub fn new_forum_channel_with_default_reaction(
   create: CreateForumChannel,
   reaction: DefaultForumReaction,
 ) -> CreateForumChannel {
   CreateForumChannel(..create, default_reaction: Some(reaction))
 }
 
-pub fn create_forum_channel_with_tags(
+pub fn new_forum_channel_with_tags(
   create: CreateForumChannel,
   tags: List(ForumTag),
 ) -> CreateForumChannel {
@@ -5389,7 +5431,7 @@ pub fn create_forum_channel_with_tags(
 }
 
 /// Controls the default layout the channel is shown in.
-pub fn create_forum_channel_with_default_layout(
+pub fn new_forum_channel_with_default_layout(
   create: CreateForumChannel,
   layout: ForumLayout,
 ) -> CreateForumChannel {
@@ -5397,7 +5439,7 @@ pub fn create_forum_channel_with_default_layout(
 }
 
 /// Controls the default order of sorting the threads in the forum.
-pub fn create_forum_channel_with_default_sort_order(
+pub fn new_forum_channel_with_default_sort_order(
   create: CreateForumChannel,
   order: ForumSortOrder,
 ) -> CreateForumChannel {
@@ -5405,7 +5447,7 @@ pub fn create_forum_channel_with_default_sort_order(
 }
 
 /// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
-pub fn create_forum_channel_with_thread_rate_limit_per_user(
+pub fn new_forum_channel_with_thread_rate_limit_per_user(
   create: CreateForumChannel,
   limit: RateLimitPerUser,
 ) -> CreateForumChannel {
@@ -5477,7 +5519,7 @@ fn create_media_channel_to_json(create: CreateMediaChannel) -> Json {
 }
 
 /// Requires the `AllowManagingChannels` permission.
-pub fn create_media_channel_request(
+pub fn new_media_channel_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateMediaChannel,
@@ -5494,13 +5536,13 @@ pub fn create_media_channel_request(
   |> request.set_body(body)
 }
 
-pub fn create_media_channel_response(
+pub fn new_media_channel_response(
   response: Response(String),
 ) -> Result(MediaChannel, RestError) {
   handle_response(response, decode_with: media_channel_decoder())
 }
 
-pub fn new_create_media_channel(named name: String) -> CreateMediaChannel {
+pub fn new_media_channel(named name: String) -> CreateMediaChannel {
   CreateMediaChannel(
     name,
     None,
@@ -5517,7 +5559,7 @@ pub fn new_create_media_channel(named name: String) -> CreateMediaChannel {
   )
 }
 
-pub fn create_media_channel_with_topic(
+pub fn new_media_channel_with_topic(
   create: CreateMediaChannel,
   topic: String,
 ) -> CreateMediaChannel {
@@ -5525,7 +5567,7 @@ pub fn create_media_channel_with_topic(
 }
 
 /// The rate limit per user is the amount of time a user has to wait between sending messages.
-pub fn create_media_channel_with_rate_limit_per_user(
+pub fn new_media_channel_with_rate_limit_per_user(
   create: CreateMediaChannel,
   limit: RateLimitPerUser,
 ) -> CreateMediaChannel {
@@ -5534,7 +5576,7 @@ pub fn create_media_channel_with_rate_limit_per_user(
 
 /// Channels without a specified position will automatically be assigned one at the bottom of their category/channel list.
 /// Channels with the same position are sorted by ID (new channel will be lower)
-pub fn create_media_channel_at_position(
+pub fn new_media_channel_at_position(
   create: CreateMediaChannel,
   position: Int,
 ) -> CreateMediaChannel {
@@ -5543,7 +5585,7 @@ pub fn create_media_channel_at_position(
 
 /// You can only allow/deny permissions if your bot has those permissions.
 /// Setting the `AllowManagingRoles` permission requires your bot to have the `AdministratorPermission`.
-pub fn create_media_channel_with_permission_overwrites(
+pub fn new_media_channel_with_permission_overwrites(
   create: CreateMediaChannel,
   overwrites: List(PermissionOverwrite),
 ) -> CreateMediaChannel {
@@ -5552,7 +5594,7 @@ pub fn create_media_channel_with_permission_overwrites(
 
 /// Puts the channel in a category.
 /// Channels without a parent ID will not be in a category, and will rather be independent in the server list.
-pub fn create_media_channel_with_parent_id(
+pub fn new_media_channel_with_parent_id(
   create: CreateMediaChannel,
   parent_id: Snowflake(CategoryChannel),
 ) -> CreateMediaChannel {
@@ -5560,7 +5602,7 @@ pub fn create_media_channel_with_parent_id(
 }
 
 /// Controls the default amount of time after which inactive threads are archived in the channel.
-pub fn create_media_channel_with_thread_auto_archive_duration(
+pub fn new_media_channel_with_thread_auto_archive_duration(
   create: CreateMediaChannel,
   duration: ThreadAutoArchiveDuration,
 ) -> CreateMediaChannel {
@@ -5571,14 +5613,14 @@ pub fn create_media_channel_with_thread_auto_archive_duration(
 }
 
 /// Controls the default reaction shown in the thread preview.
-pub fn create_media_channel_with_default_reaction(
+pub fn new_media_channel_with_default_reaction(
   create: CreateMediaChannel,
   reaction: DefaultForumReaction,
 ) -> CreateMediaChannel {
   CreateMediaChannel(..create, default_reaction: Some(reaction))
 }
 
-pub fn create_media_channel_with_tags(
+pub fn new_media_channel_with_tags(
   create: CreateMediaChannel,
   tags: List(ForumTag),
 ) -> CreateMediaChannel {
@@ -5586,7 +5628,7 @@ pub fn create_media_channel_with_tags(
 }
 
 /// Controls the default order of sorting the threads in the media.
-pub fn create_media_channel_with_default_sort_order(
+pub fn new_media_channel_with_default_sort_order(
   create: CreateMediaChannel,
   order: ForumSortOrder,
 ) -> CreateMediaChannel {
@@ -5594,7 +5636,7 @@ pub fn create_media_channel_with_default_sort_order(
 }
 
 /// The default thread rate limit per user. This value gets copied to every thread and does not live-update.
-pub fn create_media_channel_with_thread_rate_limit_per_user(
+pub fn new_media_channel_with_thread_rate_limit_per_user(
   create: CreateMediaChannel,
   limit: RateLimitPerUser,
 ) -> CreateMediaChannel {
@@ -6401,7 +6443,9 @@ pub fn unban_user_from_guild_request(
   |> request_with_reason(reason)
 }
 
-pub fn unban_user_from_guild_response(response: Response(String)) {
+pub fn unban_user_from_guild_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
   handle_no_content_response(response)
 }
 
@@ -6553,23 +6597,23 @@ fn create_role_to_json(create: CreateRole) -> Json {
 /// * icon: null
 /// * unicode_emoji: null
 /// * is_mentionable: false
-pub fn new_create_role() -> CreateRole {
+pub fn new_role() -> CreateRole {
   CreateRole(None, None, None, None, None, None, None)
 }
 
-pub fn create_role_with_name(create: CreateRole, name: String) -> CreateRole {
+pub fn new_role_with_name(create: CreateRole, name: String) -> CreateRole {
   CreateRole(..create, name: Some(name))
 }
 
 /// Controls the role's guild-wide permissions.
-pub fn create_role_with_permissions(
+pub fn new_role_with_permissions(
   create: CreateRole,
   permissions: List(Permission),
 ) -> CreateRole {
   CreateRole(..create, permissions: Some(permissions))
 }
 
-pub fn create_role_with_colours(
+pub fn new_role_with_colours(
   create: CreateRole,
   colours: RoleColours,
 ) -> CreateRole {
@@ -6602,22 +6646,19 @@ pub fn role_colours_with_tertiary_colour(
 }
 
 /// Controls whether the role is shown separately in the sidebar.
-pub fn create_hoisted_role(create: CreateRole) -> CreateRole {
+pub fn new_hoisted_role(create: CreateRole) -> CreateRole {
   CreateRole(..create, is_hoisted: Some(True))
 }
 
 /// Requires the `GuildCanUseRoleIcons` feature.
-pub fn create_role_with_icon(
-  create: CreateRole,
-  icon: ImageData,
-) -> CreateRole {
+pub fn new_role_with_icon(create: CreateRole, icon: ImageData) -> CreateRole {
   CreateRole(..create, icon: Some(icon))
 }
 
 /// Requires the `GuildCanUseRoleIcons` feature.
 ///
 /// Accepts a unicode emoji character (e.g. 🔨)
-pub fn create_role_with_unicode_emoji(
+pub fn new_role_with_unicode_emoji(
   create: CreateRole,
   emoji: String,
 ) -> CreateRole {
@@ -6625,12 +6666,12 @@ pub fn create_role_with_unicode_emoji(
 }
 
 /// Allows everyone the mention the role.
-pub fn create_mentionable_role(create: CreateRole) -> CreateRole {
+pub fn new_mentionable_role(create: CreateRole) -> CreateRole {
   CreateRole(..create, is_mentionable: Some(True))
 }
 
 /// Requires the `AllowManagingRoles` permission.
-pub fn create_role_request(
+pub fn new_role_request(
   token token: Token,
   in_guild_with_id guild_id: Snowflake(Guild),
   using create: CreateRole,
@@ -6647,7 +6688,7 @@ pub fn create_role_request(
   |> request.set_body(body)
 }
 
-pub fn create_role_response(
+pub fn new_role_response(
   response: Response(String),
 ) -> Result(Role, RestError) {
   handle_response(response, decode_with: role_decoder())
@@ -7376,6 +7417,21 @@ fn scheduled_event_status_decoder() -> Decoder(ScheduledEventStatus) {
 pub type InviteTarget {
   StreamInvite(streaming_user: User)
   EmbeddedApplicationInvite(application: Application)
+}
+
+fn invite_target_to_json(
+  target: InviteTarget,
+) -> List(Result(#(String, Json), Nil)) {
+  case target {
+    StreamInvite(..) -> [
+      Ok(#("target_type", json.int(1))),
+      Ok(#("target_user_id", snowflake_to_json(target.streaming_user.id))),
+    ]
+    EmbeddedApplicationInvite(..) -> [
+      Ok(#("target_type", json.int(1))),
+      Ok(#("target_application_id", snowflake_to_json(target.application.id))),
+    ]
+  }
 }
 
 fn invite_target_decoder() -> Decoder(Option(InviteTarget)) {
@@ -8525,7 +8581,7 @@ pub fn modify_guild_incidents_data_response(
 /// DMs should be initiated by user action - for example, interactions.
 ///
 /// Even then, if you create a significant amount of DMs too quickly, your bot may be quarantined.
-pub fn create_dm_channel_request(
+pub fn new_dm_channel_request(
   token token: Token,
   to_user_with_id user_id: Snowflake(User),
 ) -> Request(String) {
@@ -8538,7 +8594,7 @@ pub fn create_dm_channel_request(
   |> request.set_body(body)
 }
 
-pub fn create_dm_channel_response(
+pub fn new_dm_channel_response(
   response: Response(String),
 ) -> Result(DmChannel, RestError) {
   handle_response(response, decode_with: dm_channel_decoder())
@@ -10031,6 +10087,7 @@ pub fn unlock_thread(modify: ModifyThread) -> ModifyThread {
   ModifyThread(..modify, is_locked: Some(False))
 }
 
+// todo: better, type-safe api
 /// Non-moderators can add other non-moderators to an invitable thread.
 ///
 /// Only available on private threads.
@@ -10126,4 +10183,1118 @@ pub fn rate_limit_per_user(
 
 pub fn rate_limit_per_user_to_duration(limit: RateLimitPerUser) -> Duration {
   limit.duration
+}
+
+/// Requires the `AllowSettingVoiceChannelStatus` permission.
+///
+/// Additionally requires the `AllowManagingChannels` permission if the current user isn't connected to the specified channel.
+pub fn set_voice_channel_status_request(
+  token token: Token,
+  channel_with_id id: Snowflake(VoiceChannel),
+  new status: Option(String),
+  reason reason: Option(String),
+) -> Request(String) {
+  let body =
+    [#("status", json.nullable(status, json.string))]
+    |> json.object
+    |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(id) <> "/voice-status",
+    method: http.Put,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+}
+
+pub fn set_voice_channel_status_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
+}
+
+/// Behavior:
+/// * guild channels - will permanently and irreversibly delete the channel; requires the `AllowManagingChannels` permission
+///   * category channels - will **not** delete the child channels, their `parent_id` property will be deleted
+///   * community-specific (rules & community updates) channels - cannot be deleted
+/// * threads - will permanently and irreversibly delete the thread; requires the `AllowManagingThreads` permission
+/// * DM channels - will close the channel; the channel can be re-opened by opening a DM with the recipient once again
+pub fn delete_channel_request(
+  token token: Token,
+  channel_with_id id: Snowflake(Channel),
+  reason reason: Option(String),
+) -> Request(String) {
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(id),
+    method: http.Delete,
+  )
+  |> request_with_reason(reason)
+}
+
+pub fn delete_channel_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
+}
+
+/// Requires the `AllowManagingChannels` permission.
+pub fn get_guild_channel_invites_request(
+  token token: Token,
+  channel_with_id id: Snowflake(GuildChannel),
+) -> Request(String) {
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(id) <> "/invites",
+    method: http.Get,
+  )
+}
+
+pub fn get_guild_channel_invites_response(
+  response: Response(String),
+) -> Result(List(Invite), RestError) {
+  handle_response(response, decode_with: decode.list(of: invite_decoder()))
+}
+
+pub opaque type CreateGuildChannelInvite {
+  CreateGuildChannelInvite(
+    max_age: Option(Duration),
+    max_uses: Option(Int),
+    is_temporary: Option(Bool),
+    is_unique: Option(Bool),
+    target: Option(InviteTarget),
+    allowlist: Option(List(Snowflake(User))),
+    automatically_awarded_roles_ids: Option(List(Snowflake(Role))),
+  )
+}
+
+fn create_guild_channel_invite_to_json(
+  create: CreateGuildChannelInvite,
+) -> Json {
+  [
+    optional_to_json(create.max_age, "max_age", duration_to_json_seconds),
+    optional_to_json(create.max_uses, "max_uses", json.int),
+    optional_to_json(create.is_temporary, "temporary", json.bool),
+    optional_to_json(create.is_unique, "unique", json.bool),
+    optional_to_json(
+      create.automatically_awarded_roles_ids,
+      "role_ids",
+      json.array(_, snowflake_to_json),
+    ),
+  ]
+  |> list.append(case create.target {
+    Some(target) -> invite_target_to_json(target)
+    None -> []
+  })
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_guild_channel_invite() -> CreateGuildChannelInvite {
+  CreateGuildChannelInvite(None, None, None, None, None, None, None)
+}
+
+/// Defaults to 24 hours.
+pub fn new_guild_channel_invite_with_expiration(
+  create: CreateGuildChannelInvite,
+  max_age: Duration,
+) -> CreateGuildChannelInvite {
+  CreateGuildChannelInvite(..create, max_age: Some(max_age))
+}
+
+pub fn new_guild_channel_invite_with_max_uses(
+  create: CreateGuildChannelInvite,
+  max_uses: Int,
+) -> CreateGuildChannelInvite {
+  CreateGuildChannelInvite(..create, max_uses: Some(max_uses))
+}
+
+/// A temporary invite only grants temporary membership.
+pub fn new_temporary_guild_channel_invite(
+  create: CreateGuildChannelInvite,
+) -> CreateGuildChannelInvite {
+  CreateGuildChannelInvite(..create, is_temporary: Some(True))
+}
+
+/// Will force creating a new code, won't reuse similar invites.
+pub fn new_unique_guild_channel_invite(
+  create: CreateGuildChannelInvite,
+) -> CreateGuildChannelInvite {
+  CreateGuildChannelInvite(..create, is_unique: Some(True))
+}
+
+pub fn new_guild_channel_invite_with_target(
+  create: CreateGuildChannelInvite,
+  target: InviteTarget,
+) -> CreateGuildChannelInvite {
+  CreateGuildChannelInvite(..create, target: Some(target))
+}
+
+/// Restricts who can accept the invite.
+pub fn new_guild_channel_invite_with_allowlist(
+  create: CreateGuildChannelInvite,
+  user_ids allowlist: List(Snowflake(User)),
+) -> CreateGuildChannelInvite {
+  CreateGuildChannelInvite(..create, allowlist: Some(allowlist))
+}
+
+/// Requires the `AllowManagingRoles` permission.
+///
+/// You cannot assign roles with higher permissions than the current user.
+pub fn new_guild_channel_invite_with_automatically_awarded_roles(
+  create: CreateGuildChannelInvite,
+  role_ids role_ids: List(Snowflake(Role)),
+) -> CreateGuildChannelInvite {
+  CreateGuildChannelInvite(
+    ..create,
+    automatically_awarded_roles_ids: Some(role_ids),
+  )
+}
+
+/// Requires the `AllowCreatingInstantInvites` permission.
+pub fn new_guild_channel_invite_request(
+  token token: Token,
+  channel_with_id id: Snowflake(GuildChannel),
+  using create: CreateGuildChannelInvite,
+  reason reason: Option(String),
+) -> Request(BitArray) {
+  let request =
+    new_request(
+      token:,
+      to: "/channels/" <> snowflake_to_string(id) <> "/invites",
+      method: http.Post,
+    )
+    |> request_with_reason(reason)
+
+  let json =
+    create
+    |> create_guild_channel_invite_to_json
+    |> json.to_string
+
+  case create.allowlist {
+    None -> {
+      request
+      |> request.set_body(json |> bit_array.from_string)
+    }
+    Some(allowlist) -> {
+      // id barely call this a csv, this could've been just a json array 😭
+      let allowlist_csv =
+        allowlist
+        |> list.map(snowflake_to_string)
+        |> string.join(with: "\r\n")
+        |> bit_array.from_string
+
+      request
+      |> multipart_form.to_request(form: [
+        #(
+          "payload_json",
+          field.StringWithType(json, content_type: "application/json"),
+        ),
+        #(
+          "target_users_file",
+          field.File(
+            name: "target_users_file",
+            content_type: "text/csv",
+            content: allowlist_csv,
+          ),
+        ),
+      ])
+    }
+  }
+}
+
+pub fn new_guild_channel_invite_response(
+  response: Response(BitArray),
+) -> Result(Invite, RestError) {
+  handle_response_bits(response, decode_with: invite_decoder())
+}
+
+/// A followed channel represents a followed announcement channel, which copies its messages to a text channel.
+pub type FollowedChannel {
+  FollowedChannel(
+    source_channel_id: Snowflake(AnnouncementChannel),
+    target_channel_id: Snowflake(TextChannel),
+  )
+}
+
+fn followed_channel_decoder() -> Decoder(FollowedChannel) {
+  use source_channel_id <- decode.field("channel_id", snowflake_decoder())
+  use target_channel_id <- decode.field("webhook_id", snowflake_decoder())
+
+  decode.success(FollowedChannel(source_channel_id:, target_channel_id:))
+}
+
+/// Requires the `AllowManagingWebhooks` permission.
+pub fn follow_announcement_channel_request(
+  token token: Token,
+  source_channel_id source_id: Snowflake(AnnouncementChannel),
+  target_channel_id target_id: Snowflake(TextChannel),
+  reason reason: Option(String),
+) -> Request(String) {
+  let body =
+    [#("webhook_channel_id", snowflake_to_json(target_id))]
+    |> json.object
+    |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(source_id) <> "/followers",
+    method: http.Post,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+}
+
+pub fn follow_announcement_channel_response(
+  response: Response(String),
+) -> Result(FollowedChannel, RestError) {
+  handle_response(response, decode_with: followed_channel_decoder())
+}
+
+/// The typing indicator expires after 10 seconds.
+///
+/// Bots generally shouldn't use this endpoint.
+/// It's useful if you want to let the user know that the bot is still working on their request.
+///
+/// Prefer deferring interactions and using the thinking state.
+pub fn trigger_typing_indicator_request(
+  token token: Token,
+  in_channel_with_id id: Snowflake(Channel),
+) -> Request(String) {
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(id) <> "/typing",
+    method: http.Post,
+  )
+}
+
+pub fn trigger_typing_indicator_response(
+  response: Response(String),
+) -> Result(Nil, RestError) {
+  handle_no_content_response(response)
+}
+
+pub opaque type CreateThreadFromMessage {
+  CreateThreadFromMessage(
+    name: String,
+    auto_archive_duration: Option(ThreadAutoArchiveDuration),
+    rate_limit_per_user: Option(RateLimitPerUser),
+  )
+}
+
+pub fn new_thread_from_message(named name: String) -> CreateThreadFromMessage {
+  CreateThreadFromMessage(name, None, None)
+}
+
+pub fn new_thread_from_message_with_auto_archive_duration(
+  create: CreateThreadFromMessage,
+  duration: ThreadAutoArchiveDuration,
+) -> CreateThreadFromMessage {
+  CreateThreadFromMessage(..create, auto_archive_duration: Some(duration))
+}
+
+pub fn new_thread_from_message_with_rate_limit_per_user(
+  create: CreateThreadFromMessage,
+  limit: RateLimitPerUser,
+) -> CreateThreadFromMessage {
+  CreateThreadFromMessage(..create, rate_limit_per_user: Some(limit))
+}
+
+fn create_thread_from_message_to_json(create: CreateThreadFromMessage) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    optional_to_json(
+      create.auto_archive_duration,
+      "auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(
+      create.rate_limit_per_user,
+      "rate_limit_per_user",
+      rate_limit_per_user_to_json,
+    ),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+/// Behavior:
+/// * in text channels - creates a `PublicThread`
+/// * in announcement channels - creates an `AnnouncementThread`
+/// * the ID of the created thread will be the same as the message's ID
+/// * you can only create 1 thread per message
+pub fn new_thread_from_message_request(
+  token token: Token,
+  in_channel_with_id channel_id: Snowflake(ThreadCreatableChannel),
+  message_with_id message_id: Snowflake(Message),
+  using create: CreateThreadFromMessage,
+  reason reason: Option(String),
+) -> Request(String) {
+  let body = create |> create_thread_from_message_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/"
+      <> snowflake_to_string(channel_id)
+      <> "/messages/"
+      <> snowflake_to_string(message_id)
+      <> "/threads",
+    method: http.Post,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+}
+
+pub fn new_thread_from_message_response(
+  response: Response(String),
+) -> Result(Thread, RestError) {
+  handle_response(response, decode_with: thread_decoder())
+}
+
+pub opaque type CreateThread {
+  CreateThread(
+    name: String,
+    auto_archive_duration: Option(ThreadAutoArchiveDuration),
+    type_: ThreadType,
+    rate_limit_per_user: Option(RateLimitPerUser),
+  )
+}
+
+pub fn new_thread(
+  named name: String,
+  of_type type_: ThreadType,
+) -> CreateThread {
+  CreateThread(name, None, type_, None)
+}
+
+pub fn new_thread_with_auto_archive_duration(
+  create: CreateThread,
+  duration: ThreadAutoArchiveDuration,
+) -> CreateThread {
+  CreateThread(..create, auto_archive_duration: Some(duration))
+}
+
+pub fn new_thread_with_rate_limit_per_user(
+  create: CreateThread,
+  limit: RateLimitPerUser,
+) -> CreateThread {
+  CreateThread(..create, rate_limit_per_user: Some(limit))
+}
+
+fn create_thread_to_json(create: CreateThread) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    optional_to_json(
+      create.auto_archive_duration,
+      "auto_archive_duration",
+      thread_auto_archive_duration_to_json,
+    ),
+    optional_to_json(
+      create.rate_limit_per_user,
+      "rate_limit_per_user",
+      rate_limit_per_user_to_json,
+    ),
+  ]
+  |> list.append(thread_type_to_json(create.type_))
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_thread_request(
+  token token: Token,
+  in_channel_with_id channel_id: Snowflake(ThreadCreatableChannel),
+  using create: CreateThread,
+  reason reason: Option(String),
+) -> Request(String) {
+  let body = create |> create_thread_to_json |> json.to_string
+
+  new_request(
+    token:,
+    to: "/channels/" <> snowflake_to_string(channel_id) <> "/threads",
+    method: http.Post,
+  )
+  |> request.set_body(body)
+  |> request_with_reason(reason)
+}
+
+pub opaque type CreateForumLikeThread {
+  CreateForumLikeThread(
+    name: String,
+    auto_archive_duration: Option(ThreadAutoArchiveDuration),
+    rate_limit_per_user: Option(RateLimitPerUser),
+    message: CreateForumLikeThreadMessage,
+    applied_tags_ids: Option(List(Snowflake(ForumTag))),
+  )
+}
+
+pub opaque type CreateForumLikeThreadMessage {
+  CreateForumLikeThreadMessage(
+    content: Option(String),
+    embeds: Option(List(CreateForumLikeThreadMessageEmbed)),
+    allowed_mentions: List(AllowedMessageMention),
+  )
+}
+
+/// This type controls which persons get notified after mentioning them in a message.
+///
+/// This type will always be used as a special unique list - you cannot reuse the same variant.
+///
+/// That means that, i.e.
+///
+/// ```gleam
+/// [
+///   AllowMentioningUsers(AllowMentioningAllUsers),
+///   AllowMentioningUsers(AllowMentioningSpecificUsers([some_id]))
+/// ]
+/// ```
+///
+/// is not a valid allowed mention.
+///
+/// In that case, the more specific allowed mention will be given priority.
+/// If multiple specific mentions are passed, only the first will be used.
+///
+/// If an empty list is passed, contrary to default Discord behavior, no mentions will be allowed to notify users, to prevent abuse.
+pub type AllowedMessageMention {
+  AllowMentioningRoles(AllowedRoleMentions)
+  AllowMentioningUsers(AllowedUserMentions)
+  /// Allows mentioning `@everyone` and `@here`.
+  ///
+  /// Requires the `AllowMentioningEveryone` permission - otherwise ineffective.
+  AllowMentioningAtEveryone
+  AllowMentioningRepliedUser
+}
+
+fn allowed_message_mentions_to_json(
+  mentions: List(AllowedMessageMention),
+) -> Json {
+  case mentions {
+    [] -> [#("parse", json.preprocessed_array([]))]
+    [_, ..] -> allowed_message_mentions_to_json_loop(mentions, [], [])
+  }
+  |> json.object
+}
+
+fn allowed_message_mentions_to_json_loop(
+  mentions: List(AllowedMessageMention),
+  parse_acc: List(String),
+  acc: List(#(String, Json)),
+) -> List(#(String, Json)) {
+  let mentions = remove_invalid_allowed_mentions(mentions)
+
+  case mentions {
+    [] -> [#("parse", json.array(parse_acc, json.string)), ..acc]
+    [mention, ..rest] ->
+      case mention {
+        AllowMentioningAtEveryone ->
+          allowed_message_mentions_to_json_loop(
+            rest,
+            ["everyone", ..parse_acc],
+            acc,
+          )
+        AllowMentioningRepliedUser ->
+          allowed_message_mentions_to_json_loop(rest, parse_acc, [
+            #("replied_user", json.bool(True)),
+            ..acc
+          ])
+        AllowMentioningRoles(AllowMentioningAllRoles) ->
+          allowed_message_mentions_to_json_loop(
+            rest,
+            ["roles", ..parse_acc],
+            acc,
+          )
+        AllowMentioningRoles(AllowMentioningSpecificRoles(ids:)) ->
+          allowed_message_mentions_to_json_loop(rest, parse_acc, [
+            #("roles", json.array(ids, snowflake_to_json)),
+            ..acc
+          ])
+        AllowMentioningUsers(AllowMentioningAllUsers) ->
+          allowed_message_mentions_to_json_loop(
+            rest,
+            ["users", ..parse_acc],
+            acc,
+          )
+        AllowMentioningUsers(AllowMentioningSpecificUsers(ids:)) ->
+          allowed_message_mentions_to_json_loop(rest, parse_acc, [
+            #("users", json.array(ids, snowflake_to_json)),
+            ..acc
+          ])
+      }
+  }
+}
+
+fn remove_invalid_allowed_mentions(
+  mentions: List(AllowedMessageMention),
+) -> List(AllowedMessageMention) {
+  let mentions = list.unique(mentions)
+  remove_invalid_allowed_mentions_loop(mentions, [])
+}
+
+fn remove_invalid_allowed_mentions_loop(
+  mentions: List(AllowedMessageMention),
+  acc: List(AllowedMessageMention),
+) -> List(AllowedMessageMention) {
+  case mentions {
+    [] -> acc
+
+    // we don't have to check for duplicates as the list is unique
+    [AllowMentioningAtEveryone, ..rest] ->
+      remove_invalid_allowed_mentions_loop(rest, [
+        AllowMentioningAtEveryone,
+        ..acc
+      ])
+
+    // we don't have to check for duplicates as the list is unique
+    [AllowMentioningRepliedUser, ..rest] ->
+      remove_invalid_allowed_mentions_loop(rest, [
+        AllowMentioningRepliedUser,
+        ..acc
+      ])
+
+    [AllowMentioningRoles(AllowMentioningAllRoles) as mention, ..rest] -> {
+      let is_there_specific_elsewhere =
+        list.any(rest, allowed_mention_is_specific_roles)
+        || list.any(acc, allowed_mention_is_specific_roles)
+
+      case is_there_specific_elsewhere {
+        True -> remove_invalid_allowed_mentions_loop(rest, acc)
+        False -> remove_invalid_allowed_mentions_loop(rest, [mention, ..acc])
+      }
+    }
+
+    [AllowMentioningRoles(AllowMentioningSpecificRoles(_)) as mention, ..rest] -> {
+      case list.any(in: acc, satisfying: allowed_mention_is_specific_roles) {
+        True -> remove_invalid_allowed_mentions_loop(rest, acc)
+        False -> remove_invalid_allowed_mentions_loop(rest, [mention, ..acc])
+      }
+    }
+
+    [AllowMentioningUsers(AllowMentioningAllUsers) as mention, ..rest] -> {
+      let is_there_specific_elsewhere =
+        list.any(rest, allowed_mention_is_specific_users)
+        || list.any(acc, allowed_mention_is_specific_users)
+
+      case is_there_specific_elsewhere {
+        True -> remove_invalid_allowed_mentions_loop(rest, acc)
+        False -> remove_invalid_allowed_mentions_loop(rest, [mention, ..acc])
+      }
+    }
+
+    [AllowMentioningUsers(AllowMentioningSpecificUsers(_)) as mention, ..rest] -> {
+      case list.any(in: acc, satisfying: allowed_mention_is_specific_users) {
+        True -> remove_invalid_allowed_mentions_loop(rest, acc)
+        False -> remove_invalid_allowed_mentions_loop(rest, [mention, ..acc])
+      }
+    }
+  }
+}
+
+fn allowed_mention_is_specific_roles(mention: AllowedMessageMention) -> Bool {
+  case mention {
+    AllowMentioningRoles(AllowMentioningSpecificRoles(_)) -> True
+    _ -> False
+  }
+}
+
+fn allowed_mention_is_specific_users(mention: AllowedMessageMention) -> Bool {
+  case mention {
+    AllowMentioningUsers(AllowMentioningSpecificUsers(_)) -> True
+    _ -> False
+  }
+}
+
+pub type AllowedUserMentions {
+  AllowMentioningAllUsers
+  AllowMentioningSpecificUsers(ids: List(Snowflake(User)))
+}
+
+pub type AllowedRoleMentions {
+  AllowMentioningAllRoles
+  AllowMentioningSpecificRoles(ids: List(Snowflake(Role)))
+}
+
+pub opaque type CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(
+    title: Option(String),
+    description: Option(String),
+    url: Option(String),
+    timestamp: Option(Timestamp),
+    colour: Option(Colour),
+    footer: Option(CreateEmbedFooter),
+    image: Option(CreateEmbedImage),
+    thumbnail: Option(CreateEmbedImage),
+    author: Option(CreateEmbedAuthor),
+    fields: Option(List(CreateEmbedField)),
+  )
+}
+
+fn create_forum_like_thread_message_embed_to_json(
+  create: CreateForumLikeThreadMessageEmbed,
+) -> Json {
+  [
+    Ok(#("type", json.string("rich"))),
+    optional_to_json(create.title, "title", json.string),
+    optional_to_json(create.description, "description", json.string),
+    optional_to_json(create.url, "url", json.string),
+    optional_to_json(create.timestamp, "timestamp", timestamp_to_json),
+    optional_to_json(create.colour, "color", colour_to_json),
+    optional_to_json(create.footer, "footer", create_embed_footer_to_json),
+    optional_to_json(create.image, "image", create_embed_image_to_json),
+    optional_to_json(create.thumbnail, "thumbnail", create_embed_image_to_json),
+    optional_to_json(create.author, "author", create_embed_author_to_json),
+    optional_to_json(create.fields, "fields", json.array(
+      _,
+      create_embed_field_to_json,
+    )),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_forum_like_thread_message_embed() {
+  CreateForumLikeThreadMessageEmbed(
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+  )
+}
+
+pub fn new_forum_like_thread_message_embed_with_title(
+  create: CreateForumLikeThreadMessageEmbed,
+  title: String,
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, title: Some(title))
+}
+
+pub fn new_forum_like_thread_message_embed_with_description(
+  create: CreateForumLikeThreadMessageEmbed,
+  description: String,
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, description: Some(description))
+}
+
+pub fn new_forum_like_thread_message_embed_with_url(
+  create: CreateForumLikeThreadMessageEmbed,
+  url: String,
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, url: Some(url))
+}
+
+pub fn new_forum_like_thread_message_embed_with_timestamp(
+  create: CreateForumLikeThreadMessageEmbed,
+  timestamp: Timestamp,
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, timestamp: Some(timestamp))
+}
+
+pub fn new_forum_like_thread_message_embed_with_colour(
+  create: CreateForumLikeThreadMessageEmbed,
+  colour: Colour,
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, colour: Some(colour))
+}
+
+pub fn new_forum_like_thread_message_embed_with_image(
+  create: CreateForumLikeThreadMessageEmbed,
+  image: CreateEmbedImage,
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, image: Some(image))
+}
+
+pub fn new_forum_like_thread_message_embed_with_thumbnail(
+  create: CreateForumLikeThreadMessageEmbed,
+  thumbnail: CreateEmbedImage,
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, thumbnail: Some(thumbnail))
+}
+
+pub fn new_forum_like_thread_message_embed_with_author(
+  create: CreateForumLikeThreadMessageEmbed,
+  author: CreateEmbedAuthor,
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, author: Some(author))
+}
+
+pub fn new_forum_like_thread_message_embed_with_fields(
+  create: CreateForumLikeThreadMessageEmbed,
+  fields: List(CreateEmbedField),
+) -> CreateForumLikeThreadMessageEmbed {
+  CreateForumLikeThreadMessageEmbed(..create, fields: Some(fields))
+}
+
+pub opaque type CreateEmbedFooter {
+  CreateEmbedFooter(text: String, icon_url: Option(String))
+}
+
+fn create_embed_footer_to_json(create: CreateEmbedFooter) -> Json {
+  [
+    Ok(#("text", json.string(create.text))),
+    optional_to_json(create.icon_url, "icon_url", json.string),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_embed_footer(text text: String) -> CreateEmbedFooter {
+  CreateEmbedFooter(text, None)
+}
+
+/// URL must be[attachment](#get_url_to_attachment) or HTTPS.
+pub fn new_embed_footer_with_icon(
+  create: CreateEmbedFooter,
+  url icon_url: String,
+) -> CreateEmbedFooter {
+  CreateEmbedFooter(..create, icon_url: Some(icon_url))
+}
+
+/// Include the extension in the file name.
+pub fn get_url_to_attachment(named filename: String) -> String {
+  "attachment://" <> filename
+}
+
+pub opaque type CreateEmbedImage {
+  CreateEmbedImage(url: String, description: Option(String))
+}
+
+fn create_embed_image_to_json(create: CreateEmbedImage) -> Json {
+  [
+    Ok(#("url", json.string(create.url))),
+    optional_to_json(create.description, "description", json.string),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+fn create_embed_video_to_json(create: CreateEmbedVideo) -> Json {
+  [
+    Ok(#("url", json.string(create.url))),
+    optional_to_json(create.description, "description", json.string),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_embed_image(url url: String) -> CreateEmbedImage {
+  CreateEmbedImage(url, None)
+}
+
+pub fn new_embed_image_with_description(
+  create: CreateEmbedImage,
+  description: String,
+) -> CreateEmbedImage {
+  CreateEmbedImage(..create, description: Some(description))
+}
+
+pub opaque type CreateEmbedVideo {
+  CreateEmbedVideo(url: String, description: Option(String))
+}
+
+pub fn new_embed_video(url url: String) -> CreateEmbedVideo {
+  CreateEmbedVideo(url, None)
+}
+
+pub fn new_embed_video_with_description(
+  create: CreateEmbedVideo,
+  description: String,
+) -> CreateEmbedVideo {
+  CreateEmbedVideo(..create, description: Some(description))
+}
+
+pub opaque type CreateEmbedAuthor {
+  CreateEmbedAuthor(name: String, url: Option(String), icon_url: Option(String))
+}
+
+fn create_embed_author_to_json(create: CreateEmbedAuthor) -> Json {
+  [
+    Ok(#("name", json.string(create.name))),
+    optional_to_json(create.url, "url", json.string),
+    optional_to_json(create.icon_url, "icon_url", json.string),
+  ]
+  |> list.filter_map(function.identity)
+  |> json.object
+}
+
+pub fn new_embed_author(named name: String) -> CreateEmbedAuthor {
+  CreateEmbedAuthor(name, None, None)
+}
+
+/// URL must be HTTPS.
+pub fn new_embed_author_with_url(
+  create: CreateEmbedAuthor,
+  url: String,
+) -> CreateEmbedAuthor {
+  CreateEmbedAuthor(..create, url: Some(url))
+}
+
+/// URL must be[attachment](#get_url_to_attachment) or HTTPS.
+pub fn new_embed_author_with_icon(
+  create: CreateEmbedAuthor,
+  url icon_url: String,
+) -> CreateEmbedAuthor {
+  CreateEmbedAuthor(..create, icon_url: Some(icon_url))
+}
+
+pub opaque type CreateEmbedField {
+  CreateEmbedField(name: String, value: String, is_inline: Bool)
+}
+
+fn create_embed_field_to_json(create: CreateEmbedField) -> Json {
+  [
+    #("name", json.string(create.name)),
+    #("value", json.string(create.value)),
+    #("inline", json.bool(create.is_inline)),
+  ]
+  |> json.object
+}
+
+pub fn new_embed_field(
+  named name: String,
+  value value: String,
+) -> CreateEmbedField {
+  CreateEmbedField(name, value, False)
+}
+
+pub fn new_inline_embed_field(create: CreateEmbedField) -> CreateEmbedField {
+  CreateEmbedField(..create, is_inline: True)
+}
+
+pub type MessageComponent {
+  ActionRowComponent(MessageActionRow)
+  SectionComponent(MessageSection)
+}
+
+pub type MessageActionRow {
+  MessageActionRow(id: Option(Int), components: List(ActionRowComponent))
+}
+
+pub type ActionRowComponent {
+  ActionRowButton(MessageButton)
+  ActionRowStringSelect(MessageStringSelect)
+  ActionRowUserSelect(MessageUserSelect)
+  ActionRowRoleSelect(MessageRoleSelect)
+  ActionRowMentionableSelect(MessageMentionableSelect)
+  ActionRowChannelSelect(MessageChannelSelect)
+}
+
+pub type MessageButton {
+  MessageButtonRegular(RegularMessageButton)
+  MessageButtonLink(LinkMessageButton)
+  MessageButtonPremium(PremiumMessageButton)
+}
+
+pub type LinkMessageButton {
+  LinkMessageButton(
+    id: Option(Int),
+    label: Option(String),
+    emoji: Option(ComponentEmoji),
+    url: String,
+    is_disabled: Bool,
+  )
+}
+
+pub type PremiumMessageButton {
+  PremiumMessageButton(
+    id: Option(Int),
+    sku_id: Snowflake(Sku),
+    is_disabled: Bool,
+  )
+}
+
+pub type RegularMessageButton {
+  RegularMessageButton(
+    id: Option(Int),
+    style: RegularButtonStyle,
+    label: Option(String),
+    emoji: Option(ComponentEmoji),
+    custom_id: String,
+    is_disabled: Bool,
+  )
+}
+
+pub type ComponentEmoji {
+  UnicodeComponentEmoji(character: String)
+  CustomComponentEmoji(id: Snowflake(Emoji), name: String, is_animated: Bool)
+}
+
+pub type RegularButtonStyle {
+  PrimaryRegularButton
+  SecondaryRegularButton
+  SuccessRegularButton
+  DangerRegularButton
+}
+
+pub type MessageStringSelect {
+  MessageStringSelect(
+    id: Option(Int),
+    custom_id: String,
+    options: List(StringSelectOption),
+    /// Shown when no value is selected. Maximum 150 characters.
+    placeholder: Option(String),
+    /// Minimum amount of selected values, default 1.
+    /// 
+    /// Must be between 0 and 25.
+    min_values: Int,
+    /// Maximum amount of selected values, default 1.
+    ///
+    /// Must be between 1 and 25.
+    max_values: Int,
+    /// Defaults to False.
+    is_disabled: Bool,
+  )
+}
+
+pub type StringSelectOption {
+  StringSelectOption(
+    /// User-facing name.
+    label: String,
+    /// Dev-facing value.
+    value: String,
+    /// Max 100 characters.
+    description: Option(String),
+    emoji: Option(ComponentEmoji),
+    /// Whether the option is selected by default. Defaults to False.
+    is_default_selected: Bool,
+  )
+}
+
+pub type MessageUserSelect {
+  MessageUserSelect(
+    id: Option(Int),
+    custom_id: String,
+    /// Shown when no user is selected. Maximum 150 characters.
+    placeholder: Option(String),
+    /// Which users will be selected by default.
+    default_users: List(Snowflake(User)),
+    /// Minimum amount of selected values, default 1.
+    /// 
+    /// Must be between 0 and 25.
+    min_values: Int,
+    /// Maximum amount of selected values, default 1.
+    ///
+    /// Must be between 1 and 25.
+    max_values: Int,
+    /// Defaults ot False.
+    is_disabled: Bool,
+  )
+}
+
+pub type MessageRoleSelect {
+  MessageRoleSelect(
+    id: Option(Int),
+    custom_id: String,
+    /// Shown when no role is selected. Maximum 150 characters.
+    placeholder: Option(String),
+    /// Which roles will be selected by default.
+    default_roles: List(Snowflake(Role)),
+    /// Minimum amount of selected values, default 1.
+    /// 
+    /// Must be between 0 and 25.
+    min_values: Int,
+    /// Maximum amount of selected values, default 1.
+    ///
+    /// Must be between 1 and 25.
+    max_values: Int,
+    /// Defaults to False.
+    is_disabled: Bool,
+  )
+}
+
+pub type MessageMentionableSelect {
+  MessageMentionableSelect(
+    id: Option(Int),
+    custom_id: String,
+    /// Shown when no mentionable is selected. Maximum 150 characters.
+    placeholder: Option(String),
+    /// Which users will be selected by default.
+    default_users: List(Snowflake(User)),
+    /// Which roles will be selected by default.
+    default_roles: List(Snowflake(User)),
+    /// Minimum amount of selected values, default 1.
+    ///
+    /// Must be between 0 and 25.
+    min_values: Int,
+    /// Maximum amount of selected values, default 1.
+    ///
+    /// Must be between 1 and 25.
+    max_values: Int,
+    /// Defaults to False.
+    is_disabled: Bool,
+  )
+}
+
+pub type MessageChannelSelect {
+  MessageChannelSelect(
+    id: Option(Int),
+    custom_id: String,
+    /// Shown when no channel is selected. Maximum 150 characters.
+    placeholder: Option(String),
+    /// Which channels will be selected by default.
+    default_channels: List(Snowflake(Channel)),
+    /// Which channel types to include in the list.
+    channel_types: List(ChannelSelectType),
+    /// Minimum amount of selected values, default 1.
+    ///
+    /// Must be between 0 and 25.
+    min_values: Int,
+    /// Maximum amount of selected values, default 1.
+    ///
+    /// Must be between 1 and 25.
+    max_values: Int,
+    /// Defaults to False.
+    is_disabled: Bool,
+  )
+}
+
+pub type ChannelSelectType {
+  SelectTextChannels
+  SelectDmChannels
+  SelectVoiceChannels
+  SelectCategoryChannels
+  SelectAnnouncementChannels
+  SelectAnnouncementThreads
+  SelectPublicThreads
+  SelectPrivateThreads
+  SelectStageChannels
+  SelectForumChannels
+  SelectMediaChannels
+}
+
+pub type MessageSection {
+  MessageSection(
+    id: Option(Int),
+    /// Between 1 and 3 components.
+    components: List(SectionComponent),
+    accessory: SectionAccessory,
+  )
+}
+
+pub type SectionComponent {
+  SectionTextDisplay(MessageTextDisplay)
+}
+
+pub type SectionAccessory {
+  SectionButton(MessageButton)
+  SectionThumbnail(MessageThumbnail)
+}
+
+pub type MessageTextDisplay {
+  MessageTextDisplay(id: Option(Int), content: String)
+}
+
+pub type MessageThumbnail {
+  MessageThumbnail(
+    id: Option(Int),
+    media: UnfurledMediaItem,
+    /// Max 1024 characters.
+    description: Option(String),
+    /// Defaults to False.
+    is_spoiler: Bool,
+  )
 }
