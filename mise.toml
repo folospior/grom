@@ -2,3 +2,6 @@
 erlang = "latest"
 gleam = "latest"
 rebar = "latest"
+node = "latest"
+bun = "latest"
+deno = "latest"
