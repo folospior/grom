@@ -1,3 +1,6 @@
+# WARNING: Archived! ⚠️
+# This project moved to [tangled](https://tangled.org/folospior.dev/tangled).
+
 # grom
 
 [![Package Version](https://img.shields.io/hexpm/v/grom)](https://hex.pm/packages/grom)
