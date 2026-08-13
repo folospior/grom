@@ -1,5 +1,5 @@
 # WARNING: Archived! ⚠️
-# This project moved to [tangled](https://tangled.org/folospior.dev/tangled).
+# This project moved to [tangled](https://tangled.org/folospior.dev/grom).
 
 # grom
 
